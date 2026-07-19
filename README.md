@@ -127,8 +127,34 @@ on-demand diagnostic endpoints `target_gen` creates with
 | `Radar/TargetTrack` | TargetTrack | 10 Hz | TargetTrackProfile | RELIABLE + TRANSIENT_LOCAL + 100 ms deadline |
 | `Radar/CalibrationStatus` | CalibrationStatus | 1 Hz | CalibrationStatusProfile | array health, 1024 elements |
 | `Radar/SystemCommand` | SystemCommand | bursty | SystemCommandProfile | RELIABLE, WaitSet-handled |
-| `Ship/ShipPosition` | ShipPosition | 10 Hz | ShipPositionProfile | keyed: 0 = INS, 1 = truth |
+| `Ship/ShipPosition` | ShipPosition | 10 Hz | ShipPositionProfile | keyed: 0 = INS, 1 = truth; consumed by DetectionProcessor (coordinate stabilization) and TrackManager (track correlation) |
 | `TargetGen/TargetTruth` | TargetTruth | 50 Hz/target | TargetTruthProfile | keyed per target |
+
+### DetectionProcessor loopback simplification
+
+`Radar.DetectionProcessor` is a **deliberate architectural simplification** for the demo.
+In a real phased-array radar the transmit and receive chains are physically separate:
+the T/R modules fire a pulse, switch to receive microseconds later, and the digital
+beamformer aggregates returns from all elements before handing them to the CFAR engine.
+
+For this simulation, `DetectionProcessor` **both publishes and subscribes** to
+`Radar/RawReturn` (the 1 kHz loopback shown in the diagram). The participant
+**produces** the synthetic I/Q data — modeling the pulse-repetition-rate stream
+that would come from the radar face — and then **consumes it back** to run CFAR
+detection processing.
+
+The realism is baked in via the `TargetGen/TargetTruth` subscription:
+DetectionProcessor reads the ground-truth target positions, then synthesizes
+range-bin I/Q samples with appropriate RCS, Doppler shift, and noise so that
+the 1 kHz `RawReturn` stream looks like genuine radar data rather than random
+numbers. Sea clutter and other environmental returns are also synthesized.
+
+> **Production note:** a real system would not put raw I/Q on DDS at 1 kHz × 512 bins
+> (~2 MB/s). The loopback exists here to stress-test the middleware and to make the
+> full data flow visible in Connext Studio. A deployed architecture would use separate
+> `Radar.Transmitter` and `Radar.Receiver` participants, with the raw data staying on
+> a high-bandwidth internal fabric (PCIe, RDMA, or shared memory) rather than the
+> DDS data bus.
 
 ### WaitSet vs. listener split
 

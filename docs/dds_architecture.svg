@@ -31,46 +31,65 @@
   <text x="145" y="290" font-size="11" fill="#c9d8ce">Ship/ShipPosition</text>
   <text x="145" y="305" font-size="9.5" fill="#8fa398">10 Hz &#183; key 0 (INS)</text>
 
-  <!-- Radar.BeamScheduler -->
-  <rect x="443" y="110" width="190" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
-  <text x="538" y="140" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.BeamScheduler</text>
-  <text x="538" y="159" text-anchor="middle" font-size="10" fill="#8fa398">radar_app</text>
-  <line x1="538" y1="182" x2="538" y2="424" stroke="#46d17c" stroke-width="2.2" marker-end="url(#pubArrow)"/>
-  <text x="548" y="246" font-size="11" fill="#c9d8ce">Radar/BeamCommand</text>
-  <text x="548" y="261" font-size="9.5" fill="#8fa398">50 Hz</text>
+  <!-- Radar.BeamScheduler (moved left, closer to ShipINS) -->
+  <rect x="280" y="110" width="190" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
+  <text x="375" y="140" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.BeamScheduler</text>
+  <text x="375" y="159" text-anchor="middle" font-size="10" fill="#8fa398">radar_app</text>
+  <line x1="375" y1="182" x2="375" y2="424" stroke="#46d17c" stroke-width="2.2" marker-end="url(#pubArrow)"/>
+  <text x="385" y="246" font-size="11" fill="#c9d8ce">Radar/BeamCommand</text>
+  <text x="385" y="261" font-size="9.5" fill="#8fa398">50 Hz</text>
 
-  <!-- Radar.DetectionProcessor (5 endpoints) -->
-  <rect x="846" y="110" width="190" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
-  <text x="941" y="134" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.Detection</text>
-  <text x="941" y="151" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Processor</text>
-  <text x="941" y="168" text-anchor="middle" font-size="10" fill="#8fa398">radar_app</text>
-  <!-- sub BeamCommand -->
-  <line x1="881" y1="424" x2="881" y2="184" stroke="#4fc3f7" stroke-width="2.2" marker-end="url(#subArrow)"/>
-  <text x="871" y="216" text-anchor="end" font-size="11" fill="#c9d8ce">Radar/BeamCommand</text>
+  <!-- Radar.DetectionProcessor (widened to 520px, arrows well spread) -->
+  <rect x="540" y="110" width="520" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
+  <text x="800" y="134" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.Detection</text>
+  <text x="800" y="151" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Processor</text>
+  <text x="800" y="168" text-anchor="middle" font-size="10" fill="#8fa398">radar_app</text>
+
+  <!-- sub BeamCommand (leftmost) -->
+  <line x1="580" y1="424" x2="580" y2="184" stroke="#4fc3f7" stroke-width="2.2" marker-end="url(#subArrow)"/>
+  <text x="570" y="216" text-anchor="end" font-size="11" fill="#c9d8ce">Radar/BeamCommand</text>
+
   <!-- pub RawReturn -->
-  <line x1="911" y1="182" x2="911" y2="424" stroke="#46d17c" stroke-width="2.2" marker-end="url(#pubArrow)"/>
-  <text x="876" y="254" text-anchor="end" font-size="11" fill="#c9d8ce">Radar/RawReturn</text>
-  <text x="876" y="269" text-anchor="end" font-size="9.5" fill="#8fa398">1 kHz</text>
-  <!-- sub RawReturn (loopback) -->
-  <line x1="941" y1="424" x2="941" y2="184" stroke="#4fc3f7" stroke-width="2.2" marker-end="url(#subArrow)"/>
-  <text x="951" y="292" font-size="11" fill="#c9d8ce">Radar/RawReturn</text>
-  <text x="951" y="307" font-size="9.5" fill="#8fa398">loopback</text>
-  <!-- pub DetectionEvent -->
-  <line x1="971" y1="182" x2="971" y2="424" stroke="#46d17c" stroke-width="2.2" marker-end="url(#pubArrow)"/>
-  <text x="981" y="330" font-size="11" fill="#c9d8ce">Radar/DetectionEvent</text>
-  <!-- sub TargetTruth -->
-  <line x1="1001" y1="424" x2="1001" y2="184" stroke="#4fc3f7" stroke-width="2.2" marker-end="url(#subArrow)"/>
-  <text x="1011" y="368" font-size="11" fill="#c9d8ce">TargetGen/TargetTruth</text>
+  <line x1="640" y1="182" x2="640" y2="424" stroke="#46d17c" stroke-width="2.2" marker-end="url(#pubArrow)"/>
+  <text x="630" y="254" text-anchor="end" font-size="11" fill="#c9d8ce">Radar/RawReturn</text>
+  <text x="630" y="269" text-anchor="end" font-size="9.5" fill="#8fa398">1 kHz</text>
 
-  <!-- Radar.TrackManager -->
-  <rect x="1249" y="110" width="190" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
-  <text x="1344" y="140" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.TrackManager</text>
-  <text x="1344" y="159" text-anchor="middle" font-size="10" fill="#8fa398">radar_app</text>
-  <line x1="1335" y1="424" x2="1335" y2="184" stroke="#4fc3f7" stroke-width="2.2" marker-end="url(#subArrow)"/>
-  <text x="1325" y="250" text-anchor="end" font-size="11" fill="#c9d8ce">Radar/DetectionEvent</text>
-  <line x1="1353" y1="182" x2="1353" y2="424" stroke="#46d17c" stroke-width="2.2" marker-end="url(#pubArrow)"/>
-  <text x="1325" y="330" text-anchor="end" font-size="11" fill="#c9d8ce">Radar/TargetTrack</text>
-  <text x="1325" y="345" text-anchor="end" font-size="9.5" fill="#8fa398">10 Hz</text>
+  <!-- sub RawReturn (loopback) -->
+  <line x1="720" y1="424" x2="720" y2="184" stroke="#4fc3f7" stroke-width="2.2" marker-end="url(#subArrow)"/>
+  <text x="730" y="292" font-size="11" fill="#c9d8ce">Radar/RawReturn</text>
+  <text x="730" y="307" font-size="9.5" fill="#8fa398">loopback</text>
+
+  <!-- pub DetectionEvent -->
+  <line x1="820" y1="182" x2="820" y2="424" stroke="#46d17c" stroke-width="2.2" marker-end="url(#pubArrow)"/>
+  <text x="830" y="330" font-size="11" fill="#c9d8ce">Radar/DetectionEvent</text>
+
+  <!-- sub TargetTruth -->
+  <line x1="920" y1="424" x2="920" y2="184" stroke="#4fc3f7" stroke-width="2.2" marker-end="url(#subArrow)"/>
+  <text x="930" y="368" font-size="11" fill="#c9d8ce">TargetGen/TargetTruth</text>
+
+  <!-- sub Ship/ShipPosition key 0 (rightmost) -->
+  <line x1="1000" y1="424" x2="1000" y2="184" stroke="#4fc3f7" stroke-width="2.2" marker-end="url(#subArrow)"/>
+  <text x="1010" y="406" font-size="11" fill="#c9d8ce">Ship/ShipPosition</text>
+  <text x="1010" y="419" font-size="9.5" fill="#8fa398">key 0 (INS)</text>
+
+  <!-- Radar.TrackManager (widened, arrows spread) -->
+  <rect x="1180" y="110" width="260" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
+  <text x="1310" y="140" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.TrackManager</text>
+  <text x="1310" y="159" text-anchor="middle" font-size="10" fill="#8fa398">radar_app</text>
+
+  <!-- sub DetectionEvent (left edge) -->
+  <line x1="1210" y1="424" x2="1210" y2="184" stroke="#4fc3f7" stroke-width="2.2" marker-end="url(#subArrow)"/>
+  <text x="1200" y="250" text-anchor="end" font-size="11" fill="#c9d8ce">Radar/DetectionEvent</text>
+
+  <!-- pub TargetTrack (center) -->
+  <line x1="1310" y1="182" x2="1310" y2="424" stroke="#46d17c" stroke-width="2.2" marker-end="url(#pubArrow)"/>
+  <text x="1320" y="330" text-anchor="start" font-size="11" fill="#c9d8ce">Radar/TargetTrack</text>
+  <text x="1320" y="345" text-anchor="start" font-size="9.5" fill="#8fa398">10 Hz</text>
+
+  <!-- sub Ship/ShipPosition key 0 (right edge) -->
+  <line x1="1410" y1="424" x2="1410" y2="184" stroke="#4fc3f7" stroke-width="2.2" marker-end="url(#subArrow)"/>
+  <text x="1420" y="370" text-anchor="start" font-size="11" fill="#c9d8ce">Ship/ShipPosition</text>
+  <text x="1420" y="383" text-anchor="start" font-size="9.5" fill="#8fa398">key 0 (INS)</text>
 
   <!-- ============================ THE BUS ============================ -->
   <rect x="40" y="430" width="1400" height="65" rx="9" fill="#12291b" stroke="#2e7d4f" stroke-width="2"/>
@@ -113,8 +132,8 @@
   <text x="1325" y="548" text-anchor="end" font-size="11" fill="#c9d8ce">TargetGen/TargetTruth</text>
   <text x="1325" y="563" text-anchor="end" font-size="9.5" fill="#8fa398">50 Hz &#183; keyed per target</text>
   <line x1="1353" y1="700" x2="1353" y2="501" stroke="#46d17c" stroke-width="2.2" marker-end="url(#pubArrow)"/>
-  <text x="1325" y="616" text-anchor="end" font-size="11" fill="#c9d8ce">Ship/ShipPosition</text>
-  <text x="1325" y="631" text-anchor="end" font-size="9.5" fill="#8fa398">10 Hz &#183; key 1 (truth)</text>
+  <text x="1363" y="616" text-anchor="start" font-size="11" fill="#c9d8ce">Ship/ShipPosition</text>
+  <text x="1363" y="631" text-anchor="start" font-size="9.5" fill="#8fa398">10 Hz &#183; key 1 (truth)</text>
 
   <!-- footer -->
   <text x="40" y="916" font-size="10.5" fill="#6f7f76">All application types are @appendable and self-describing via the builtin TypeLookup Service &#8212; monitoring tools decode samples without the IDL file.</text>
