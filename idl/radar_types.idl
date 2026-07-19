@@ -1,0 +1,207 @@
+// ============================================================================
+// AESA SPY-6 class radar simulation - shared DDS type system
+//
+// Design notes (Connext Studio visibility):
+//  - All application types are @appendable: fields can be added in future
+//    releases without breaking interoperability with older participants.
+//    The builtin TypeLookup Service (enabled by default in Connext 7.x)
+//    makes these types fully self-describing, so monitoring tools such as
+//    Connext Studio can decode samples without access to this IDL file.
+//  - Verbose field names and comments are intentional - they are what
+//    Connext Studio's data inspector shows for each sample.
+//  - Every topic carries a timestamp and (directly or via ship-relative
+//    coordinates) the ship's GPS/INS state, because the radar is mounted
+//    on a moving naval vessel.
+//
+// Coordinate frames:
+//  - Ship-relative polar  : range (m), azimuth (deg, 0 = bow, CW positive),
+//                           elevation (deg, + = up)
+//  - Ship-relative ENU    : x = east (m), y = north (m), z = up (m),
+//                           origin at the ship's own position
+// ============================================================================
+
+module radar {
+module types {
+
+    // ---- Bounds ------------------------------------------------------------
+    const long MAX_RANGE_BINS      = 2048;  // range samples per beam dwell
+    const long MAX_ARRAY_ELEMENTS  = 1024;  // T/R modules in the array face
+    const long COVARIANCE_SIZE     = 9;     // 3x3 position covariance, row-major
+    const long MAX_PARAMS_LEN      = 128;   // free-form command parameter string
+
+    // ---- Common primitives -------------------------------------------------
+
+    // Dual time base: wall clock for correlation with external tools,
+    // simulation clock for deterministic replay.
+    struct TimeStamp {
+        long long epoch_millis;  // Unix epoch time [ms]
+        long      sim_millis;    // time since simulation start [ms]
+    };
+
+    // WGS-84 geodetic position (own-ship GPS/INS solution)
+    @appendable
+    struct GeoPosition {
+        double latitude_deg;
+        double longitude_deg;
+        double altitude_m;
+    };
+
+    // Cartesian vector in ship-relative ENU coordinates [m] / [m/s] / [m/s^2]
+    @appendable
+    struct Cartesian3D {
+        double x_east_m;
+        double y_north_m;
+        double z_up_m;
+    };
+
+    // ---- Enumerations --------------------------------------------------------
+
+    enum BeamMode {
+        BEAM_MODE_SEARCH,     // volume search dwell
+        BEAM_MODE_TRACK,      // dedicated track update dwell
+        BEAM_MODE_CONFIRM,    // detection confirmation dwell
+        BEAM_MODE_CALIBRATE   // array calibration dwell
+    };
+
+    enum TrackClassification {
+        CLASS_UNKNOWN,
+        CLASS_AIR_BREATHING,  // aircraft-like kinematics
+        CLASS_BALLISTIC,      // ballistic trajectory
+        CLASS_SURFACE,        // surface contact
+        CLASS_CLUTTER         // assessed false alarm
+    };
+
+    enum ArrayHealth {
+        ARRAY_NOMINAL,        // all elements within tolerance
+        ARRAY_DEGRADED,       // some elements failed, beam quality reduced
+        ARRAY_CRITICAL,       // too many failures, transmit inhibited
+        ARRAY_OFFLINE         // array in standby / self-test
+    };
+
+    enum CommandType {
+        CMD_SET_MODE,         // change radar operating mode
+        CMD_SET_SECTOR,       // reprioritize a search sector
+        CMD_SELF_TEST,        // run built-in self test
+        CMD_RESET,            // reset tracks and restart scan
+        CMD_DEGRADE_ARRAY,    // demo: inject element failures
+        CMD_RESTORE_ARRAY     // demo: restore array to nominal
+    };
+
+    enum TargetType {
+        TARGET_FIGHTER,
+        TARGET_BOMBER,
+        TARGET_MISSILE,
+        TARGET_SHIP,
+        TARGET_DRONE,
+        TARGET_DECOY
+    };
+
+    // ---- Topic types ---------------------------------------------------------
+
+    // Ship GPS/INS position and motion. Published by the radar's INS
+    // (source_id = 0) and as ground truth by the target generator
+    // (source_id = 1), keyed so both coexist on the same topic.
+    @appendable
+    struct ShipPosition {
+        @key long   source_id;      // 0 = own-ship INS, 1 = ground truth
+        TimeStamp   timestamp;
+        double      latitude_deg;   // WGS-84 latitude  [deg]
+        double      longitude_deg;  // WGS-84 longitude [deg]
+        double      altitude_m;     // height above WGS-84 ellipsoid [m]
+        double      heading_deg;    // true heading [deg]
+        double      course_deg;     // course over ground [deg]
+        double      speed_mps;      // speed over ground [m/s]
+        double      pitch_deg;      // INS attitude, pitch [deg]
+        double      roll_deg;       // INS attitude, roll  [deg]
+    };
+
+    // Beam steering request issued by the BeamScheduler.
+    @appendable
+    struct BeamCommand {
+        @key long   beam_id;        // monotonically increasing dwell id
+        TimeStamp   timestamp;
+        double      azimuth_deg;    // commanded azimuth, ship-relative [deg]
+        double      elevation_deg;  // commanded elevation [deg]
+        long        dwell_time_us;  // dwell duration [microseconds]
+        BeamMode    mode;           // dwell purpose
+        long        priority;       // 1 = highest
+    };
+
+    // Simulated raw receiver output for one beam dwell.
+    // High-rate (1 kHz), best-effort: the "wire" between receiver and
+    // signal processor, exposed as a topic for monitoring purposes.
+    @appendable
+    struct RawReturn {
+        @key long             beam_id;       // dwell this return belongs to
+        TimeStamp             timestamp;
+        double                azimuth_deg;   // beam pointing direction [deg]
+        double                elevation_deg;
+        long                  range_bin_count; // valid entries in iq_samples
+        sequence<float, MAX_RANGE_BINS> iq_samples; // interleaved I,Q per bin
+    };
+
+    // Single threshold-crossing detection report (a "blip").
+    @appendable
+    struct DetectionEvent {
+        @key long     detection_id;   // unique detection number
+        TimeStamp     timestamp;
+        GeoPosition   ship_position;  // own-ship GPS/INS at detection time
+        double        range_m;        // ship-relative range [m]
+        double        azimuth_deg;    // ship-relative azimuth [deg]
+        double        elevation_deg;  // ship-relative elevation [deg]
+        double        amplitude;      // linear amplitude of the return
+        double        snr_db;         // signal-to-noise ratio [dB]
+    };
+
+    // Correlated, filtered target track maintained by the TrackManager.
+    @appendable
+    struct TargetTrack {
+        @key long               track_id;      // persistent track number
+        TimeStamp               timestamp;
+        Cartesian3D             position;      // ship-relative ENU [m]
+        Cartesian3D             velocity;      // ship-relative ENU [m/s]
+        Cartesian3D             acceleration;  // ship-relative ENU [m/s^2]
+        sequence<double, COVARIANCE_SIZE> covariance; // 3x3 pos covariance
+        TrackClassification     classification;
+        long                    quality;       // track quality score 0..100
+    };
+
+    // Phased-array health and calibration report (1 Hz).
+    @appendable
+    struct CalibrationStatus {
+        @key long   array_id;       // array face identifier (0 = forward face)
+        TimeStamp   timestamp;
+        double      temperature_c;  // array face temperature [deg C]
+        sequence<float, MAX_ARRAY_ELEMENTS> element_drift_db; // per-element gain drift
+        ArrayHealth overall_status;
+        long        failed_element_count;
+    };
+
+    // Operator / external system command into the radar.
+    @appendable
+    struct SystemCommand {
+        @key long   command_id;
+        TimeStamp   timestamp;
+        CommandType command_type;
+        double      sector_center_deg; // azimuth of prioritized sector [deg]
+        double      sector_width_deg;  // sector width [deg]
+        long        priority;          // 1 = highest
+        string<MAX_PARAMS_LEN> parameters; // self-test / mode parameters
+    };
+
+    // Ground-truth target state published by the target generator.
+    // The radar app never displays truth directly; it is only used by the
+    // DetectionProcessor to synthesize physically-plausible raw returns.
+    @appendable
+    struct TargetTruth {
+        @key long   target_id;
+        TimeStamp   timestamp;
+        Cartesian3D position;      // ship-relative ENU [m]
+        Cartesian3D velocity;      // ship-relative ENU [m/s]
+        Cartesian3D acceleration;  // ship-relative ENU [m/s^2]
+        double      rcs_dbsm;      // radar cross section [dBsm]
+        TargetType  target_type;
+    };
+
+}; // module types
+}; // module radar

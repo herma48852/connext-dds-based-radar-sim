@@ -1,0 +1,11 @@
+build/
+out/
+generated/
+.vs/
+.vscode/
+*.user
+*.suo
+.DS_Store
+CMakeCache.txt
+CMakeFiles/
+compile_commands.json

@@ -1,0 +1,214 @@
+<?xml version="1.0"?>
+<!--
+  ============================================================================
+  Radar system QoS profiles - single file, loaded BY NAME from C++.
+
+    QosProvider provider("file:qos/radar_qos.xml");
+    provider.participant_qos("RadarQosLibrary::RadarParticipantProfile");
+    provider.datawriter_qos ("RadarQosLibrary::DetectionEventProfile");
+
+  Design intent (Connext Studio demo):
+   - Profile names describe their role so Studio's QoS views are
+     self-explanatory.
+   - Deliberate QoS variety: DetectionEvent / RawReturn / TargetTruth are
+     BEST_EFFORT (high-rate sensor paths), while TargetTrack / BeamCommand /
+     SystemCommand / ShipPosition / CalibrationStatus are RELIABLE. In
+     Studio's match-analysis view this variety is visible and explainable.
+   - The target generator can deliberately inject a MISMATCHED endpoint
+     (its "inject-qos-mismatch" flag) so Studio's diagnostics can be
+     demonstrated live.
+   - The builtin TypeLookup Service is enabled by default in Connext 7.x;
+     no XML is required to turn it on. Types in idl/radar_types.idl are
+     @appendable and fully self-describing.
+  ============================================================================
+-->
+<dds xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:noNamespaceSchemaLocation="https://community.rti.com/schema/7.7.0/rti_dds_qos_profiles.xsd">
+
+  <qos_library name="RadarQosLibrary">
+
+    <!-- ==================================================================
+         PARTICIPANT PROFILES
+         ================================================================== -->
+
+    <!-- Radar simulation app DomainParticipants.
+         UDPv4 only, by default, because macOS ships with very small
+         System V shared-memory limits (32 segments); this app creates 7
+         participants, which exhausts them (RTI KB osx510). Loopback UDP
+         handles the intra-host rates in this demo comfortably.
+         To re-enable shared memory: raise the sysv limits per
+         http://community.rti.com/kb/osx510 and change the mask to
+         "UDPv4 | SHMEM". -->
+    <qos_profile name="RadarParticipantProfile">
+      <participant_qos>
+        <participant_name>
+          <name>Radar.App</name>
+          <role_name>RadarSimulation</role_name>
+        </participant_name>
+        <transport_builtin>
+          <mask>UDPv4</mask>
+        </transport_builtin>
+        <discovery>
+          <!-- standard simple discovery; TypeLookup service is builtin -->
+          <initial_peers>
+            <element>builtin.udpv4://127.0.0.1</element>
+          </initial_peers>
+        </discovery>
+      </participant_qos>
+    </qos_profile>
+
+    <!-- Target generator app DomainParticipant(s). UDPv4 only: it may
+         run on a different host, and it keeps macOS shared-memory limit
+         pressure down (see note on RadarParticipantProfile). -->
+    <qos_profile name="TargetGeneratorParticipantProfile">
+      <participant_qos>
+        <participant_name>
+          <name>TargetGen.Generator</name>
+          <role_name>TargetGenerator</role_name>
+        </participant_name>
+        <transport_builtin>
+          <mask>UDPv4</mask>
+        </transport_builtin>
+      </participant_qos>
+    </qos_profile>
+
+    <!-- ==================================================================
+         TOPIC / ENDPOINT PROFILES
+         ================================================================== -->
+
+    <!-- DetectionEvent: 100 Hz blips. Low latency beats perfect delivery;
+         a lost blip is corrected by the next dwell. -->
+    <qos_profile name="DetectionEventProfile">
+      <datawriter_qos>
+        <reliability><kind>BEST_EFFORT_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>VOLATILE_DURABILITY_QOS</kind></durability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>10</depth></history>
+        <latency_budget><duration><sec>0</sec><nanosec>1000000</nanosec></duration></latency_budget>
+      </datawriter_qos>
+      <datareader_qos>
+        <reliability><kind>BEST_EFFORT_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>VOLATILE_DURABILITY_QOS</kind></durability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>10</depth></history>
+        <latency_budget><duration><sec>0</sec><nanosec>1000000</nanosec></duration></latency_budget>
+      </datareader_qos>
+    </qos_profile>
+
+    <!-- TargetTrack: 10 Hz correlated tracks. Reliable, last-value cached
+         for late joiners, deadline detects a stalled TrackManager. -->
+    <qos_profile name="TargetTrackProfile">
+      <datawriter_qos>
+        <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>TRANSIENT_LOCAL_DURABILITY_QOS</kind></durability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>1</depth></history>
+        <deadline><period><sec>0</sec><nanosec>100000000</nanosec></period></deadline>
+      </datawriter_qos>
+      <datareader_qos>
+        <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>TRANSIENT_LOCAL_DURABILITY_QOS</kind></durability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>1</depth></history>
+        <deadline><period><sec>0</sec><nanosec>100000000</nanosec></period></deadline>
+      </datareader_qos>
+    </qos_profile>
+
+    <!-- BeamCommand: 50 Hz steering commands. Reliable, single-slot:
+         only the newest command matters. -->
+    <qos_profile name="BeamCommandProfile">
+      <datawriter_qos>
+        <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>VOLATILE_DURABILITY_QOS</kind></durability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>1</depth></history>
+        <latency_budget><duration><sec>0</sec><nanosec>5000000</nanosec></duration></latency_budget>
+      </datawriter_qos>
+      <datareader_qos>
+        <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>VOLATILE_DURABILITY_QOS</kind></durability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>1</depth></history>
+        <latency_budget><duration><sec>0</sec><nanosec>5000000</nanosec></duration></latency_budget>
+      </datareader_qos>
+    </qos_profile>
+
+    <!-- CalibrationStatus: 1 Hz slow health data. Transient-local so a
+         late-joining Studio session immediately sees array state. -->
+    <qos_profile name="CalibrationStatusProfile">
+      <datawriter_qos>
+        <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>TRANSIENT_LOCAL_DURABILITY_QOS</kind></durability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>1</depth></history>
+      </datawriter_qos>
+      <datareader_qos>
+        <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>TRANSIENT_LOCAL_DURABILITY_QOS</kind></durability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>1</depth></history>
+      </datareader_qos>
+    </qos_profile>
+
+    <!-- SystemCommand: bursty (~1 Hz max), must not be lost. Keep a few
+         so a burst of commands is processed in order. -->
+    <qos_profile name="SystemCommandProfile">
+      <datawriter_qos>
+        <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>VOLATILE_DURABILITY_QOS</kind></durability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>5</depth></history>
+        <latency_budget><duration><sec>0</sec><nanosec>10000000</nanosec></duration></latency_budget>
+      </datawriter_qos>
+      <datareader_qos>
+        <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>VOLATILE_DURABILITY_QOS</kind></durability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>5</depth></history>
+        <latency_budget><duration><sec>0</sec><nanosec>10000000</nanosec></duration></latency_budget>
+      </datareader_qos>
+    </qos_profile>
+
+    <!-- TargetTruth: high-rate ground truth. Best effort; the radar only
+         needs the freshest sample per target. -->
+    <qos_profile name="TargetTruthProfile">
+      <datawriter_qos>
+        <reliability><kind>BEST_EFFORT_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>VOLATILE_DURABILITY_QOS</kind></durability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>1</depth></history>
+        <latency_budget><duration><sec>0</sec><nanosec>1000000</nanosec></duration></latency_budget>
+      </datawriter_qos>
+      <datareader_qos>
+        <reliability><kind>BEST_EFFORT_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>VOLATILE_DURABILITY_QOS</kind></durability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>1</depth></history>
+        <latency_budget><duration><sec>0</sec><nanosec>1000000</nanosec></duration></latency_budget>
+      </datareader_qos>
+    </qos_profile>
+
+    <!-- ShipPosition: 10 Hz INS. Reliable, last-value cached for
+         late joiners. -->
+    <qos_profile name="ShipPositionProfile">
+      <datawriter_qos>
+        <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>TRANSIENT_LOCAL_DURABILITY_QOS</kind></durability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>1</depth></history>
+        <latency_budget><duration><sec>0</sec><nanosec>10000000</nanosec></duration></latency_budget>
+      </datawriter_qos>
+      <datareader_qos>
+        <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>TRANSIENT_LOCAL_DURABILITY_QOS</kind></durability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>1</depth></history>
+        <latency_budget><duration><sec>0</sec><nanosec>10000000</nanosec></duration></latency_budget>
+      </datareader_qos>
+    </qos_profile>
+
+    <!-- RawReturn: 1 kHz receiver wire data. Best effort, tightest
+         latency budget in the system. -->
+    <qos_profile name="RawReturnProfile">
+      <datawriter_qos>
+        <reliability><kind>BEST_EFFORT_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>VOLATILE_DURABILITY_QOS</kind></durability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>1</depth></history>
+        <latency_budget><duration><sec>0</sec><nanosec>500000</nanosec></duration></latency_budget>
+      </datawriter_qos>
+      <datareader_qos>
+        <reliability><kind>BEST_EFFORT_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>VOLATILE_DURABILITY_QOS</kind></durability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>1</depth></history>
+        <latency_budget><duration><sec>0</sec><nanosec>500000</nanosec></duration></latency_budget>
+      </datareader_qos>
+    </qos_profile>
+
+  </qos_library>
+</dds>
