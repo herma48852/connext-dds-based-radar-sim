@@ -48,32 +48,32 @@
   <text x="570" y="216" text-anchor="end" font-size="11" fill="#c9d8ce">Radar/BeamCommand</text>
 
   <!-- pub RawReturn -->
-  <line x1="640" y1="182" x2="640" y2="420" stroke="#46d17c" stroke-width="2.2"/>
-  <polygon points="640,424 635,414 645,414" fill="#46d17c"/>
-  <text x="630" y="254" text-anchor="end" font-size="11" fill="#c9d8ce">Radar/RawReturn</text>
-  <text x="630" y="269" text-anchor="end" font-size="9.5" fill="#8fa398">1 kHz</text>
+  <line x1="660" y1="182" x2="660" y2="420" stroke="#46d17c" stroke-width="2.2"/>
+  <polygon points="660,424 655,414 665,414" fill="#46d17c"/>
+  <text x="660" y="254" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/RawReturn</text>
+  <text x="660" y="269" text-anchor="middle" font-size="9.5" fill="#8fa398">1 kHz</text>
 
   <!-- sub RawReturn (loopback) -->
-  <line x1="720" y1="424" x2="720" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
-  <polygon points="720,184 715,194 725,194" fill="#4fc3f7"/>
-  <text x="730" y="292" font-size="11" fill="#c9d8ce">Radar/RawReturn</text>
-  <text x="730" y="307" font-size="9.5" fill="#8fa398">loopback</text>
+  <line x1="760" y1="424" x2="760" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="760,184 755,194 765,194" fill="#4fc3f7"/>
+  <text x="760" y="292" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/RawReturn</text>
+  <text x="760" y="307" text-anchor="middle" font-size="9.5" fill="#8fa398">loopback</text>
 
   <!-- pub DetectionEvent -->
-  <line x1="820" y1="182" x2="820" y2="420" stroke="#46d17c" stroke-width="2.2"/>
-  <polygon points="820,424 815,414 825,414" fill="#46d17c"/>
-  <text x="830" y="330" font-size="11" fill="#c9d8ce">Radar/DetectionEvent</text>
+  <line x1="860" y1="182" x2="860" y2="420" stroke="#46d17c" stroke-width="2.2"/>
+  <polygon points="860,424 855,414 865,414" fill="#46d17c"/>
+  <text x="860" y="330" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/DetectionEvent</text>
 
   <!-- sub TargetTruth -->
-  <line x1="920" y1="424" x2="920" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
-  <polygon points="920,184 915,194 925,194" fill="#4fc3f7"/>
-  <text x="930" y="368" font-size="11" fill="#c9d8ce">TargetGen/TargetTruth</text>
+  <line x1="960" y1="424" x2="960" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="960,184 955,194 965,194" fill="#4fc3f7"/>
+  <text x="960" y="368" text-anchor="middle" font-size="11" fill="#c9d8ce">TargetGen/TargetTruth</text>
 
   <!-- sub Ship/ShipPosition key 0 (rightmost) -->
-  <line x1="1000" y1="424" x2="1000" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
-  <polygon points="1000,184 995,194 1005,194" fill="#4fc3f7"/>
-  <text x="1010" y="406" font-size="11" fill="#c9d8ce">Ship/ShipPosition</text>
-  <text x="1010" y="419" font-size="9.5" fill="#8fa398">key 0 (INS)</text>
+  <line x1="1040" y1="424" x2="1040" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="1040,184 1035,194 1045,194" fill="#4fc3f7"/>
+  <text x="1040" y="406" text-anchor="middle" font-size="11" fill="#c9d8ce">Ship/ShipPosition</text>
+  <text x="1040" y="419" text-anchor="middle" font-size="9.5" fill="#8fa398">key 0 (INS)</text>
 
   <!-- Radar.TrackManager (widened, arrows spread) -->
   <rect x="1180" y="110" width="260" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
@@ -91,11 +91,11 @@
   <text x="1320" y="330" text-anchor="start" font-size="11" fill="#c9d8ce">Radar/TargetTrack</text>
   <text x="1320" y="345" text-anchor="start" font-size="9.5" fill="#8fa398">10 Hz</text>
 
-  <!-- sub Ship/ShipPosition key 0 (right edge) -->
+  <!-- sub Ship/ShipPosition key 0 (right edge, label centered) -->
   <line x1="1410" y1="424" x2="1410" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
   <polygon points="1410,184 1405,194 1415,194" fill="#4fc3f7"/>
-  <text x="1420" y="370" text-anchor="start" font-size="11" fill="#c9d8ce">Ship/ShipPosition</text>
-  <text x="1420" y="383" text-anchor="start" font-size="9.5" fill="#8fa398">key 0 (INS)</text>
+  <text x="1410" y="370" text-anchor="middle" font-size="11" fill="#c9d8ce">Ship/ShipPosition</text>
+  <text x="1410" y="383" text-anchor="middle" font-size="9.5" fill="#8fa398">key 0 (INS)</text>
 
   <!-- ============================ THE BUS ============================ -->
   <rect x="40" y="430" width="1400" height="65" rx="9" fill="#12291b" stroke="#2e7d4f" stroke-width="2"/>
@@ -114,37 +114,67 @@
   <text x="145" y="548" font-size="11" fill="#c9d8ce">Radar/CalibrationStatus</text>
   <text x="145" y="563" font-size="9.5" fill="#8fa398">1 Hz</text>
 
-  <!-- Radar.CommandHandler -->
-  <rect x="443" y="700" width="190" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
-  <text x="538" y="724" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.Command</text>
-  <text x="538" y="741" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Handler</text>
-  <text x="538" y="758" text-anchor="middle" font-size="10" fill="#8fa398">radar_app &#183; WaitSet</text>
-  <line x1="538" y1="505" x2="538" y2="690" stroke="#4fc3f7" stroke-width="2.2"/>
-  <polygon points="538,694 533,684 543,684" fill="#4fc3f7"/>
-  <text x="528" y="548" text-anchor="end" font-size="11" fill="#c9d8ce">Radar/SystemCommand</text>
+  <!-- Radar.CommandHandler (moved left) -->
+  <rect x="280" y="700" width="190" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
+  <text x="375" y="724" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.Command</text>
+  <text x="375" y="741" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Handler</text>
+  <text x="375" y="758" text-anchor="middle" font-size="10" fill="#8fa398">radar_app &#183; WaitSet</text>
+  <line x1="375" y1="505" x2="375" y2="690" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="375,694 370,684 380,684" fill="#4fc3f7"/>
+  <text x="365" y="580" text-anchor="end" font-size="11" fill="#c9d8ce">Radar/SystemCommand</text>
 
-  <!-- Radar.CommandConsole -->
-  <rect x="846" y="700" width="190" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
-  <text x="941" y="724" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.Command</text>
-  <text x="941" y="741" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Console</text>
-  <text x="941" y="758" text-anchor="middle" font-size="10" fill="#8fa398">radar_app &#183; UI</text>
-  <line x1="941" y1="700" x2="941" y2="505" stroke="#46d17c" stroke-width="2.2"/>
-  <polygon points="941,501 936,511 946,511" fill="#46d17c"/>
-  <text x="931" y="548" text-anchor="end" font-size="11" fill="#c9d8ce">Radar/SystemCommand</text>
-  <text x="931" y="563" text-anchor="end" font-size="9.5" fill="#8fa398">UI scenarios</text>
+  <!-- Radar.CommandConsole (moved left) -->
+  <rect x="540" y="700" width="190" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
+  <text x="635" y="724" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.Command</text>
+  <text x="635" y="741" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Console</text>
+  <text x="635" y="758" text-anchor="middle" font-size="10" fill="#8fa398">radar_app &#183; UI</text>
+  <line x1="635" y1="700" x2="635" y2="505" stroke="#46d17c" stroke-width="2.2"/>
+  <polygon points="635,501 630,511 640,511" fill="#46d17c"/>
+  <text x="625" y="548" text-anchor="end" font-size="11" fill="#c9d8ce">Radar/SystemCommand</text>
+  <text x="625" y="563" text-anchor="end" font-size="9.5" fill="#8fa398">UI scenarios</text>
 
-  <!-- TargetGen.Generator -->
-  <rect x="1249" y="700" width="190" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
-  <text x="1344" y="730" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">TargetGen.Generator</text>
-  <text x="1344" y="749" text-anchor="middle" font-size="10" fill="#8fa398">target_gen</text>
-  <line x1="1335" y1="700" x2="1335" y2="505" stroke="#46d17c" stroke-width="2.2"/>
-  <polygon points="1335,501 1330,511 1340,511" fill="#46d17c"/>
-  <text x="1325" y="548" text-anchor="end" font-size="11" fill="#c9d8ce">TargetGen/TargetTruth</text>
-  <text x="1325" y="563" text-anchor="end" font-size="9.5" fill="#8fa398">50 Hz &#183; keyed per target</text>
-  <line x1="1353" y1="700" x2="1353" y2="505" stroke="#46d17c" stroke-width="2.2"/>
-  <polygon points="1353,501 1348,511 1358,511" fill="#46d17c"/>
-  <text x="1363" y="616" text-anchor="start" font-size="11" fill="#c9d8ce">Ship/ShipPosition</text>
-  <text x="1363" y="631" text-anchor="start" font-size="9.5" fill="#8fa398">10 Hz &#183; key 1 (truth)</text>
+  <!-- HMI-UI (NEW, between CommandConsole and TargetGen) -->
+  <rect x="840" y="700" width="280" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
+  <text x="980" y="730" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">HMI-UI</text>
+  <text x="980" y="749" text-anchor="middle" font-size="10" fill="#8fa398">radar_app &#183; display</text>
+
+  <!-- sub TargetTrack (left edge) -->
+  <line x1="870" y1="505" x2="870" y2="690" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="870,694 865,684 875,684" fill="#4fc3f7"/>
+  <text x="860" y="548" text-anchor="end" font-size="11" fill="#c9d8ce">Radar/TargetTrack</text>
+
+  <!-- sub DetectionEvent -->
+  <line x1="940" y1="505" x2="940" y2="690" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="940,694 935,684 945,684" fill="#4fc3f7"/>
+  <text x="930" y="600" text-anchor="end" font-size="11" fill="#c9d8ce">Radar/DetectionEvent</text>
+
+  <!-- sub Ship/ShipPosition -->
+  <line x1="1020" y1="505" x2="1020" y2="690" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="1020,694 1015,684 1025,684" fill="#4fc3f7"/>
+  <text x="1010" y="650" text-anchor="end" font-size="11" fill="#c9d8ce">Ship/ShipPosition</text>
+  <text x="1010" y="663" text-anchor="end" font-size="9.5" fill="#8fa398">key 0 (INS)</text>
+
+  <!-- sub CalibrationStatus (right edge) -->
+  <line x1="1090" y1="505" x2="1090" y2="690" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="1090,694 1085,684 1095,684" fill="#4fc3f7"/>
+  <text x="1100" y="620" text-anchor="start" font-size="11" fill="#c9d8ce">Radar/CalibrationStatus</text>
+
+  <!-- TargetGen.Generator (widened, arrows spread) -->
+  <rect x="1200" y="700" width="260" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
+  <text x="1330" y="730" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">TargetGen.Generator</text>
+  <text x="1330" y="749" text-anchor="middle" font-size="10" fill="#8fa398">target_gen</text>
+
+  <!-- pub TargetGen/TargetTruth (left, 25% position) -->
+  <line x1="1260" y1="700" x2="1260" y2="505" stroke="#46d17c" stroke-width="2.2"/>
+  <polygon points="1260,501 1255,511 1265,511" fill="#46d17c"/>
+  <text x="1250" y="548" text-anchor="end" font-size="11" fill="#c9d8ce">TargetGen/TargetTruth</text>
+  <text x="1250" y="563" text-anchor="end" font-size="9.5" fill="#8fa398">50 Hz &#183; keyed per target</text>
+
+  <!-- pub Ship/ShipPosition key 1 (right, 75% position, label centered) -->
+  <line x1="1400" y1="700" x2="1400" y2="505" stroke="#46d17c" stroke-width="2.2"/>
+  <polygon points="1400,501 1395,511 1405,511" fill="#46d17c"/>
+  <text x="1400" y="620" text-anchor="middle" font-size="11" fill="#c9d8ce">Ship/ShipPosition</text>
+  <text x="1400" y="633" text-anchor="middle" font-size="9.5" fill="#8fa398">10 Hz &#183; key 1 (truth)</text>
 
   <!-- footer -->
   <text x="40" y="916" font-size="10.5" fill="#6f7f76">All application types are @appendable and self-describing via the builtin TypeLookup Service &#8212; monitoring tools decode samples without the IDL file.</text>

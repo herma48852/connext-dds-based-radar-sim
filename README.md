@@ -10,7 +10,7 @@ Two applications, one CMake monorepo, one DDS domain (default: domain 0):
 
 | App          | Purpose |
 |--------------|---------|
-| `radar_app`  | Simulated radar on a moving ship. Internal components (BeamScheduler, DetectionProcessor, TrackManager, CalibrationMonitor, CommandHandler) communicate **exclusively via DDS topics**. ImGui/GLFW/OpenGL 3.3 UI with PPI, A-scope, B-scope, track list, beam timeline, health and ship panels. |
+| `radar_app`  | Simulated radar on a moving ship. Internal components (BeamScheduler, DetectionProcessor, TrackManager, CalibrationMonitor, CommandHandler, **HMI-UI**) communicate **exclusively via DDS topics**. ImGui/GLFW/OpenGL 3.3 UI with PPI, A-scope, B-scope, track list, beam timeline, health and ship panels. |
 | `target_gen` | Synthetic target generator (configurable trajectories, RCS, kinematics) publishing `TargetGen/TargetTruth` + ship-motion ground truth. Can inject QoS/type mismatches and the degraded-array scenario on demand. |
 
 ```
@@ -24,6 +24,7 @@ AesaRadarSim/
 │   ├── components/              # one class per radar component, one
 │   │                            # DomainParticipant each (topology demo)
 │   ├── ui/                      # PpiView, AScopeView, BScopeView, Panels
+│   ├── hmi_ui/                  # HMI-UI DomainParticipant (display thread)
 │   └── main.cpp
 ├── src/target_gen/              # TargetFleet + DiagnosticsInjector
 └── docs/CONNEXT_STUDIO.md       # monitoring / diagnostics demo guide
@@ -111,9 +112,11 @@ cmake --build build --config RelWithDebInfo
 
 Every internal radar component is a named DomainParticipant wired to the
 others purely through topics on the shared bus — there are no direct
-in-process calls between components. (Connext Studio joins the same domain
-from a separate workspace and can read every topic shown; see
-[docs/CONNEXT_STUDIO.md](docs/CONNEXT_STUDIO.md). Not shown: the
+in-process calls between components. The **HMI-UI** participant is the
+ImGui/GLFW/OpenGL display thread; it never blocks on DDS but drains
+lock-free SPSC queues fed by DDS listener callbacks. (Connext Studio joins
+the same domain from a separate workspace and can read every topic shown;
+see [docs/CONNEXT_STUDIO.md](docs/CONNEXT_STUDIO.md). Not shown: the
 on-demand diagnostic endpoints `target_gen` creates with
 `--inject-qos-mismatch`, `--inject-type-mismatch` and `--degrade-array`.)
 
@@ -122,12 +125,12 @@ on-demand diagnostic endpoints `target_gen` creates with
 | Topic | Type | Rate | Profile | Notes |
 |---|---|---|---|---|
 | `Radar/RawReturn` | RawReturn | 1 kHz | RawReturnProfile | BEST_EFFORT, 500us latency budget. The "receiver wire", looped back inside DetectionProcessor |
-| `Radar/DetectionEvent` | DetectionEvent | ~100 Hz | DetectionEventProfile | BEST_EFFORT CFAR blips |
+| `Radar/DetectionEvent` | DetectionEvent | ~100 Hz | DetectionEventProfile | BEST_EFFORT CFAR blips; consumed by HMI-UI (PPI, A-scope, B-scope) |
 | `Radar/BeamCommand` | BeamCommand | 50 Hz | BeamCommandProfile | RELIABLE dwell schedule |
-| `Radar/TargetTrack` | TargetTrack | 10 Hz | TargetTrackProfile | RELIABLE + TRANSIENT_LOCAL + 100 ms deadline |
-| `Radar/CalibrationStatus` | CalibrationStatus | 1 Hz | CalibrationStatusProfile | array health, 1024 elements |
+| `Radar/TargetTrack` | TargetTrack | 10 Hz | TargetTrackProfile | RELIABLE + TRANSIENT_LOCAL + 100 ms deadline; consumed by HMI-UI (track list) |
+| `Radar/CalibrationStatus` | CalibrationStatus | 1 Hz | CalibrationStatusProfile | array health, 1024 elements; consumed by HMI-UI (health panel) |
 | `Radar/SystemCommand` | SystemCommand | bursty | SystemCommandProfile | RELIABLE, WaitSet-handled |
-| `Ship/ShipPosition` | ShipPosition | 10 Hz | ShipPositionProfile | keyed: 0 = INS, 1 = truth; consumed by DetectionProcessor (coordinate stabilization) and TrackManager (track correlation) |
+| `Ship/ShipPosition` | ShipPosition | 10 Hz | ShipPositionProfile | keyed: 0 = INS, 1 = truth; consumed by DetectionProcessor (coordinate stabilization), TrackManager (track correlation), and HMI-UI (ship panel) |
 | `TargetGen/TargetTruth` | TargetTruth | 50 Hz/target | TargetTruthProfile | keyed per target |
 
 ### DetectionProcessor loopback simplification
@@ -163,8 +166,8 @@ numbers. Sea clutter and other environmental returns are also synthesized.
   only cache or enqueue.
 - **WaitSet** (dedicated thread): `SystemCommand` — lower rate, handled
   atomically and in order by `CommandHandler`.
-- **Render thread**: never blocks on DDS; drains lock-free SPSC queues and
-  mutex-protected stores from the `DataBus` at display rate. DDS threads
+- **HMI-UI / Render thread**: never blocks on DDS; drains lock-free SPSC queues
+  and mutex-protected stores from the `DataBus` at display rate. DDS threads
   never touch ImGui/OpenGL.
 
 ### Type system
