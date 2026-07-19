@@ -41,16 +41,16 @@ public:
                 owner_->on_track(s.data());
                 continue;
             }
-            // Invalid sample: instance state change (dispose / no writers).
-            const auto st = s.info().instance_state();
-            if (st == dds::sub::status::InstanceState::not_alive_disposed() ||
-                st == dds::sub::status::InstanceState::not_alive_no_writers()) {
-                try {
-                    const auto key = reader.key_value(s.info().instance_handle());
-                    owner_->on_track_dropped(key.track_id);
-                } catch (const dds::core::Error&) {
-                    // instance already reclaimed; the age-out will catch it
-                }
+            // Invalid sample on take(): instance lifecycle event (dispose /
+            // unregister). Recover the key to drop the track from the UI.
+            // (RTI 7.7: SampleInfo has no instance_state(); key_value uses
+            // the two-argument out-param form.)
+            try {
+                types::TargetTrack key;
+                reader.key_value(key, s.info().instance_handle());
+                owner_->on_track_dropped(key.track_id);
+            } catch (const dds::core::Error&) {
+                // instance already reclaimed; the age-out will catch it
             }
         }
     }
