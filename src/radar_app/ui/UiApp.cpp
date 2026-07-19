@@ -1,5 +1,6 @@
 #include "UiApp.hpp"
 
+#include <algorithm>
 #include <iostream>
 
 #include <imgui.h>
@@ -113,8 +114,14 @@ int UiApp::run() {
 
         const ImGuiViewport* vp = ImGui::GetMainViewport();
         const float W = vp->Size.x, H = vp->Size.y;
-        const float panel_h = 230.0f * ImGui::GetStyle().WindowPadding.y / 8.0f
-                              * ImGui::GetIO().FontGlobalScale + 190.0f;
+        // Bottom strip sized to its content at the active UI scale; the
+        // scopes are guaranteed the majority of the window. (The old
+        // formula multiplied by an ALREADY-scaled WindowPadding AND by
+        // FontGlobalScale, so on Retina it produced 1110pt of panels on
+        // an 1100pt window — the scopes were crushed to ~100px.)
+        const float ui_scale = ImGui::GetIO().FontGlobalScale;
+        const float panel_h = std::clamp(240.0f * ui_scale,
+                                         H * 0.27f, H * 0.5f);
         const float scope_h = H - panel_h;
         const float ppi_w = W * 0.48f;
         const float right_w = W - ppi_w;
@@ -137,8 +144,10 @@ int UiApp::run() {
 
         // bottom strip
         const float y0 = scope_h;
-        const float w1 = W * 0.30f, w2 = W * 0.24f, w3 = W * 0.15f,
-                    w4 = W * 0.15f, w5 = W - w1 - w2 - w3 - w4;
+        // Wider health/ship panels: at 2x UI scale their text was
+        // clipped by the old 15% widths ("DRIFT ... dB avg", "PIT/ROL").
+        const float w1 = W * 0.26f, w2 = W * 0.22f, w3 = W * 0.18f,
+                    w4 = W * 0.18f, w5 = W - w1 - w2 - w3 - w4;
         render_track_list("TARGET TRACKS", ImVec2(0, y0), ImVec2(w1, panel_h),
                           tracks, ship);
         render_beam_timeline("BEAM SCHEDULE", ImVec2(w1, y0), ImVec2(w2, panel_h),

@@ -64,13 +64,20 @@ void PpiView::render(const char* title, ImVec2 pos, ImVec2 size,
     range_m_smooth_ += (range_m_target_ - range_m_smooth_) * std::min(1.0f, dt * 8.0f);
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    const ImVec2 wp = ImGui::GetWindowPos();
-    const ImVec2 ws = ImGui::GetWindowSize();
-    const double cx = wp.x + ws.x * 0.5;
-    const double cy = wp.y + ws.y * 0.54;
-    const double R  = std::min(ws.x, ws.y) * 0.44;
+    // Geometry from the CONTENT area (not the whole window incl. title
+    // bar), with the top line reserved for the HDG/SPD/RNG readout so it
+    // can never collide with the scope or the azimuth labels.
+    const ImVec2 wp = ImGui::GetCursorScreenPos();
+    const float w = ImGui::GetContentRegionAvail().x;
+    const float h = ImGui::GetContentRegionAvail().y;
+    const float readout_h = ImGui::GetTextLineHeightWithSpacing();
+    const double cx = wp.x + w * 0.5;
+    const double cy = wp.y + readout_h + (h - readout_h) * 0.5;
+    const double R  = std::min((double)w, (double)(h - readout_h)) * 0.44;
 
-    dl->AddRectFilled(wp, ImVec2(wp.x + ws.x, wp.y + ws.y), theme::col_bg());
+    if (R < 20.0) { ImGui::End(); return; } // too small to draw meaningfully
+
+    dl->AddRectFilled(wp, ImVec2(wp.x + w, wp.y + h), theme::col_bg());
 
     // --- range rings + labels ---
     for (int i = 1; i <= 4; ++i) {
@@ -182,11 +189,11 @@ void PpiView::render(const char* title, ImVec2 pos, ImVec2 size,
                     theme::col_ownship(), 2.0f);
     }
 
-    // --- readouts ---
+    // --- readouts (top-left, above the scope) ---
     char buf[96];
     std::snprintf(buf, sizeof buf, "HDG %05.1f  SPD %04.1f kn  RNG %.0f km",
                   ship.heading_deg, ship.speed_mps * 1.94384, range_m_smooth_ / 1000.0);
-    dl->AddText(ImVec2(wp.x + 12, wp.y + ws.y - 22), theme::col_text(), buf);
+    dl->AddText(ImVec2(wp.x + 4, wp.y), theme::col_text(), buf);
 
     ImGui::End();
 }

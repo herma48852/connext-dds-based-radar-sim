@@ -81,7 +81,8 @@ void TrackManager::update_loop() {
         if (bus_.reset_requested.exchange(false)) {
             // Dispose every live instance so subscribers (HMI-UI, Studio)
             // watch the tracks vanish instead of timing out.
-            for (auto& [id, h] : handles_) writer_.dispose_instance(h);
+            if (bus_.dispose_enabled.load())
+                for (auto& [id, h] : handles_) writer_.dispose_instance(h);
             handles_.clear();
             tracks.clear();
         }
@@ -158,7 +159,8 @@ void TrackManager::update_loop() {
             if (now_ms - it->last_update_ms > kCoastMs) {
                 auto h = handles_.find(it->id);
                 if (h != handles_.end()) {
-                    writer_.dispose_instance(h->second);
+                    if (bus_.dispose_enabled.load())
+                        writer_.dispose_instance(h->second);
                     handles_.erase(h);
                 }
                 it = tracks.erase(it);

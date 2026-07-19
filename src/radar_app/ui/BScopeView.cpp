@@ -43,9 +43,18 @@ void BScopeView::init_gl() {
 }
 
 void BScopeView::splat(const app::BlipView& b) {
-    const int az = ((int)std::lround(b.azimuth_deg) % 360 + 360) % 360;
-    const int rb = std::clamp((int)(b.range_m / kRangeMaxM * kRangeBins),
-                              0, kRangeBins - 1);
+    // Reject NaN/Inf blips outright: casting them to int is UB.
+    if (!std::isfinite(b.azimuth_deg) || !std::isfinite(b.range_m) ||
+        !std::isfinite(b.snr_db))
+        return;
+    // Mod in long arithmetic (no narrowing cast of a huge double), then
+    // clamp in double before converting — indices stay in range for any
+    // finite input, however extreme.
+    const long az_l = std::lround(b.azimuth_deg);
+    const int az = static_cast<int>((az_l % 360 + 360) % 360);
+    const int rb = static_cast<int>(std::clamp(
+        b.range_m / kRangeMaxM * kRangeBins, 0.0,
+        static_cast<double>(kRangeBins - 1)));
     const float amp = std::clamp((float)(b.snr_db / 30.0), 0.15f, 1.0f);
     // 3x3 gaussian splat
     for (int da = -1; da <= 1; ++da) {

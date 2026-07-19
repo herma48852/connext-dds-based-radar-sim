@@ -1,7 +1,7 @@
 # AesaRadarSim — Continuation TODO
 
-State as of 2026-07-20. Build is green; both apps run. One open crash
-investigation. Read this first when resuming with a fresh context.
+State as of 2026-07-20 (evening). Build is green; both apps run. One open
+crash investigation. Read this first when resuming with a fresh context.
 
 ---
 
@@ -24,58 +24,162 @@ sweep, tracks, blips), then SIGSEGV. The crash handler in
 24 radar_app radar::ui::UiApp::run() + 200
 ```
 
-### Analysis so far
+### FULL code audit COMPLETE (2026-07-20, K3) — our code is clean
 
-- Crash is on the **main thread, inside AppKit** (a Foundation timer
-  walking the window titlebar views hits a dangling pointer).
-- **NOT a DDS crash.** No Connext frames in the stack.
-- Verified: **zero GLFW/OpenGL/ImGui calls outside `src/radar_app/ui/`** —
-  no component thread touches the window system.
-- Therefore prime suspect: **heap corruption in our own code** (an
-  overflow trashes AppKit objects; the titlebar timer is just where it
-  gets detected). Second suspect: a GLFW/macOS titlebar interaction, but
-  nothing in the code mutates the window after creation.
-- History note: the earlier "silent SIGSEGV:11" and "SIGBUS:10 after
-  sustained runtime" were very likely this same bug all along. The DDS
-  instance-leak fix (below) removed unbounded instance growth but did
-  **not** fix this crash.
+Every .cpp/.hpp in the repo was read line-by-line with heap corruption as
+the search target. **No out-of-bounds write exists anywhere.** Verdicts:
 
-### Code audit progress (render path, most likely corruptor)
+- `ui/BScopeView.cpp` — splat/flip/LUT indices provably bounded
+  (mod/clamp after every cast). Texture size == buffer size. CLEAN.
+- `ui/AScopeView.cpp` — phosphor/points sized from trace length. CLEAN.
+- `ui/Panels.cpp` + `ui/Theme.hpp` — bounded ImPlot arrays, no raw math.
+  CLEAN.
+- `common/SpscQueue.hpp` — textbook SPSC: head written only by producer,
+  tail only by consumer, correct acquire/release. **Producer uniqueness
+  verified per queue**: `detection_blips` ← HmiUi listener only,
+  `beam_commands` ← BeamScheduler only, `CommandConsole::queue_` ←
+  render thread only. CLEAN.
+- `CommandConsole.hpp` / `components/CommandHandler.cpp` — CLEAN.
+- `ui/PpiView.cpp` / `ui/UiApp.cpp` — re-audited; blip deque ≤2048,
+  trails ≤10 and pruned, beam history ≤240. CLEAN.
+- `DataBus.hpp` — trace double-buffer swapped under mutex; UI receives
+  its own copy of every store. CLEAN.
+- Components (DetectionProcessor, TrackManager, HmiUi, BeamScheduler,
+  CalibrationMonitor, ShipSimulator, CommandHandler), both mains,
+  target_gen, IDL↔code constants, QoS profile names — CLEAN.
 
-- `src/radar_app/ui/UiApp.cpp` — **read, clean.** Standard ImGui loop,
-  no per-frame window mutation, no raw buffers.
-- `src/radar_app/ui/PpiView.cpp` — **read, nothing conclusive.** Blip
-  deque bounded at 2048; track trails pruned against live tracks.
-- **Still to audit (in priority order):**
-  1. `src/radar_app/ui/BScopeView.cpp` — GL texture splat math; classic
-     overflow site (check row/column bounds when azimuth wraps or
-     `range_m > range_max`; check texture size vs. buffer size).
-  2. `src/radar_app/ui/AScopeView.cpp` — polyline buffer sizing.
-  3. `src/radar_app/ui/Panels.cpp` + `Theme.hpp`.
-  4. `src/common/SpscQueue.hpp` — lock-free index math (producer pushes,
-     consumer drains; already fixed one producer-side pop race).
-  5. `src/radar_app/CommandConsole.hpp`, `components/CommandHandler.cpp`.
+### Hardening fixes applied this session (real defects, small blast radius)
 
-### Fastest path to the answer: AddressSanitizer
+1. `DetectionProcessor::on_raw_return` indexed `iq_samples[2*i]` trusting
+   the sender's `range_bin_count` over the **actual received sequence
+   length** — OOB read if any foreign/malformed publisher writes
+   RawReturn. Now `n` is also bounded by `iq_samples.size()/2`.
+2. `BScopeView::splat` — NaN/Inf blip fields made the `(int)` casts UB.
+   Now: `isfinite` reject, modulo in `long`, clamp in `double`.
+3. `SimClock::started_` — plain bool cross-thread flag; now
+   `std::atomic<bool>` with acquire/release.
+4. `UiApp::run` — layout could go negative for extreme content scales;
+   `panel_h` now clamped to `[100, 90% H]`.
 
-One ASan run should name the exact file/line of the overflow:
+### KEY FACT (2026-07-20 PM): every crash so far is radar_app ALONE
 
-```bash
-cd /Users/fherman/rti_workspace/7.7.0/my_examples/AesaRadarSim
-cmake -B build-asan -DCMAKE_BUILD_TYPE=Debug \
-  -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer" \
-  -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address"
-cmake --build build-asan -j8
-./build-asan/radar_app    # plus ./build/target_gen --targets 8
+**target_gen has never been run.** All crashes (60 s AppKit SIGSEGV,
+earlier silent SIGSEGV/SIGBUS, 20 s SIGBUS) happened with radar_app as
+the only process — the bug is fully self-contained; no second terminal
+or external publisher is needed to reproduce it.
+
+The dispose chain runs on empty space via CFAR false alarms:
+
+- Pfa ≈ 1.4e-6/bin (kCfarThreshold 0.26, Rayleigh σ 0.05) × 512 bins ×
+  1 kHz ≈ one false blip every few seconds, BY DESIGN.
+- Each false blip → tentative track (registered DDS instance).
+- No correlating second hit → coasts out after exactly 5 s →
+  dispose_instance fires. Rate ≈ 10–15 disposes/min from t ≈ 10 s on.
+- First dispose lands squarely in the observed 20–60 s crash windows;
+  crash-time variance matches the stochastic false-alarm process
+  (mt19937 seeded from random_device → different every run).
+
+### 2026-07-20 PM: second crash capture — same bug, DDS-layer victim
+
+Patched build died at **20 s** with **SIGBUS:10**, this time on the
+TrackManager thread, inside Connext's writer-history buffer pool:
+
+```
+2  REDAFastBufferPoolSet_getBuffer + 152      <- wild free-list pointer
+5  WriterHistorySessionManager_getNewSample
+9  WriterHistoryMemoryPlugin_addSample
+10 PRESWriterHistoryDriver_addDispose
+12 PRESPsWriter_disposeInternal
+14 rti::pub::UntypedDataWriterView::dispose_instance
+15 radar::app::TrackManager::update_loop + 788
 ```
 
-Paste the ASan report back. (TSan is the fallback for a data race, but
-expect noise from Connext internals.)
+- SIGBUS:10 was in the crash history BEFORE any patches (see "History
+  note" above) — same underlying bug, different innocent bystander.
+- The corruptor tripped inside Connext during
+  `writer_.dispose_instance(handle)` — the newest, least-exercised DDS
+  code in the system (§4's "show dispose in action" was never run).
+- Timing fits: the first dispose fires when the first tentative track
+  coasts out (~15–30 s in). Plausible that earlier 60 s AppKit crashes
+  were downstream victims of the same ~20 s dispose event.
+- No matching RTI known issue for this stack (checked 7.x release
+  notes, CORE crash-fix lists).
+
+### E1/E2 RESULTS (2026-07-20 eve) — VERDICT: corruptor is in the UI layer
+
+- **E1 (`--headless`, dispose ACTIVE): ran 11 min CLEAN.** The whole DDS
+  layer — 8 participants, 1 kHz loopback, TrackManager, dispose path
+  firing on false-alarm tracks — is EXONERATED. **H1 (dispose) is dead.**
+- **E2 (`--no-dispose`, windowed): crashed in 12 s**, main thread,
+  `glfwPollEvents` → `nextEventMatchingMask:` → `NSEvent
+  _initWithCGEvent:` → `_findWindowUsingCache:` → `-[NSRecursiveLock
+  unlock]` on garbage. Removing dispose changed nothing.
+- Both windowed crashes are the same animal: `glfwPollEvents` → AppKit
+  window bookkeeping (titlebar view list / NSApplication window cache)
+  walked into a dangling pointer. **The bug only manifests with the
+  GLFW/ImGui/GL UI running.**
+- Remaining suspects, in order: (a) our UI glue + ImGui 1.90.5 + ImPlot
+  0.16 + GLFW 3.4 — ALL built from source, hence ASan-coverable;
+  (b) Apple's GL-on-Metal shim (per-frame 360x256 texture re-upload);
+  (c) macOS AppKit/GLFW interaction bug. Checked GLFW changelog since
+  3.4: no Cocoa crash fixes (post-3.4 work is Wayland/X11) — bump stays
+  as a low-expectation last resort.
+
+### Experiment ladder (final form; in order)
+
+1. **ASan, windowed, solo** — covers our UI code + ImGui + ImPlot +
+   GLFW entirely (all FetchContent/source-built). **CRITICAL: GLFW is C
+   — pass the sanitizer in CMAKE_C_FLAGS too or GLFW stays
+   uninstrumented:**
+   ```bash
+   cmake -B build-asan -DCMAKE_BUILD_TYPE=Debug \
+     -DCMAKE_C_FLAGS="-fsanitize=address -fno-omit-frame-pointer" \
+     -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer" \
+     -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address"
+   cmake --build build-asan -j8
+   ASAN_OPTIONS=halt_on_error=1:abort_on_error=1 ./build-asan/radar_app
+   ```
+   Repro takes <60 s. Paste the first ASan report verbatim.
+   (Connext dylibs are uninstrumented — fine; they're exonerated by E1.)
+2. **No rebuild:** `NSZombieEnabled=YES ./build/radar_app` — a dangling
+   NSView/NSWindow gets a console log naming the freed object's class
+   and address. Then `MallocScribble=1 MallocPreScribble=1
+   ./build/radar_app` — poisoned freed memory crashes the FIRST reader
+   (0x55... pattern), closer to the cause.
+3. **GL-on-Metal theory:** throttle the B-scope texture upload to every
+   4th frame (patch ready on request). Crash gone → driver path; keep
+   the throttle as the fix (15 Hz is invisible on a 4 s phosphor).
+4. **Connext debug libs** (`cmake -B build-dbg
+   -DCMAKE_BUILD_TYPE=Debug`) — retained only as a formality; E1 makes
+   Connext involvement unlikely.
+5. **GLFW master bump** (`GIT_TAG 3.4` → `master` in CMakeLists) —
+   cheap, but no relevant Cocoa fixes per the changelog.
+6. TSan last (noisy with Connext internals, as before).
+
+Report back: ASan report (or "ASan silent + zombie/scribble output").
 
 ---
 
 ## 2. Recently completed (don't redo)
 
+- **Full heap-corruption audit of the entire codebase** (2026-07-20):
+  every file read; no OOB write found. Four hardening fixes applied
+  (RawReturn seq-length bound, B-scope NaN-safe binning, atomic
+  SimClock flag, clamped UI layout). Details in §1.
+- **`radar_app --headless`** soak mode added (components only, no UI) —
+  the bisect tool for the crash investigation.
+- **`radar_app --no-dispose`** toggle added (`bus_.dispose_enabled`;
+  guards both dispose sites in TrackManager) — isolates the dispose
+  path, the prime suspect after the 20 s SIGBUS in Connext's
+  writer-history pool.
+- **UI layout fix** (2026-07-20 eve): the bottom-strip formula
+  multiplied by an ALREADY-scaled WindowPadding AND by FontGlobalScale,
+  so on Retina it reserved 1110pt of an 1100pt window — PPI/A/B scopes
+  were crushed to ~100px. Now `panel_h = clamp(240 × ui_scale, 27% H,
+  50% H)` (scopes get ≥50–56%); PPI geometry uses the content area
+  (title bar excluded) with the HDG/SPD/RNG readout on a reserved top
+  line; health/ship panels widened (15%→18%, text was clipped);
+  redundant in-content "SCENARIOS" title removed so 7 buttons fit.
 - **HMI-UI is now a real DomainParticipant** (`Radar.HMI-UI`,
   `src/radar_app/components/HmiUi.{hpp,cpp}`): subscribes TargetTrack,
   DetectionEvent, ShipPosition (key 0), CalibrationStatus. Every panel is

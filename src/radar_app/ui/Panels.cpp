@@ -142,7 +142,9 @@ void render_ship_panel(const char* title, ImVec2 pos, ImVec2 size,
 void render_scenario_bar(const char* title, ImVec2 pos, ImVec2 size,
                          app::CommandConsole& console) {
     begin_panel(title, pos, size);
-    ImGui::TextUnformatted("SCENARIOS");
+    // (No in-content title: the window title bar already reads
+    // "SCENARIOS" — removing it keeps all seven buttons inside the
+    // reduced bottom-strip height.)
 
     if (ImGui::Button("SEARCH MODE"))
         console.send(0, 0, 0, "search");            // CMD_SET_MODE

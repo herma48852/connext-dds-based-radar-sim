@@ -8,6 +8,7 @@
 //     t.epoch_millis = value;   // not t.epoch_millis(value)
 // ============================================================================
 
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include "radar_types.hpp" // generated from idl/radar_types.idl
@@ -18,11 +19,11 @@ class SimClock {
 public:
     static void start() {
         instance().start_ = clock::now();
-        instance().started_ = true;
+        instance().started_.store(true, std::memory_order_release);
     }
 
     static int64_t sim_millis() {
-        if (!instance().started_) start();
+        if (!instance().started_.load(std::memory_order_acquire)) start();
         return std::chrono::duration_cast<std::chrono::milliseconds>(
                    clock::now() - instance().start_).count();
     }
@@ -44,7 +45,7 @@ private:
     using clock = std::chrono::steady_clock;
     static SimClock& instance() { static SimClock c; return c; }
     clock::time_point start_{};
-    bool started_{false};
+    std::atomic<bool> started_{false};
 };
 
 } // namespace radar

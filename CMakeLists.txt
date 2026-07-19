@@ -85,15 +85,23 @@ add_library(imgui STATIC
     ${imgui_SOURCE_DIR}/imgui_widgets.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp)
-target_include_directories(imgui PUBLIC
+# SYSTEM includes: warnings from third-party headers (e.g. clang's
+# -Wnontrivial-memcall on imgui.h's memset constructors) must not drown
+# out warnings from our own code.
+target_include_directories(imgui SYSTEM PUBLIC
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends)
 target_link_libraries(imgui PUBLIC glfw OpenGL::GL)
+# imgui's own .cpps include imgui.h with quoted includes, which resolve
+# next to the source file (not via the SYSTEM path above), so silence the
+# clang-only warning for the library's own translation units as well.
+target_compile_options(imgui PRIVATE
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-nontrivial-memcall>)
 
 add_library(implot STATIC
     ${implot_SOURCE_DIR}/implot.cpp
     ${implot_SOURCE_DIR}/implot_items.cpp)
-target_include_directories(implot PUBLIC ${implot_SOURCE_DIR})
+target_include_directories(implot SYSTEM PUBLIC ${implot_SOURCE_DIR})
 target_link_libraries(implot PUBLIC imgui)
 
 # --- Common DDS infrastructure (header-only) --------------------------------
@@ -138,6 +146,10 @@ if(APPLE)
     # Connext on macOS uses @rpath; the runtime environment is set up by
     # sourcing rtisetenv_<arch>.bash (see README) or by DYLD_LIBRARY_PATH.
     set_target_properties(radar_app target_gen PROPERTIES MACOSX_RPATH ON)
+    # macOS deprecates ALL of OpenGL (since 10.14); every GL app gets one
+    # warning per call. Silence them in our sources (ImGui's GL backend
+    # already defines this for itself).
+    target_compile_definitions(radar_app PRIVATE GL_SILENCE_DEPRECATION)
 endif()
 
 # Make the QoS file discoverable next to the binaries.

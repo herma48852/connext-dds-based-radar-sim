@@ -151,7 +151,12 @@ void DetectionProcessor::return_synthesis_loop() {
 
 // --- Signal processor: CFAR threshold crossings -> DetectionEvent ----------
 void DetectionProcessor::on_raw_return(const types::RawReturn& ret) {
-    const int n = std::min<int>(ret.range_bin_count, kRangeBins);
+    // Bound by the ACTUAL sequence length, not just the declared bin count:
+    // a foreign/malformed publisher could send range_bin_count = N with a
+    // shorter iq_samples buffer, and indexing would run off the end.
+    const int n = std::min<int>(
+        std::min<int>(ret.range_bin_count, kRangeBins),
+        static_cast<int>(ret.iq_samples.size()) / 2);
     if (n < 3) return;
 
     // magnitude per bin (also feeds the A-scope trace)

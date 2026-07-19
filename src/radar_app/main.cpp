@@ -15,9 +15,13 @@
 // Usage: radar_app [--domain N]     (default domain 0)
 // ============================================================================
 
+#include <atomic>
+#include <chrono>
+#include <csignal>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <thread>
 
 // Crash diagnostics: dump a backtrace to stderr on fatal signals so the
 // failing thread is identifiable without a debugger attached (POSIX only).
@@ -60,14 +64,30 @@ void install_crash_handler() {}
 #include "components/TrackManager.hpp"
 #include "ui/UiApp.hpp"
 
+namespace {
+std::atomic<bool> g_running{true};
+void on_sigint(int) { g_running.store(false); }
+} // namespace
+
 int main(int argc, char** argv) {
     install_crash_handler();
     int32_t domain = 0;
+    bool headless = false;
+    bool no_dispose = false;
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--domain") == 0 && i + 1 < argc)
             domain = std::atoi(argv[++i]);
+        else if (std::strcmp(argv[i], "--headless") == 0)
+            headless = true;
+        else if (std::strcmp(argv[i], "--no-dispose") == 0)
+            no_dispose = true;
         else if (std::strcmp(argv[i], "--help") == 0) {
-            std::cout << "radar_app [--domain N]\n";
+            std::cout << "radar_app [--domain N] [--headless] [--no-dispose]\n"
+                         "  --headless    run components only (no window); the\n"
+                         "                crash-bisect soak test: same DDS traffic,\n"
+                         "                zero GLFW/ImGui/AppKit in the process\n"
+                         "  --no-dispose  TrackManager never calls dispose_instance;\n"
+                         "                isolates the dispose path as crash suspect\n";
             return 0;
         }
     }
@@ -76,6 +96,10 @@ int main(int argc, char** argv) {
     std::cout << "[radar_app] starting on DDS domain " << domain << "\n";
 
     radar::app::DataBus bus;
+    if (no_dispose) {
+        bus.dispose_enabled.store(false);
+        std::cout << "[radar_app] --no-dispose: dispose_instance disabled\n";
+    }
 
     radar::app::ShipSimulator      ship(domain, bus);
     radar::app::BeamScheduler      scheduler(domain, bus);
@@ -96,8 +120,24 @@ int main(int argc, char** argv) {
     console.start();
     hmi.start();
 
-    radar::ui::UiApp app(bus, console);
-    const int rc = app.run(); // blocks until the window closes
+    int rc = 0;
+    if (headless) {
+        // Soak test for the SIGSEGV investigation: identical components,
+        // participants and DDS traffic as the full app, but no GLFW window,
+        // no ImGui and no AppKit. If this survives for hours while the
+        // windowed build dies after ~1 minute, the corruptor lives in the
+        // UI/windowing layer, not in the DDS/component layer.
+        std::signal(SIGINT, on_sigint);
+        std::cout << "[radar_app] headless soak mode; Ctrl+C to stop\n";
+        while (g_running.load()) {
+            std::this_thread::sleep_for(std::chrono::seconds(10));
+            std::cout << "[radar_app] alive t="
+                      << radar::SimClock::sim_millis() / 1000 << " s\n";
+        }
+    } else {
+        radar::ui::UiApp app(bus, console);
+        rc = app.run(); // blocks until the window closes
+    }
 
     std::cout << "[radar_app] shutting down\n";
     hmi.stop();

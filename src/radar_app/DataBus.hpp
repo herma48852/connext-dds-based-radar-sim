@@ -148,6 +148,11 @@ public:
     std::atomic<bool>    degrade_array{false};     // demo: CalibrationStatus faults
     std::atomic<bool>    reset_requested{false};   // consumed by TrackManager
     std::atomic<bool>    self_test_requested{false};
+    // Crash-investigation toggle (--no-dispose): when false, TrackManager
+    // skips every dispose_instance call. Dropped tracks then linger as DDS
+    // instances (the UI still ages them out) — acceptable for a short
+    // experiment that isolates the dispose path as a crash suspect.
+    std::atomic<bool>    dispose_enabled{true};
 
     // Latest beam pointing (DetectionProcessor -> UI sweep display)
     std::atomic<double>  current_beam_az_deg{0.0};
