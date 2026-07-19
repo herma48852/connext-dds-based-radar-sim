@@ -79,8 +79,11 @@ void TrackManager::update_loop() {
         next += milliseconds(100); // 10 Hz track update
 
         if (bus_.reset_requested.exchange(false)) {
+            // Dispose every live instance so subscribers (HMI-UI, Studio)
+            // watch the tracks vanish instead of timing out.
+            for (auto& [id, h] : handles_) writer_.dispose_instance(h);
+            handles_.clear();
             tracks.clear();
-            bus_.clear_tracks();
         }
 
         std::vector<types::DetectionEvent> batch;
@@ -122,8 +125,23 @@ void TrackManager::update_loop() {
                 best->quality = std::min(100, best->quality + 2);
                 best->last_update_ms = now_ms;
             } else if (tracks.size() < kMaxTracks) {
+                // Bounded id pool: recycle ids of dropped tracks so the keyed
+                // TargetTrack topic tops out at kMaxTracks DDS instances
+                // (an ever-incrementing key leaks one instance per track,
+                // growing writer/reader memory without bound).
+                int64_t new_id = -1;
+                for (int k = 0; k < kMaxTracks; ++k) {
+                    const int64_t cand = 1000 + (next_track_id_ + k) % kMaxTracks;
+                    const bool in_use = std::any_of(tracks.begin(), tracks.end(),
+                        [cand](const Track& tr) { return tr.id == cand; });
+                    if (!in_use) { new_id = cand; next_track_id_ += k + 1; break; }
+                }
+                if (new_id < 0) continue; // pool exhausted; skip this blip
                 Track t{};
-                t.id = next_track_id_++;
+                t.id = new_id;
+                types::TargetTrack reg;
+                reg.track_id = new_id;
+                handles_[new_id] = writer_.register_instance(reg);
                 t.x = x; t.y = y; t.z = z;
                 t.vx = t.vy = t.vz = 0.0;
                 t.hits = 1;
@@ -136,9 +154,13 @@ void TrackManager::update_loop() {
         }
 
         // coast / drop + classify + publish
-        std::vector<TrackView> views;
         for (auto it = tracks.begin(); it != tracks.end();) {
             if (now_ms - it->last_update_ms > kCoastMs) {
+                auto h = handles_.find(it->id);
+                if (h != handles_.end()) {
+                    writer_.dispose_instance(h->second);
+                    handles_.erase(h);
+                }
                 it = tracks.erase(it);
                 continue;
             }
@@ -172,14 +194,9 @@ void TrackManager::update_loop() {
                     static_cast<types::TrackClassification>(it->classification);
                 msg.quality = it->quality;
                 writer_.write(msg);
-
-                views.push_back(TrackView{
-                    it->id, it->x, it->y, it->z, it->vx, it->vy, it->vz,
-                    it->classification, it->quality, now_ms});
             }
             ++it;
         }
-        bus_.update_tracks(views);
 
         std::this_thread::sleep_until(next);
     }

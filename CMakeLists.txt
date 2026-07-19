@@ -111,6 +111,7 @@ add_executable(radar_app
     src/radar_app/components/TrackManager.cpp
     src/radar_app/components/CalibrationMonitor.cpp
     src/radar_app/components/CommandHandler.cpp
+    src/radar_app/components/HmiUi.cpp
     src/radar_app/ShipSimulator.cpp
     src/radar_app/ui/UiApp.cpp
     src/radar_app/ui/PpiView.cpp

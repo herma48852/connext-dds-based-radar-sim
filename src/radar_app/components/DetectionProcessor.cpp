@@ -184,6 +184,7 @@ void DetectionProcessor::on_raw_return(const types::RawReturn& ret) {
             const double snr_db  = 20.0 * std::log10(mag[i] / kNoiseSigma);
 
             types::DetectionEvent det;
+            det.sensor_id     = 0; // constant key: one DDS instance
             det.detection_id  = detection_id_++;
             det.timestamp     = SimClock::stamp();
             det.ship_position = geo;
@@ -193,10 +194,7 @@ void DetectionProcessor::on_raw_return(const types::RawReturn& ret) {
             det.amplitude     = mag[i];
             det.snr_db        = snr_db;
             det_writer_.write(det);
-
-            bus_.detection_blips.push_overwrite(BlipView{
-                range_m, ret.azimuth_deg, ret.elevation_deg,
-                static_cast<double>(mag[i]), snr_db, SimClock::sim_millis()});
+            // PPI blips reach the UI via HmiUi's DetectionEvent subscription.
         }
     }
 }

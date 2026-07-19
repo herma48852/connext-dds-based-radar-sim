@@ -32,6 +32,7 @@ void BeamScheduler::start() {
 
             const int32_t mode = bus_.radar_mode.load();
             types::BeamCommand cmd;
+            cmd.scheduler_id = 0; // constant key: one DDS instance
             cmd.beam_id   = beam_id;
             cmd.timestamp = SimClock::stamp();
 

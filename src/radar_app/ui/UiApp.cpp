@@ -52,6 +52,9 @@ bool UiApp::init() {
 
     float sx = 1.0f, sy = 1.0f;
     glfwGetWindowContentScale(window_, &sx, &sy);
+    // Guard against a bogus 0/NaN content scale (reported on some macOS
+    // multi-monitor moves): a zero font scale crashes ImGui's atlas builder.
+    if (!(sx >= 1.0f && sx <= 4.0f)) sx = 1.0f;
     io.FontGlobalScale = sx;              // crisp text on Retina/HiDPI
     theme::apply_style(sx);
 
@@ -99,7 +102,7 @@ int UiApp::run() {
             ppi_.update_track_trail(t.track_id, t.x_m, t.y_m);
         ppi_.prune_tracks(tracks);
 
-        const auto ship   = bus_.ship();
+        const auto ship   = bus_.ship_display(); // via HMI-UI's DDS reader
         const auto health = bus_.health();
         const auto trace  = bus_.trace();
 

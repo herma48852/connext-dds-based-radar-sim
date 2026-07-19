@@ -10,7 +10,7 @@ Two applications, one CMake monorepo, one DDS domain (default: domain 0):
 
 | App          | Purpose |
 |--------------|---------|
-| `radar_app`  | Simulated radar on a moving ship. Internal components (BeamScheduler, DetectionProcessor, TrackManager, CalibrationMonitor, CommandHandler, **HMI-UI**) communicate **exclusively via DDS topics**. ImGui/GLFW/OpenGL 3.3 UI with PPI, A-scope, B-scope, track list, beam timeline, health and ship panels. |
+| `radar_app`  | Simulated radar on a moving ship. Internal components (BeamScheduler, DetectionProcessor, TrackManager, CalibrationMonitor, CommandHandler, CommandConsole, HMI-UI) communicate **exclusively via DDS topics**. ImGui/GLFW/OpenGL 3.3 UI with PPI, A-scope, B-scope, track list, beam timeline, health and ship panels. |
 | `target_gen` | Synthetic target generator (configurable trajectories, RCS, kinematics) publishing `TargetGen/TargetTruth` + ship-motion ground truth. Can inject QoS/type mismatches and the degraded-array scenario on demand. |
 
 ```
@@ -24,7 +24,6 @@ AesaRadarSim/
 │   ├── components/              # one class per radar component, one
 │   │                            # DomainParticipant each (topology demo)
 │   ├── ui/                      # PpiView, AScopeView, BScopeView, Panels
-│   ├── hmi_ui/                  # HMI-UI DomainParticipant (display thread)
 │   └── main.cpp
 ├── src/target_gen/              # TargetFleet + DiagnosticsInjector
 └── docs/CONNEXT_STUDIO.md       # monitoring / diagnostics demo guide
@@ -81,7 +80,7 @@ search/sector mode, degrade/restore array, self test, track reset.
 
 > **macOS note (shared memory):** the shipped profiles use **UDPv4 only**.
 > macOS defaults allow very few System V shared-memory segments, and the
-> radar app's seven participants exhaust them (RTI KB
+> radar app's eight participants exhaust them (RTI KB
 > [osx510](http://community.rti.com/kb/osx510)), which otherwise ends in
 > "No index available for participant" errors. If you raise the sysv
 > limits per that KB, you can switch the transport masks back to
@@ -113,10 +112,16 @@ cmake --build build --config RelWithDebInfo
 Every internal radar component is a named DomainParticipant wired to the
 others purely through topics on the shared bus — there are no direct
 in-process calls between components. The **HMI-UI** participant is the
-ImGui/GLFW/OpenGL display thread; it never blocks on DDS but drains
-lock-free SPSC queues fed by DDS listener callbacks. (Connext Studio joins
-the same domain from a separate workspace and can read every topic shown;
-see [docs/CONNEXT_STUDIO.md](docs/CONNEXT_STUDIO.md). Not shown: the
+display endpoint: it subscribes to `Radar/TargetTrack`,
+`Radar/DetectionEvent`, `Ship/ShipPosition` and `Radar/CalibrationStatus`,
+so every panel renders data that arrived over the bus — no dangling
+publishers anywhere in the system. Its listener callbacks only convert
+samples into view structs in a `DataBus` (lock-free SPSC queues +
+mutex-protected stores), which the render thread drains at display rate:
+the GUI can never stall a DDS receive thread, and DDS threads never touch
+OpenGL. (Connext Studio joins the same domain from a
+separate workspace and can read every topic shown; see
+[docs/CONNEXT_STUDIO.md](docs/CONNEXT_STUDIO.md). Not shown: the
 on-demand diagnostic endpoints `target_gen` creates with
 `--inject-qos-mismatch`, `--inject-type-mismatch` and `--degrade-array`.)
 
@@ -125,13 +130,18 @@ on-demand diagnostic endpoints `target_gen` creates with
 | Topic | Type | Rate | Profile | Notes |
 |---|---|---|---|---|
 | `Radar/RawReturn` | RawReturn | 1 kHz | RawReturnProfile | BEST_EFFORT, 500us latency budget. The "receiver wire", looped back inside DetectionProcessor |
-| `Radar/DetectionEvent` | DetectionEvent | ~100 Hz | DetectionEventProfile | BEST_EFFORT CFAR blips; consumed by HMI-UI (PPI, A-scope, B-scope) |
+| `Radar/DetectionEvent` | DetectionEvent | ~100 Hz | DetectionEventProfile | BEST_EFFORT CFAR blips; consumed by TrackManager and HMI-UI (PPI) |
 | `Radar/BeamCommand` | BeamCommand | 50 Hz | BeamCommandProfile | RELIABLE dwell schedule |
 | `Radar/TargetTrack` | TargetTrack | 10 Hz | TargetTrackProfile | RELIABLE + TRANSIENT_LOCAL + 100 ms deadline; consumed by HMI-UI (track list) |
 | `Radar/CalibrationStatus` | CalibrationStatus | 1 Hz | CalibrationStatusProfile | array health, 1024 elements; consumed by HMI-UI (health panel) |
 | `Radar/SystemCommand` | SystemCommand | bursty | SystemCommandProfile | RELIABLE, WaitSet-handled |
-| `Ship/ShipPosition` | ShipPosition | 10 Hz | ShipPositionProfile | keyed: 0 = INS, 1 = truth; consumed by DetectionProcessor (coordinate stabilization), TrackManager (track correlation), and HMI-UI (ship panel) |
+| `Ship/ShipPosition` | ShipPosition | 10 Hz | ShipPositionProfile | keyed: 0 = INS, 1 = truth; key 0 consumed by HMI-UI (ship panel) |
 | `TargetGen/TargetTruth` | TargetTruth | 50 Hz/target | TargetTruthProfile | keyed per target |
+
+All keyed topics have a **bounded key space** (constant source ids, a
+recycled track-id pool, a modulo command-id range): an ever-incrementing
+key would register a new DDS instance per sample and grow writer/reader
+memory without bound.
 
 ### DetectionProcessor loopback simplification
 
@@ -148,12 +158,13 @@ detection processing.
 
 The realism is baked in via the `TargetGen/TargetTruth` subscription:
 DetectionProcessor reads the ground-truth target positions, then synthesizes
-range-bin I/Q samples with appropriate RCS, Doppler shift, and noise so that
-the 1 kHz `RawReturn` stream looks like genuine radar data rather than random
-numbers. Sea clutter and other environmental returns are also synthesized.
+range-bin I/Q samples with RCS-based amplitude, 1/r^4 range attenuation and a
+Rayleigh noise floor, spread over ~3 bins as a matched-filter response, so the
+1 kHz `RawReturn` stream behaves like genuine radar data rather than random
+numbers.
 
 > **Production note:** a real system would not put raw I/Q on DDS at 1 kHz × 512 bins
-> (~2 MB/s). The loopback exists here to stress-test the middleware and to make the
+> (~4 MB/s). The loopback exists here to stress-test the middleware and to make the
 > full data flow visible in Connext Studio. A deployed architecture would use separate
 > `Radar.Transmitter` and `Radar.Receiver` participants, with the raw data staying on
 > a high-bandwidth internal fabric (PCIe, RDMA, or shared memory) rather than the
@@ -166,9 +177,11 @@ numbers. Sea clutter and other environmental returns are also synthesized.
   only cache or enqueue.
 - **WaitSet** (dedicated thread): `SystemCommand` — lower rate, handled
   atomically and in order by `CommandHandler`.
-- **HMI-UI / Render thread**: never blocks on DDS; drains lock-free SPSC queues
-  and mutex-protected stores from the `DataBus` at display rate. DDS threads
-  never touch ImGui/OpenGL.
+- **Render thread**: never blocks on DDS; drains lock-free SPSC queues
+  and mutex-protected stores from the `DataBus` at display rate. The
+  `DataBus` is fed by the HMI-UI participant's listeners (tracks, blips,
+  ship, health) and by component worker threads (A-scope trace, beam
+  timeline). DDS threads never touch ImGui/OpenGL.
 
 ### Type system
 
@@ -184,7 +197,7 @@ ship-relative polar for detections, ship-relative ENU for tracks/truth.
   Studio's topology map shows `Radar.BeamScheduler`, `Radar.TrackManager`,
   etc. as individual nodes. A production system would use one participant
   with several publishers/subscribers.
-- `RawReturn` at 1 kHz x 512 bins (~2 MB/s) exercises the bus for the demo;
+- `RawReturn` at 1 kHz x 512 bins (~4 MB/s) exercises the bus for the demo;
   a real system would not put raw I/Q on DDS at this rate.
 - QoS **variety is intentional** (BEST_EFFORT sensor paths vs RELIABLE
   command/track paths) so Studio's match analysis has something to show.

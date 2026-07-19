@@ -36,10 +36,13 @@ Every component is a named participant:
 | `Radar.CommandHandler` | subscribes `Radar/SystemCommand` (WaitSet) |
 | `Radar.ShipINS` | publishes `Ship/ShipPosition` (key 0) |
 | `Radar.CommandConsole` | publishes `Radar/SystemCommand` (UI buttons) |
+| `Radar.HMI-UI` | subscribes `Radar/TargetTrack`, `Radar/DetectionEvent`, `Ship/ShipPosition` (key 0), `Radar/CalibrationStatus` — the display endpoint |
 | `TargetGen.Generator` | publishes `TargetGen/TargetTruth` + `Ship/ShipPosition` (key 1) |
 
 Note the **loopback edge** inside `Radar.DetectionProcessor`
 (RawReturn out and back in) — the 1 kHz receiver wire on the bus.
+Every topic has at least one in-system subscriber (the display topics
+terminate at `Radar.HMI-UI`), so there are no dangling publishers.
 
 ### 2.2 Topic tree and live data
 

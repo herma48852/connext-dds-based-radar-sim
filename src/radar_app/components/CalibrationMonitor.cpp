@@ -32,7 +32,6 @@ void CalibrationMonitor::start() {
 
             const bool degraded = bus_.degrade_array.load();
             int failed = 0;
-            double drift_sum = 0.0;
 
             for (int i = 0; i < types::MAX_ARRAY_ELEMENTS; ++i) {
                 float d = drift(rng_);
@@ -45,7 +44,6 @@ void CalibrationMonitor::start() {
                     }
                 }
                 msg.element_drift_db[i] = d;
-                drift_sum += std::fabs(d);
             }
 
             const auto status =
@@ -58,12 +56,7 @@ void CalibrationMonitor::start() {
             msg.failed_element_count = failed;
             msg.overall_status       = status;
             writer_.write(msg);
-
-            bus_.update_health(HealthView{
-                static_cast<int32_t>(status), failed,
-                types::MAX_ARRAY_ELEMENTS, temperature_c_,
-                drift_sum / types::MAX_ARRAY_ELEMENTS,
-                SimClock::sim_millis()});
+            // The health panel is fed by HmiUi's CalibrationStatus reader.
 
             std::this_thread::sleep_until(next);
         }

@@ -3,10 +3,14 @@
 // In-process data bus of the radar app.
 //
 // Data flow (threading rules strictly enforced):
-//   DDS listener threads  --> SpscQueue (lock-free) ----------> render thread
-//   DDS worker threads    --> mutex-protected stores --------> render thread
+//   HMI-UI DDS listeners  --> SpscQueue (lock-free) ----------> render thread
+//   HMI-UI DDS listeners  --> mutex-protected stores --------> render thread
+//   component threads     --> mutex-protected stores --------> render thread
 //   CommandHandler thread --> atomic command state ----------> components
 //
+// Display data (tracks, blips, ship panel, health panel) arrives via the
+// Radar.HMI-UI participant's DDS readers. Radar-function data shared between
+// components (own-ship state, A-scope trace, beam pointing) stays in-process.
 // The render thread never blocks on DDS; DDS threads never touch ImGui/GL.
 // ============================================================================
 
@@ -102,6 +106,19 @@ public:
         return ship_;
     }
 
+    // Ship PANEL data: fed by HmiUi's Ship/ShipPosition reader (key 0).
+    // Kept separate from ship() above, which is the radar-function path
+    // (ShipSimulator -> DetectionProcessor/TrackManager) so the HMI can
+    // never perturb component behaviour.
+    void update_ship_display(const ShipView& s) {
+        std::lock_guard lk(ship_display_mutex_);
+        ship_display_ = s;
+    }
+    ShipView ship_display() const {
+        std::lock_guard lk(ship_display_mutex_);
+        return ship_display_;
+    }
+
     void update_health(const HealthView& h) {
         std::lock_guard lk(health_mutex_);
         health_ = h;
@@ -141,6 +158,8 @@ private:
     std::vector<TrackView> tracks_;
     mutable std::mutex ship_mutex_;
     ShipView ship_{};
+    mutable std::mutex ship_display_mutex_;
+    ShipView ship_display_{};
     mutable std::mutex health_mutex_;
     HealthView health_{};
     mutable std::mutex trace_mutex_;

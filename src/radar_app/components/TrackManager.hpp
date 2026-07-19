@@ -13,6 +13,7 @@
 #include <array>
 #include <deque>
 #include <mutex>
+#include <unordered_map>
 #include <vector>
 
 #include "ComponentBase.hpp"
@@ -57,6 +58,9 @@ private:
     std::vector<types::DetectionEvent> pending_;
 
     int64_t next_track_id_{1000};
+
+    // track_id -> DDS instance handle (for dispose on drop/reset)
+    std::unordered_map<int64_t, dds::core::InstanceHandle> handles_;
 };
 
 } // namespace radar::app

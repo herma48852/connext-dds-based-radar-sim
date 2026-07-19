@@ -51,6 +51,7 @@ void DiagnosticsInjector::inject_type_mismatch() {
     mismatch_writer_thread_ = std::thread([this] {
         while (!stop_.load()) {
             types::DetectionEvent det;
+            det.sensor_id     = 0; // constant key (matches IDL @key)
             det.detection_id  = -1;
             det.timestamp     = SimClock::stamp();
             det.range_m       = 0.0;

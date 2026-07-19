@@ -37,7 +37,9 @@ public:
                 while (queue_.pop(req)) {
                     any = true;
                     types::SystemCommand cmd;
-                    cmd.command_id        = cmd_id_++;
+                    // Bounded key space: an ever-incrementing command id
+                    // would leak one DDS instance per command.
+                    cmd.command_id        = 100 + (cmd_id_++ % 128);
                     cmd.timestamp         = SimClock::stamp();
                     cmd.command_type      = static_cast<types::CommandType>(req.type);
                     cmd.sector_center_deg = req.center;

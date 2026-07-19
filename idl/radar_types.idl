@@ -116,9 +116,12 @@ module types {
     };
 
     // Beam steering request issued by the BeamScheduler.
+    // Keyed by a CONSTANT scheduler id: keying by the incrementing beam_id
+    // would register a new DDS instance per sample (unbounded growth).
     @appendable
     struct BeamCommand {
-        @key long   beam_id;        // monotonically increasing dwell id
+        @key long   scheduler_id;   // always 0: single instance
+        long        beam_id;        // monotonically increasing dwell id
         TimeStamp   timestamp;
         double      azimuth_deg;    // commanded azimuth, ship-relative [deg]
         double      elevation_deg;  // commanded elevation [deg]
@@ -130,9 +133,12 @@ module types {
     // Simulated raw receiver output for one beam dwell.
     // High-rate (1 kHz), best-effort: the "wire" between receiver and
     // signal processor, exposed as a topic for monitoring purposes.
+    // Keyed by a CONSTANT array id: keying by the incrementing beam_id
+    // would register a new DDS instance per sample (unbounded growth).
     @appendable
     struct RawReturn {
-        @key long             beam_id;       // dwell this return belongs to
+        @key long             array_id;      // always 0: single instance
+        long                  beam_id;       // dwell this return belongs to
         TimeStamp             timestamp;
         double                azimuth_deg;   // beam pointing direction [deg]
         double                elevation_deg;
@@ -141,9 +147,12 @@ module types {
     };
 
     // Single threshold-crossing detection report (a "blip").
+    // Keyed by a CONSTANT sensor id: an incrementing detection key would
+    // leak one DDS instance per blip.
     @appendable
     struct DetectionEvent {
-        @key long     detection_id;   // unique detection number
+        @key long     sensor_id;      // always 0: single instance
+        long          detection_id;   // unique detection number
         TimeStamp     timestamp;
         GeoPosition   ship_position;  // own-ship GPS/INS at detection time
         double        range_m;        // ship-relative range [m]
