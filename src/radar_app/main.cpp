@@ -54,6 +54,7 @@ void install_crash_handler() {}
 
 #include "CommandConsole.hpp"
 #include "DataBus.hpp"
+#include "Log.hpp"
 #include "ShipSimulator.hpp"
 #include "SimClock.hpp"
 #include "components/BeamScheduler.hpp"
@@ -75,6 +76,7 @@ int main(int argc, char** argv) {
     bool headless = false;
     bool no_dispose = false;
     bool gl_throttle = false;
+    bool no_titlebar = false;
     int swap_interval = 1;
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--domain") == 0 && i + 1 < argc)
@@ -85,10 +87,12 @@ int main(int argc, char** argv) {
             no_dispose = true;
         else if (std::strcmp(argv[i], "--gl-throttle") == 0)
             gl_throttle = true;
+        else if (std::strcmp(argv[i], "--no-titlebar") == 0)
+            no_titlebar = true;
         else if (std::strcmp(argv[i], "--swap-interval") == 0 && i + 1 < argc)
             swap_interval = std::atoi(argv[++i]);
         else if (std::strcmp(argv[i], "--help") == 0) {
-            std::cout << "radar_app [--domain N] [--headless] [--no-dispose]\n"
+            RADAR_LOG << "radar_app [--domain N] [--headless] [--no-dispose]\n"
                          "          [--gl-throttle] [--swap-interval N]\n"
                          "  --headless       components only (no window); crash-bisect\n"
                          "                   soak: same DDS traffic, zero GLFW/ImGui/AppKit\n"
@@ -96,18 +100,20 @@ int main(int argc, char** argv) {
                          "  --gl-throttle    upload the B-scope texture every 4th frame\n"
                          "                   (15 Hz); tests GL driver load as crash suspect\n"
                          "  --swap-interval  legacy knob; no-op with the Metal renderer\n"
-                         "                   to 30 fps (default 1 = vsync 60 fps)\n";
+                         "                   to 30 fps (default 1 = vsync 60 fps)\n"
+                         "  --no-titlebar    undecorated window; removes AppKit titlebar\n"
+                         "                   code (crash-victim cluster) to test causality\n";
             return 0;
         }
     }
 
     radar::SimClock::start();
-    std::cout << "[radar_app] starting on DDS domain " << domain << "\n";
+    RADAR_LOG << "[radar_app] starting on DDS domain " << domain << "\n";
 
     radar::app::DataBus bus;
     if (no_dispose) {
         bus.dispose_enabled.store(false);
-        std::cout << "[radar_app] --no-dispose: dispose_instance disabled\n";
+        RADAR_LOG << "[radar_app] --no-dispose: dispose_instance disabled\n";
     }
 
     radar::app::ShipSimulator      ship(domain, bus);
@@ -137,26 +143,30 @@ int main(int argc, char** argv) {
         // windowed build dies after ~1 minute, the corruptor lives in the
         // UI/windowing layer, not in the DDS/component layer.
         std::signal(SIGINT, on_sigint);
-        std::cout << "[radar_app] headless soak mode; Ctrl+C to stop\n";
+        RADAR_LOG << "[radar_app] headless soak mode; Ctrl+C to stop\n";
         while (g_running.load()) {
             std::this_thread::sleep_for(std::chrono::seconds(10));
-            std::cout << "[radar_app] alive t="
+            RADAR_LOG << "[radar_app] alive t="
                       << radar::SimClock::sim_millis() / 1000 << " s\n";
         }
     } else {
         radar::ui::UiApp app(bus, console);
         if (gl_throttle) {
             app.set_bscope_upload_decimation(4);
-            std::cout << "[radar_app] --gl-throttle: B-scope upload at 15 Hz\n";
+            RADAR_LOG << "[radar_app] --gl-throttle: B-scope upload at 15 Hz\n";
+        }
+        if (no_titlebar) {
+            app.set_undecorated(true);
+            RADAR_LOG << "[radar_app] --no-titlebar: undecorated window\n";
         }
         if (swap_interval != 1) {
             app.set_swap_interval(swap_interval);
-            std::cout << "[radar_app] swap interval " << swap_interval << "\n";
+            RADAR_LOG << "[radar_app] swap interval " << swap_interval << "\n";
         }
         rc = app.run(); // blocks until the window closes
     }
 
-    std::cout << "[radar_app] shutting down\n";
+    RADAR_LOG << "[radar_app] shutting down\n";
     hmi.stop();
     console.stop();
     commands.stop();

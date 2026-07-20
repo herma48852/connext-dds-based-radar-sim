@@ -30,6 +30,12 @@ public:
 
     // Crash-investigation knobs (apply BEFORE run()):
     void set_bscope_upload_decimation(int n) { bscope_.set_upload_decimation(n); }
+    // Crash-investigation knob: undecorated window (no titlebar). 3 of 10
+    // crash victims were in AppKit titlebar machinery (NSTitlebarView/
+    // ContainerView, SwiftUI titlebar layout) and the ASan smear anchor was
+    // a CoreText font table freed during titlebar section updates — this
+    // removes that whole code path to test causality.
+    void set_undecorated(bool v) { undecorated_ = v; }
     void set_swap_interval(int n) {
 #if defined(__APPLE__)
         (void)n; // Metal presents are display-paced by nextDrawable
@@ -56,6 +62,7 @@ private:
     BScopeView bscope_;
 
     std::deque<app::BeamView> beam_history_;   // last ~5 s of dwells
+    bool undecorated_ = false;                 // --no-titlebar experiment
 };
 
 } // namespace radar::ui

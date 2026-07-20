@@ -6,6 +6,7 @@
 #include <iostream>
 #include <memory>
 
+#include "Log.hpp"
 #include "SimClock.hpp"
 
 namespace radar::app {
@@ -68,7 +69,7 @@ void TrackManager::update_loop() {
         if (bus_.reset_requested.exchange(false)) {
             // Dispose every live instance so subscribers (HMI-UI, Studio)
             // watch the tracks vanish instead of timing out.
-            std::cout << "[TrackManager] reset consumed — tracks cleared" << std::endl;
+            RADAR_LOG << "[TrackManager] reset consumed — tracks cleared" << std::endl;
             if (bus_.dispose_enabled.load())
                 for (auto& [id, h] : handles_) writer_.dispose_instance(h);
             handles_.clear();
@@ -136,7 +137,7 @@ void TrackManager::update_loop() {
 
         if (++hb_cycles >= 20) { // 2 s at 10 Hz
             hb_cycles = 0;
-            std::cout << "[TrackManager] hb dets_in=" << dets_in
+            RADAR_LOG << "[TrackManager] hb dets_in=" << dets_in
                       << " alive=" << core_.tracks().size()
                       << " published=" << published
                       << " handles=" << handles_.size() << std::endl;

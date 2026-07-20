@@ -57,8 +57,11 @@ The QoS file is copied next to the binaries automatically
 ```bash
 # Terminal 1 — the radar console (opens the GUI)
 # (use the rtisetenv script matching YOUR Connext target architecture)
+# NOTE: radar_app is built as a macOS bundle — the plain ./build/radar_app
+# path is a stale pre-bundle leftover and is NEVER relinked. Run the binary
+# inside the bundle (it also keeps stdout, which the bare .app does not):
 source $CONNEXTDDS_DIR/resource/scripts/rtisetenv_arm64Darwin23clang16.0.bash
-./build/radar_app
+./build/radar_app.app/Contents/MacOS/radar_app
 
 # Terminal 2 — the target generator
 source $CONNEXTDDS_DIR/resource/scripts/rtisetenv_arm64Darwin23clang16.0.bash

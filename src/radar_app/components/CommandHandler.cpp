@@ -6,6 +6,7 @@
 #include <dds/sub/cond/ReadCondition.hpp>
 #include <dds/sub/status/DataState.hpp>
 
+#include "Log.hpp"
 #include "SimClock.hpp"
 
 namespace radar::app {
@@ -39,7 +40,7 @@ void CommandHandler::start() {
 }
 
 void CommandHandler::dispatch(const types::SystemCommand& cmd) {
-    std::cout << "[CommandHandler] t=" << SimClock::sim_millis()
+    RADAR_LOG << "[CommandHandler] t=" << SimClock::sim_millis()
               << "ms command=" << static_cast<int>(cmd.command_type)
               << " params=\"" << cmd.parameters << "\"\n";
 

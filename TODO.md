@@ -5,6 +5,130 @@
 Written for a fresh agent session (e.g. Kimi Code). Everything below the
 line is the full case log; this section is the executive summary.
 
+### 2026-07-20 (midday, K4) — heartbeat verdict: pipeline healthy; orphan incident
+
+- **Heartbeat runs (fresh 12:07 build):** tracking chain verified end-to-end
+  TWICE windowed + target_gen (dets_in climbing past 600, published 2–5,
+  `[HmiUi] hb tracks` following 1:1) and once solo. **Empty-table incident
+  NOT reproduced** — treat as one-off unless it recurs; heartbeat prints
+  stay in the build to catch it.
+- **ORPHAN PROCESS POISONED DOMAIN 0:** a leftover `target_gen --targets 8`
+  from the 3 AM Stage-0 session (PID 98101, pre-rebuild binary) ran ~9 h
+  undetected. With it alive, HMI-UI's ShipPosition reader rejected EVERY
+  sample from ALL THREE ShipPosition writers (~28 FATAL/s):
+  `InfrastructurePSM.c:70 RTI0x3000035 !precondition: unexpected
+  instruction index injected into non-mutable program` → "deserialize
+  sample error in topic 'Ship/ShipPosition'". Solo radar_app: ZERO errors.
+  Orphan killed + fresh target_gen rerun: ZERO errors, ~110 s clean.
+  Mechanism (unproven, RTI material): a stale/duplicate writer's
+  TypeObject poisons the reader's XCDR coercion program for the whole
+  type — Connext's error lines then name INNOCENT writers too. The
+  poisoned run also SIGTRAP'd at 31 s after ~900 such FATALs — plausibly
+  downstream of the storm, not a tenth victim.
+- **RULE for every runbook:** `ps aux | grep -E 'radar_app|target_gen'`
+  before ANY experiment and kill leftovers — a zombie participant
+  falsifies results. Note the bundle .app keeps no stdout: run the binary
+  with stdout redirected to a log or the heartbeats/FATALs are invisible.
+- Crash investigation status UNCHANGED: the orphan postdates all 9
+  victims (started 3 AM, after the last crash session) — it explains none
+  of them. Ladder stands: TSan next; `build-tsan/` is configured with
+  `-fsanitize=thread` in C/CXX/OBJCXX + linker flags.
+
+### 2026-07-20 (late, K5) — ROOT CAUSE FOUND: heat_ brace-init shotgun
+
+**The windowed-crash corruptor is identified, fixed, and every victim is
+explained.** One line in `src/radar_app/ui/BScopeView.hpp`:
+
+```cpp
+std::vector<float> heat_{size_t(kAzBins) * kRangeBins, 0.0f};
+```
+
+Brace-init with `{count, value}`: `count` (92160) converts to `float`
+**without narrowing**, so overload resolution prefers
+`initializer_list<float>` — heat_ was a **TWO-element vector**
+`{92160.0f, 0.0f}` (8-byte allocation, malloc-rounded to 16). Verified
+with a 5-line test: brace → size 2, parens → size 92160.
+
+`BScopeView::splat()` indexes `heat_[r*360 + a]` with r∈[0,255],
+a∈[0,359] — the index math genuinely is bounded (why every audit passed:
+they checked the indices, not the allocation). Against a 16-byte buffer,
+every blip's 3×3 splat wrote/read floats at offsets up to ~368 KB past
+it — a **shotgun into whatever malloc had placed there**: AppKit
+titlebar arrays, CoreText font tables, Connext REDA pool blocks,
+CF notification registrars, Metal pipeline state. Every victim (1–11)
+was an innocent heap neighbor.
+
+Caught by the 30-min ASan windowed run (`halt_on_error=1`): died at
+STARTUP on the first blips — heap-buffer-overflow READ of size 4 at
+`BScopeView.cpp:101`, address = 4 bytes past a freed 16-byte chunk
+previously owned by `NSTitlebarView`'s `__NSArrayM` (the "smear anchor"
+from the earlier ASan run — same mechanism, recycled chunk). Index
+arithmetic + malloc rounding match exactly (heat_[5]: r=0, a=5 → 20
+bytes = 4 past the 16-byte-rounded allocation).
+
+**FIX (K5):** parens init, `heat_ = std::vector<float>(kAzBins*kRangeBins,
+0.0f)`. Grep-verified the only brace-init-with-count in the codebase
+(`noise_{0,sigma}` is a distribution — no initializer_list ctor, fine).
+
+Why it fits ALL the evidence: windowed-only (splat runs only with the
+UI; headless never constructs UiApp → E1/headless clean), stochastic
+12–111 s timing (malloc layout × blip arrivals × when a victim touches
+poisoned memory), TSan-clean (not a race — the cout race found and
+fixed this session was unrelated noise), watchpoint-immune (the write
+address moves with layout), ASan "caught only victims" before (runs
+were too short / anchors pointed at recycled neighbors). Side effect
+now obvious in hindsight: **the B-scope had never displayed a real
+blip** (OOB writes never reached rgba_; texture was a flat gradient).
+
+Confirmation status: 30-min windowed ASan confirmation run + a long
+non-sanitized soak = the closure criteria. The experiment ladder
+(no-titlebar, GL-throttle, swap-interval, bundle, Connext debug libs,
+GLFW bump) is RETIRED — keep the runtime flags as diagnostics.
+
+### 2026-07-20 (late, K5) — titlebar cluster + ASan anchor; thread-0 oddity closed
+
+- **Victim count is now 10, and a cluster emerged:** 3 of 10 victims are in
+  AppKit titlebar machinery (`NSTitlebarView`/`NSTitlebarContainerView`,
+  SwiftUI titlebar layout). An ASan run produced a smear anchored to a
+  **CoreText font table freed during titlebar section updates** (verbatim
+  report not in repo — attach it to the next handoff if found in
+  ~/Library/Logs/DiagnosticReports or the session log).
+- **New experiment flag `--no-titlebar`** (uncommitted with this entry):
+  `GLFW_DECORATED=FALSE` → undecorated window, removing the whole AppKit
+  titlebar code path to test causality of that cluster. Wiring:
+  `main.cpp` → `UiApp::set_undecorated` → window hint in `UiApp::init`.
+- **Thread-0 oddity CLOSED (code-verified):** UI loop runs on the main
+  thread (`main.cpp:165 app.run()`); the only WaitSet lives in
+  CommandHandler's spawned thread; listeners run on Connext receive
+  threads; no Connext entity is ever parked on thread 0 after startup.
+  Victim #9's `KeventScanner`/kevent frames on `com.apple.main-thread`
+  are therefore not explainable by our code — consistent with
+  garbage-stack symbolication on a corrupted process.
+- **Session-start hygiene:** killed a leftover `./build/target_gen`
+  (PID 14397, ~20 min old, orphaned fragment of the prior ASan session)
+  before any experiment, per the standing rule.
+- **TSan run RESULT:** windowed + target_gen, app died at **155 s**
+  (SIGBUS; extends the 12–111 s window — TSan slowdown applies). Exactly
+  ONE race report rooted in src/: **unsynchronized `std::cout`** from
+  `TrackManager::update_loop` vs `HmiUi::housekeeping_loop` (the
+  heartbeat prints). Iostream-internal: can garble output, cannot
+  corrupt AppKit/Connext heap → not the corruptor. **FIXED (K5):**
+  `RADAR_LOG` (`src/common/Log.hpp`) — local ostringstream + one
+  mutex-guarded emission per line, flushed; 13 sites across main /
+  TrackManager / HmiUi / CommandHandler. target_gen prints left as-is
+  (startup/one-shot only).
+- **Victim #11 (under full TSan instrumentation):** SIGBUS in
+  `CFXNotificationRegistrarFind` ← `_CFXNotificationPost` ←
+  `__NSFinalizeThreadData` ← pthread TSD teardown on a **GCD worker
+  (`_pthread_wqthread`)**. Same signature as ever: Apple-internal state
+  walked into garbage, windowed-only — this time with TSan watching all
+  our code and finding nothing that explains it. Suspect #1 (latent
+  race in our code) substantially **EXONERATED** (caveat: TSan sees only
+  races, only the paths a ~2.5 min run exercises).
+- Ladder advances to #2: **30-min windowed ASan** with
+  `ASAN_OPTIONS=halt_on_error=1` + target_gen (heap corruption TSan
+  can't see: SPSC indices, vector growth, bridged MTLTexture lifetime).
+
 ### Current state — all working
 
 - Build green; both apps run. UI is native Metal on macOS (no OpenGL
@@ -132,6 +256,13 @@ transport swap (DDS is the demo's purpose).
 - Build: `cd build && cmake .. && cmake --build . -j8` (re-configure
   when CMakeLists changes). Offline harness (no Connext):
   `cmake --build build --target tracker_replay && ./build/tracker_replay 300`.
+- **STALE-BINARY TRAP (bit K5 twice in one session):** with
+  MACOSX_BUNDLE on, `./build/radar_app` (plain) is a pre-bundle leftover
+  that is NEVER relinked — only `radar_app.app/Contents/MacOS/radar_app`
+  is current. A stale 3 AM binary sat next to the bundle all day; the
+  K4 orphan (poisoned domain 0) was exactly such a leftover. Delete the
+  plain binary on sight; README run instructions now point at the
+  bundle.
 - Run from repo root (QoS path is CWD-relative: qos/radar_qos.xml).
 - Flags: `--headless --domain N --no-dispose --gl-throttle
   --swap-interval N` (last is a no-op with Metal).
@@ -147,7 +278,11 @@ crash investigation. Read this first when resuming with a fresh context.
 
 ---
 
-## 1. OPEN ISSUE — SIGSEGV after ~1 minute of runtime
+## 1. RESOLVED (2026-07-20, K5) — SIGSEGV after ~1 minute of runtime
+
+Root cause: `heat_` brace-init in `BScopeView.hpp` → 2-element vector;
+every `splat()` a heap shotgun. Full writeup in §0 (K5 entry). The
+case log below is kept for reference.
 
 ### Symptom
 

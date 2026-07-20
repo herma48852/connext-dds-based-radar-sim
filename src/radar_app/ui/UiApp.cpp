@@ -34,6 +34,9 @@ bool UiApp::init() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 #endif
+    // Crash-investigation knob (--no-titlebar): strip AppKit titlebar code.
+    if (undecorated_)
+        glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
 
     window_ = glfwCreateWindow(1800, 1100, "AESA Radar Console - SPY-6 class",
                                nullptr, nullptr);

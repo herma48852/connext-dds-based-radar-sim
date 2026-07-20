@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 
+#include "Log.hpp"
 #include "SimClock.hpp"
 
 namespace radar::app {
@@ -180,7 +181,7 @@ void HmiUi::housekeeping_loop() {
 
         if (++hb_cycles >= 10) { // 2 s at 5 Hz
             hb_cycles = 0;
-            std::cout << "[HmiUi] hb tracks=" << map_size
+            RADAR_LOG << "[HmiUi] hb tracks=" << map_size
                       << " views=" << views.size() << std::endl;
         }
 

@@ -46,7 +46,12 @@ private:
     static constexpr int kRangeBins = 256;
     static constexpr double kRangeMaxM = 100000.0;
 
-    std::vector<float> heat_{size_t(kAzBins) * kRangeBins, 0.0f};
+    // Parens, NOT braces: heat_{count, 0.0f} would select the
+    // initializer_list<float> ctor (count converts to float without
+    // narrowing) -> a TWO-element vector {92160, 0}. Every splat() then
+    // wrote up to ~368 KB past the tiny buffer into random heap (or read
+    // it) — the windowed-crash corruptor found by ASan on 2026-07-20.
+    std::vector<float> heat_ = std::vector<float>(size_t(kAzBins) * kRangeBins, 0.0f);
     std::vector<unsigned char> rgba_;       // lazily sized W*H*4
     unsigned char lut_[256][4]{};           // gradient lookup table
 #if defined(__APPLE__)
