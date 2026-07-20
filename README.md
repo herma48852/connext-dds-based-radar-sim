@@ -64,6 +64,8 @@ source $CONNEXTDDS_DIR/resource/scripts/rtisetenv_arm64Darwin23clang16.0.bash
 ./build/radar_app.app/Contents/MacOS/radar_app
 
 # Terminal 2 — the target generator
+# (targets fly inbound and are recycled past 120 km so the picture stays
+# busy; tune with --respawn-range KM, 0 disables)
 source $CONNEXTDDS_DIR/resource/scripts/rtisetenv_arm64Darwin23clang16.0.bash
 ./build/target_gen --targets 8
 

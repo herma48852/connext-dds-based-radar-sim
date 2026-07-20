@@ -32,6 +32,7 @@ void on_sigint(int) { g_running.store(false); }
 int main(int argc, char** argv) {
     int32_t domain = 0;
     int num_targets = 8;
+    double respawn_km = 120.0;
     bool qos_mismatch = false, type_mismatch = false, degrade = false;
 
     for (int i = 1; i < argc; ++i) {
@@ -45,11 +46,16 @@ int main(int argc, char** argv) {
             type_mismatch = true;
         else if (std::strcmp(argv[i], "--degrade-array") == 0)
             degrade = true;
+        else if (std::strcmp(argv[i], "--respawn-range") == 0 && i + 1 < argc)
+            respawn_km = std::atof(argv[++i]);
         else if (std::strcmp(argv[i], "--help") == 0) {
             std::cout <<
-                "target_gen [--domain N] [--targets N]\n"
+                "target_gen [--domain N] [--targets N] [--respawn-range KM]\n"
                 "           [--inject-qos-mismatch] [--inject-type-mismatch]\n"
-                "           [--degrade-array]\n";
+                "           [--degrade-array]\n"
+                "  --respawn-range  targets past this ship-relative range are\n"
+                "                   recycled inbound (default 120 km, 0 disables);\n"
+                "                   keeps the demo picture busy indefinitely\n";
             return 0;
         }
     }
@@ -61,6 +67,7 @@ int main(int argc, char** argv) {
               << " with " << num_targets << " targets\n";
 
     target_gen::TargetFleet fleet(domain, num_targets);
+    fleet.set_respawn_range_km(respawn_km);
     fleet.start();
 
     target_gen::DiagnosticsInjector injector(domain);

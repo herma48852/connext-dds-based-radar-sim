@@ -34,6 +34,54 @@ line is the full case log; this section is the executive summary.
   of them. Ladder stands: TSan next; `build-tsan/` is configured with
   `-fsanitize=thread` in C/CXX/OBJCXX + linker flags.
 
+### 2026-07-20 (late, K5) — scenario-lifecycle decay explained; target RESPAWN added
+
+- **User report:** track pane degraded over several minutes to "only an
+  occasional UNK". Root cause is NOT the tracker: targets flew straight
+  inbound FOREVER (no loop/respawn in TargetFleet), so the scenario
+  drains as movers transit coverage and exit outbound (r⁴ SNR falloff).
+  Offline replay shows the identical decay (~2 mature tracks at 600 s).
+  The ASan-slowed window made it look worse (2–3x timing distortion).
+  Normal build held published=3–5 for a full 5.3 min run.
+- **FIX (approved): respawn recycling.** TargetFleet recycles any target
+  whose ship-relative range exceeds `--respawn-range KM` (default 120,
+  0 disables): fresh inbound trajectory from the initial distributions,
+  anchored at the ship's CURRENT position (never drifts off), altitude
+  reset from the profile (missiles dive), weave/orbit phase re-randomized.
+  Same deterministic rng_ stream, so runs stay reproducible. Verified
+  with `--respawn-range 30`: 69 recycles in 90 s, tracker healthy.
+  New per-target `profile` index remembers which kProfiles entry resets z.
+- **ID column fix VERIFIED on screen** (user-confirmed): full 4-digit
+  pool IDs at 2x Retina.
+- The 120 km-default demo pair now running doubles as the long windowed
+  soak (final crash-closure criterion): watch for crashes past the old
+  12–155 s window and for respawn lines from ~10 min on.
+
+### 2026-07-20 (late, K5) — ASan confirmation + track-pane verdict
+
+- **ASan confirmation (heat_ fix):** windowed + target_gen, ZERO reports
+  in ~9 min, then stopped early (user priority switch). Pre-fix the
+  same build died at startup on the first blips. A full 30-min ASan
+  pass + a long non-sanitized windowed soak remain as the final
+  closure runs.
+- **"Empty Target Tracks pane" report — NOT a bug:** the user had been
+  watching the ASan instance (2–3x slowdown distorts ALL tracker
+  timing — revisit/coast/gates run on wall clock). Normal-build
+  window: published ramps to 3–5 within ~10 s and holds, HMI follows
+  1:1, user-confirmed healthy. With 8 targets, 3–5 concurrent tracks
+  is the designed steady state (missiles invisible, drone late,
+  hits≥2 gate suppresses the noise flicker that made old builds look
+  "many").
+- **Classification quirks (known, cosmetic):** SURF requires z<50 m but
+  z is bar-quantized (ship reads ~R·sin3° ≈ 2.6 km at 50 km) → ship
+  can never classify SURF, stays UNK. Tracks publish at hits≥2 but
+  classify at hits≥3 → brief UNK window. Fast movers DO classify AIR
+  once velocity seeds (~2 sweeps).
+- **Track-table ID column fix:** clipped the 4th pool digit at 2x
+  Retina scale (equal-stretch share vs FontGlobalScale-doubled text).
+  Now `WidthFixed` from `ImGui::CalcTextSize("T0000")` + CellPadding —
+  scale-aware (Panels.cpp).
+
 ### 2026-07-20 (late, K5) — ROOT CAUSE FOUND: heat_ brace-init shotgun
 
 **The windowed-crash corruptor is identified, fixed, and every victim is

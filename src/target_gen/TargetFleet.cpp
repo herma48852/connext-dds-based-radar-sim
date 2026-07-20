@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <iostream>
 #include <random>
 
 #include "SimClock.hpp"
@@ -43,15 +44,16 @@ TargetFleet::TargetFleet(int32_t domain_id, int num_targets)
           domain_id, radar::dds_names::PROFILE_TARGETGEN_PARTICIPANT,
           "TargetGen.Generator")),
       publisher_(participant_) {
-    std::mt19937_64 rng(20260719); // deterministic scenario for the webinar
+    // rng_ (member, seeded 20260719): deterministic scenario for the
+    // webinar; also drives respawns so runs stay reproducible.
     std::uniform_real_distribution<double> az_dist(0.0, 360.0);
     std::uniform_real_distribution<double> r_dist(25000.0, 80000.0);
     std::uniform_real_distribution<double> phase_dist(0.0, 6.2832);
 
     for (int i = 0; i < num_targets; ++i) {
         const auto& p = kProfiles[i % kNumProfiles];
-        const double az = az_dist(rng) * kDeg2Rad;
-        const double r  = r_dist(rng);
+        const double az = az_dist(rng_) * kDeg2Rad;
+        const double r  = r_dist(rng_);
         Target t{};
         t.id       = 100 + i;
         t.type     = p.type;
@@ -60,12 +62,28 @@ TargetFleet::TargetFleet(int32_t domain_id, int num_targets)
         t.z        = p.altitude_m;
         t.speed_mps= p.speed_mps;
         // mostly inbound headings (toward the ship) with some spread
-        t.heading_deg = std::fmod(az / kDeg2Rad + 180.0 + (az_dist(rng) - 180.0) * 0.2, 360.0);
+        t.heading_deg = std::fmod(az / kDeg2Rad + 180.0 + (az_dist(rng_) - 180.0) * 0.2, 360.0);
         t.rcs_dbsm = p.rcs_dbsm;
         t.maneuver = p.maneuver;
-        t.phase    = phase_dist(rng);
+        t.phase    = phase_dist(rng_);
+        t.profile  = i % kNumProfiles;
         targets_.push_back(t);
     }
+}
+
+void TargetFleet::respawn(Target& t, double ship_e, double ship_n) {
+    // Same distributions as the initial layout, but anchored at the
+    // ship's current position so the scenario never drifts off it.
+    std::uniform_real_distribution<double> az_dist(0.0, 360.0);
+    std::uniform_real_distribution<double> r_dist(25000.0, 80000.0);
+    std::uniform_real_distribution<double> phase_dist(0.0, 6.2832);
+    const double az = az_dist(rng_) * kDeg2Rad;
+    const double r  = r_dist(rng_);
+    t.x = ship_e + r * std::sin(az);
+    t.y = ship_n + r * std::cos(az);
+    t.z = kProfiles[t.profile].altitude_m; // missiles dive; reset
+    t.heading_deg = std::fmod(az / kDeg2Rad + 180.0 + (az_dist(rng_) - 180.0) * 0.2, 360.0);
+    t.phase = phase_dist(rng_);
 }
 
 void TargetFleet::start() {
@@ -128,6 +146,16 @@ void TargetFleet::loop() {
             }
             if (tgt.type == static_cast<int32_t>(TT::TARGET_MISSILE))
                 tgt.z = std::max(200.0, tgt.z - 30.0 * kDt); // diving profile
+
+            // Recycle targets that have left coverage for good (they fly
+            // straight forever otherwise; the table thins out ~10 min in).
+            if (respawn_range_m_ > 0.0 &&
+                std::hypot(tgt.x - ship_e, tgt.y - ship_n) > respawn_range_m_) {
+                std::cout << "[target_gen] target " << tgt.id
+                          << " respawned inbound (range > "
+                          << respawn_range_m_ / 1000.0 << " km)\n";
+                respawn(tgt, ship_e, ship_n);
+            }
 
             radar::types::TargetTruth msg;
             msg.target_id = tgt.id;
