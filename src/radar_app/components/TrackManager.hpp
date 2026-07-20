@@ -1,22 +1,19 @@
 #pragma once
-// TrackManager: correlates DetectionEvents into TargetTracks.
+// TrackManager: DDS adapter over TrackerCore.
 //
-//   subscribes: Radar/DetectionEvent  (listener: enqueue, lock-free)
+//   subscribes: Radar/DetectionEvent  (listener: enqueue)
 //   publishes : Radar/TargetTrack     (10 Hz, alpha-beta filtered)
 //
-// Simple but credible tracker:
-//   - nearest-neighbour association in ship-relative ENU with a 750 m gate
-//   - alpha-beta position/velocity filter per track
-//   - tentative tracks promoted after 2 hits; dropped after 5 s coast
-//   - classification heuristic from speed and altitude
+// All correlation/filter logic lives in TrackerCore (DDS-free; see
+// tests/tracker_replay.cpp for the offline harness). This class converts
+// DDS samples <-> core calls and manages instance handles for dispose.
 
-#include <array>
-#include <deque>
 #include <mutex>
 #include <unordered_map>
 #include <vector>
 
 #include "ComponentBase.hpp"
+#include "TrackerCore.hpp"
 #include "../DataBus.hpp"
 
 namespace radar::app {
@@ -29,30 +26,6 @@ public:
     void start() override;
 
 private:
-    struct Track {
-        int64_t id;
-        double x, y, z;          // ENU [m]
-        double vx, vy, vz;       // ENU [m/s]
-        bool   v_init;           // velocity seeded by cross-sweep hits
-        int    cross_hits;       // associations with dt >= 1 s (init counter)
-        double bx, by;           // birth position (endpoint velocity seed)
-        int64_t birth_ms;
-        int    hits;
-        int    classification;
-        int    quality;
-        int64_t last_update_ms;
-        std::deque<std::array<double,3>> history; // display trail (max 10)
-    };
-
-    static constexpr double kGateM        = 750.0;
-    static constexpr double kInitSpeedMps = 350.0; // capture gate: velocity uncertainty of an un-seeded track
-    static constexpr double kAlpha        = 0.55;
-    static constexpr double kBeta         = 0.20;
-    // Must exceed the worst-case revisit: 2 el bars x 1.6 s sweep = 3.2 s,
-    // plus margin for a missed bar at the elevation-gate edge.
-    static constexpr int64_t kCoastMs     = 9000;
-    static constexpr int    kMaxTracks    = 256;
-
     void on_detection(const types::DetectionEvent& det);
     void update_loop();
 
@@ -64,7 +37,7 @@ private:
     mutable std::mutex pending_mutex_;
     std::vector<types::DetectionEvent> pending_;
 
-    int64_t next_track_id_{1000};
+    TrackerCore core_;
 
     // track_id -> DDS instance handle (for dispose on drop/reset)
     std::unordered_map<int64_t, dds::core::InstanceHandle> handles_;

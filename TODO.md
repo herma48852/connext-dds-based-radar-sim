@@ -245,6 +245,20 @@ Report back: ASan report (or "ASan silent + zombie/scribble output").
   capture gate (750 + 350·dt m), velocity seeds on the first
   cross-sweep association (`Track::v_init`). Side effect: UNK noise
   tracks now linger up to 9 s — cosmetic.
+- **Frozen-track fix** (2026-07-20 late): tracks appeared but their
+  range/az/speed/alt never changed before coasting out — no cross-sweep
+  association ever succeeded. Three interacting causes: (1) single-pair
+  velocity seeding used cell-quantized positions (az snaps to 2.25°
+  dwell cells ≈ 1.2 km at 30 km) → seeded up to ~370 m/s of junk →
+  next predicted association failed → fragmentation; (2) the 3°/14°
+  elevation bars OVERLAPPED (7.5–9.5°) so mid-elevation targets
+  alternated bars and reported z (= R·sin bar_el) jumped ~10 km;
+  (3) z was in the association gate despite being bar-quantized.
+  Fix: gate in XY only; bars now tile without overlap (el gate ±5.5°);
+  velocity seeds from the SECOND cross-sweep hit over the birth-to-now
+  span (clamped to 700 m/s); freshly-seeded tracks keep a widened gate
+  for ~2 sweeps (cross_hits<4). Note: reported altitude remains
+  bar-quantized by design (no monopulse) — ship alt reads ~R·sin 3°.
 - **HMI-UI is now a real DomainParticipant** (`Radar.HMI-UI`,
   `src/radar_app/components/HmiUi.{hpp,cpp}`): subscribes TargetTrack,
   DetectionEvent, ShipPosition (key 0), CalibrationStatus. Every panel is

@@ -117,6 +117,7 @@ add_executable(radar_app
     src/radar_app/components/BeamScheduler.cpp
     src/radar_app/components/DetectionProcessor.cpp
     src/radar_app/components/TrackManager.cpp
+    src/radar_app/components/TrackerCore.cpp
     src/radar_app/components/CalibrationMonitor.cpp
     src/radar_app/components/CommandHandler.cpp
     src/radar_app/components/HmiUi.cpp
@@ -136,6 +137,14 @@ add_executable(target_gen
     src/target_gen/DiagnosticsInjector.cpp)
 target_include_directories(target_gen PRIVATE src/target_gen)
 target_link_libraries(target_gen PRIVATE radar_common)
+
+# Offline tracker replay harness: replicates the beam raster, implant gates
+# and CFAR peak-pick, and drives the production TrackerCore. No Connext
+# required — build and run anywhere for fast tracker verification.
+add_executable(tracker_replay
+    tests/tracker_replay.cpp
+    src/radar_app/components/TrackerCore.cpp)
+target_include_directories(tracker_replay PRIVATE src/radar_app/components)
 
 if(WIN32)
     target_compile_definitions(radar_app PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)

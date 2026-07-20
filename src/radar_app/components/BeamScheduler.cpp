@@ -13,12 +13,14 @@ double wrap360(double a) {
     while (a < 0.0)     a += 360.0;
     return a;
 }
-// Two-bar elevation raster: with the +/-5.5 deg elevation gate in
+// Three-bar elevation raster: with the +/-5.5 deg elevation gate in
 // DetectionProcessor these tile without overlap, covering the deck up to
-// ~19.5 deg (ship / fighters / bomber / decoy / drone). The bar toggles
-// once per azimuth revolution (or per sector bounce). High-dive targets
-// above ~19.5 deg at close range stay outside the surveillance cone.
-constexpr double kElBarsDeg[2] = {3.0, 14.0};
+// ~30.5 deg (ship / fighters / bomber / decoy / drone). The bar advances
+// once per azimuth revolution (or per sector bounce). Revisit per bar:
+// 3 x 1.6 s = 4.8 s < 9 s coast. Targets above ~30.5 deg at close range
+// stay outside the surveillance cone ("cone of silence").
+constexpr int kNumElBars = 3;
+constexpr double kElBarsDeg[kNumElBars] = {3.0, 14.0, 25.0};
 } // namespace
 
 void BeamScheduler::start() {
@@ -51,12 +53,13 @@ void BeamScheduler::start() {
                 const double lo = center - width * 0.5;
                 const double hi = center + width * 0.5;
                 az += sector_dir * kAzStepDeg;
-                if (az > hi) { az = hi; sector_dir = -1; el_bar ^= 1; }
-                if (az < lo) { az = lo; sector_dir = +1; el_bar ^= 1; }
+                if (az > hi) { az = hi; sector_dir = -1; el_bar = (el_bar + 1) % kNumElBars; }
+                if (az < lo) { az = lo; sector_dir = +1; el_bar = (el_bar + 1) % kNumElBars; }
                 cmd.mode     = types::BeamMode::BEAM_MODE_SEARCH;
                 cmd.priority = 2;
             } else {
-                if (az + kAzStepDeg >= 360.0) el_bar ^= 1; // new revolution
+                if (az + kAzStepDeg >= 360.0)
+                    el_bar = (el_bar + 1) % kNumElBars; // new revolution
                 az = wrap360(az + kAzStepDeg);
                 cmd.mode     = types::BeamMode::BEAM_MODE_SEARCH;
                 cmd.priority = 3;
