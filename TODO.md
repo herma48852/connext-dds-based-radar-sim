@@ -234,6 +234,17 @@ Report back: ASan report (or "ASan silent + zombie/scribble output").
   sweep > 750 m gate) and velocity is seeded from the first detection
   pair (track initiation). High-dive missiles above ~20° elevation at
   close range remain outside the cone — realistic surveillance ceiling.
+- **Track flicker fix** (2026-07-20 late): tracks appeared one at a
+  time, vanished, reappeared. The two-bar raster doubled per-cell
+  revisit to 6.4 s > 5.0 s coast — every track was dropped before its
+  next illumination and reborn after. Fast movers also never
+  re-associated (un-seeded v=0 → ~800 m jump between sweeps > 750 m
+  gate), so the previous seeding never fired. Fix: dwell 20→10 ms
+  (sweep 1.6 s; per-bar revisit 3.2 s < coast), coast 5→9 s (survives
+  a missed bar at the gate edge), un-seeded tracks get an age-growing
+  capture gate (750 + 350·dt m), velocity seeds on the first
+  cross-sweep association (`Track::v_init`). Side effect: UNK noise
+  tracks now linger up to 9 s — cosmetic.
 - **HMI-UI is now a real DomainParticipant** (`Radar.HMI-UI`,
   `src/radar_app/components/HmiUi.{hpp,cpp}`): subscribes TargetTrack,
   DetectionEvent, ShipPosition (key 0), CalibrationStatus. Every panel is

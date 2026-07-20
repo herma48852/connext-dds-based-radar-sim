@@ -101,35 +101,45 @@ void TrackManager::update_loop() {
             polar_to_enu(det.range_m, det.azimuth_deg, det.elevation_deg,
                          ship.heading_deg, x, y, z);
 
-            // Nearest-neighbour association. Seeded tracks gate on the
-            // PREDICTED position (a 250 m/s fighter moves ~400 m between
-            // 1.6 s sweeps). Un-seeded tracks get a capture gate that grows
-            // with time-since-update so a fast mover's second burst can
-            // still associate and seed the velocity.
+            // Nearest-neighbour association, gated in XY ONLY: reported z is
+            // quantized to the elevation bar (z = R sin(el_bar)) and would
+            // dominate a 3D gate. The gate grows with time-since-update
+            // while velocity is unseeded or freshly seeded — azimuth is
+            // quantized to 2.25 deg dwell cells (~1.2 km at 30 km), so early
+            // velocity estimates are noisy.
             Track* best = nullptr;
             double best_d2 = 1e30;
             for (auto& tr : tracks) {
                 const double dtg = std::max(0.02, (now_ms - tr.last_update_ms) / 1000.0);
-                double px = tr.x, py = tr.y, pz = tr.z, gate = kGateM;
+                double px = tr.x, py = tr.y, gate = kGateM;
                 if (tr.v_init) {
-                    px += tr.vx * dtg; py += tr.vy * dtg; pz += tr.vz * dtg;
+                    px += tr.vx * dtg; py += tr.vy * dtg;
+                    if (tr.cross_hits < 4) gate += 0.5 * kInitSpeedMps * dtg;
                 } else {
                     gate += kInitSpeedMps * dtg;
                 }
-                const double dx = px - x, dy = py - y, dz = pz - z;
-                const double d2 = dx*dx + dy*dy + dz*dz;
+                const double dx = px - x, dy = py - y;
+                const double d2 = dx*dx + dy*dy;
                 if (d2 < gate * gate && d2 < best_d2) { best_d2 = d2; best = &tr; }
             }
 
             if (best) {
                 const double dt = std::max(0.02, (now_ms - best->last_update_ms) / 1000.0);
-                // Track initiation: the first CROSS-SWEEP association on an
-                // un-seeded track seeds velocity = displacement / elapsed.
-                if (!best->v_init && dt >= 1.0) {
-                    best->vx = (x - best->x) / dt;
-                    best->vy = (y - best->y) / dt;
-                    best->vz = (z - best->z) / dt;
-                    best->v_init = true;
+                // Track initiation: seed velocity only from the SECOND
+                // cross-sweep hit, over the full birth-to-now span. A
+                // single-pair seed is mostly cell-quantization noise and
+                // would break the next predicted association.
+                if (dt >= 1.0) {
+                    ++best->cross_hits;
+                    if (!best->v_init && best->cross_hits >= 2) {
+                        const double span = std::max(1.0, (now_ms - best->birth_ms) / 1000.0);
+                        double sx = (x - best->bx) / span;
+                        double sy = (y - best->by) / span;
+                        const double sp = std::hypot(sx, sy);
+                        if (sp > 700.0) { sx *= 700.0 / sp; sy *= 700.0 / sp; }
+                        best->vx = sx; best->vy = sy; best->vz = 0.0;
+                        best->v_init = true;
+                    }
                 }
                 // alpha-beta filter
                 const double rx = x - (best->x + best->vx * dt);
@@ -164,6 +174,7 @@ void TrackManager::update_loop() {
                 handles_[new_id] = writer_.register_instance(reg);
                 t.x = x; t.y = y; t.z = z;
                 t.vx = t.vy = t.vz = 0.0;
+                t.bx = x; t.by = y; t.birth_ms = now_ms;
                 t.hits = 1;
                 t.quality = 30;
                 t.classification =

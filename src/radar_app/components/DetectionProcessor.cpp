@@ -120,9 +120,11 @@ void DetectionProcessor::return_synthesis_loop() {
                     continue; // outside this dwell's beam
 
                 const double el_t = std::atan2(t.z, range_xy) / kDeg2Rad;
-                // Elevation gate: +/-6.5 deg so the scheduler's 3/14 deg
-                // raster bars give continuous cover from -3.5 to +20.5 deg.
-                if (std::fabs(el_t - el_deg) > 6.5)
+                // Elevation gate: +/-5.5 deg so the scheduler's 3/14 deg
+                // bars tile WITHOUT overlap (-2.5..8.5 / 8.5..19.5) — an
+                // overlapping target would alternate bars sweep-to-sweep
+                // and its reported z (= R sin(bar_el)) would jump by km.
+                if (std::fabs(el_t - el_deg) > 5.5)
                     continue; // outside elevation beam
 
                 const double rcs_lin = std::pow(10.0, t.rcs_dbsm / 10.0);

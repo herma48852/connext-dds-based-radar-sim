@@ -13,11 +13,11 @@ double wrap360(double a) {
     while (a < 0.0)     a += 360.0;
     return a;
 }
-// Two-bar elevation raster: with the +/-6.5 deg elevation gate in
-// DetectionProcessor these give continuous cover from the deck up to
-// ~20.5 deg (ship / fighters / bomber / decoy / drone). The bar toggles
+// Two-bar elevation raster: with the +/-5.5 deg elevation gate in
+// DetectionProcessor these tile without overlap, covering the deck up to
+// ~19.5 deg (ship / fighters / bomber / decoy / drone). The bar toggles
 // once per azimuth revolution (or per sector bounce). High-dive targets
-// above ~20 deg at close range stay outside the surveillance cone.
+// above ~19.5 deg at close range stay outside the surveillance cone.
 constexpr double kElBarsDeg[2] = {3.0, 14.0};
 } // namespace
 

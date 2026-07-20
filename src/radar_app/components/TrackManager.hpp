@@ -33,7 +33,10 @@ private:
         int64_t id;
         double x, y, z;          // ENU [m]
         double vx, vy, vz;       // ENU [m/s]
-        bool   v_init;           // velocity seeded by a cross-sweep hit
+        bool   v_init;           // velocity seeded by cross-sweep hits
+        int    cross_hits;       // associations with dt >= 1 s (init counter)
+        double bx, by;           // birth position (endpoint velocity seed)
+        int64_t birth_ms;
         int    hits;
         int    classification;
         int    quality;
