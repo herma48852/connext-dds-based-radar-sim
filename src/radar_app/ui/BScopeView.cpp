@@ -4,13 +4,45 @@
 #include <cmath>
 #include <cstdio>
 
+#if defined(__APPLE__)
+#include "MetalContext.hpp"
+#endif
+
 #include "Theme.hpp"
 
 namespace radar::ui {
 
 BScopeView::~BScopeView() {
-    // Context may already be gone; release_gl() handles the normal path.
+    // GPU context may already be gone; release_*() handles the normal path.
 }
+
+#if defined(__APPLE__)
+
+void BScopeView::release_texture(MetalContext& ctx) {
+    if (tex_ != nullptr) {
+        ctx.destroy_texture(tex_);
+        tex_ = nullptr;
+    }
+    ctx_ = nullptr;
+}
+
+void BScopeView::init_texture(MetalContext& ctx) {
+    ctx_ = &ctx;
+    if (tex_ == nullptr) {
+        tex_ = ctx.create_texture(kAzBins, kRangeBins);
+        rgba_.assign(size_t(kAzBins) * kRangeBins * 4, 0);
+    }
+    if (!lut_built_) {
+        for (int i = 0; i < 256; ++i) {
+            unsigned char r, g, b;
+            theme::bscope_gradient(i / 255.0f, r, g, b);
+            lut_[i][0] = r; lut_[i][1] = g; lut_[i][2] = b; lut_[i][3] = 255;
+        }
+        lut_built_ = true;
+    }
+}
+
+#else // !__APPLE__
 
 void BScopeView::release_gl() {
     if (tex_ != 0) {
@@ -41,6 +73,8 @@ void BScopeView::init_gl() {
         lut_built_ = true;
     }
 }
+
+#endif // __APPLE__
 
 void BScopeView::splat(const app::BlipView& b) {
     // Reject NaN/Inf blips outright: casting them to int is UB.
@@ -107,18 +141,25 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
             std::copy_n(rgba_.data() + size_t(r) * row_bytes, row_bytes,
                         flipped.data() + size_t(kRangeBins - 1 - r) * row_bytes);
 
-        // Upload decimation (--gl-throttle): pushing 360x256 RGBA every
-        // frame is ~22 MB/s through Apple's deprecated GL->Metal shim,
-        // the prime suspect in the windowed crashes. At 4x decimation
-        // (15 Hz) the phosphor decay (4 s half-life) looks identical.
+        // Upload decimation (--gl-throttle): 360x256 RGBA per frame is
+        // ~22 MB/s. Harmless for native Metal, but the knob stays — at 4x
+        // decimation (15 Hz) the phosphor decay looks identical.
         if (upload_frame_++ % upload_decimation_ == 0) {
+#if defined(__APPLE__)
+            ctx_->upload_texture(tex_, flipped.data(), kAzBins, kRangeBins);
+#else
             glBindTexture(GL_TEXTURE_2D, tex_);
             glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, kAzBins, kRangeBins,
                             GL_RGBA, GL_UNSIGNED_BYTE, flipped.data());
             glBindTexture(GL_TEXTURE_2D, 0);
+#endif
         }
 
+#if defined(__APPLE__)
+        ImGui::Image((ImTextureID)tex_, ImVec2(w, h)); // bridged MTLTexture
+#else
         ImGui::Image((ImTextureID)(intptr_t)tex_, ImVec2(w, h));
+#endif
     }
 
     // --- overlay mapping helpers (screen space) ---

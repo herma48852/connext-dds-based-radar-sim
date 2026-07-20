@@ -95,7 +95,7 @@ int main(int argc, char** argv) {
                          "  --no-dispose     TrackManager never calls dispose_instance\n"
                          "  --gl-throttle    upload the B-scope texture every 4th frame\n"
                          "                   (15 Hz); tests GL driver load as crash suspect\n"
-                         "  --swap-interval  glfwSwapInterval(N); 2 halves all GL traffic\n"
+                         "  --swap-interval  legacy knob; no-op with the Metal renderer\n"
                          "                   to 30 fps (default 1 = vsync 60 fps)\n";
             return 0;
         }

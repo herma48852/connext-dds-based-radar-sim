@@ -1,11 +1,16 @@
 #pragma once
 // UiApp: owns the GLFW window, the ImGui/ImPlot contexts and the render
-// loop. The render thread is the ONLY thread that touches ImGui/OpenGL;
+// loop. The render thread is the ONLY thread that touches ImGui/GPU;
 // all DDS data arrives through the DataBus (lock-free queues + stores).
+// On Apple the renderer is native Metal (MetalContext) — no OpenGL.
 
 #include <deque>
 
 #include <GLFW/glfw3.h>
+
+#if defined(__APPLE__)
+#  include "MetalContext.hpp"
+#endif
 
 #include "../CommandConsole.hpp"
 #include "../DataBus.hpp"
@@ -25,7 +30,13 @@ public:
 
     // Crash-investigation knobs (apply BEFORE run()):
     void set_bscope_upload_decimation(int n) { bscope_.set_upload_decimation(n); }
-    void set_swap_interval(int n) { swap_interval_ = n < 0 ? 0 : n; }
+    void set_swap_interval(int n) {
+#if defined(__APPLE__)
+        (void)n; // Metal presents are display-paced by nextDrawable
+#else
+        swap_interval_ = n < 0 ? 0 : n;
+#endif
+    }
 
 private:
     bool init();
@@ -34,7 +45,11 @@ private:
     app::DataBus&        bus_;
     app::CommandConsole& console_;
     GLFWwindow*          window_ = nullptr;
+#if defined(__APPLE__)
+    MetalContext         metal_;
+#else
     int                  swap_interval_ = 1;   // glfwSwapInterval; 2 = 30 fps
+#endif
 
     PpiView    ppi_;
     AScopeView ascope_;

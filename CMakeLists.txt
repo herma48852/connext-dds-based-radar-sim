@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.20)
 project(AesaRadarSim VERSION 1.0.0 LANGUAGES CXX)
 
+if(APPLE)
+    # Native Metal UI renderer (Objective-C++): replaces Apple's deprecated
+    # OpenGL->Metal shim, the prime suspect in the windowed crashes.
+    enable_language(OBJCXX)
+endif()
+
 # ---------------------------------------------------------------------------
 # AESA SPY-6 class radar simulation on RTI Connext DDS 7.7.0 LTS
 # macOS (Apple Silicon) first, Windows 11 / Visual Studio 2022 ready.
@@ -56,8 +62,10 @@ add_library(radar_types STATIC ${GEN_SOURCES})
 target_include_directories(radar_types PUBLIC "${GEN_DIR}")
 target_link_libraries(radar_types PUBLIC RTIConnextDDS::cpp2_api)
 
-# --- Graphics dependencies (Dear ImGui + GLFW + OpenGL 3.3 + ImPlot) -------
-find_package(OpenGL REQUIRED)
+# --- Graphics dependencies (Dear ImGui + GLFW + Metal[mac]/GL[other] + ImPlot)
+if(NOT APPLE)
+    find_package(OpenGL REQUIRED)
+endif()
 include(FetchContent)
 
 set(GLFW_BUILD_DOCS     OFF CACHE BOOL "" FORCE)
@@ -78,20 +86,35 @@ FetchContent_Declare(implot
 
 FetchContent_MakeAvailable(glfw imgui implot)
 
+set(IMGUI_BACKEND_SOURCES ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp)
+if(APPLE)
+    list(APPEND IMGUI_BACKEND_SOURCES
+        ${imgui_SOURCE_DIR}/backends/imgui_impl_metal.mm)
+else()
+    list(APPEND IMGUI_BACKEND_SOURCES
+        ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp)
+endif()
+
 add_library(imgui STATIC
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp
     ${imgui_SOURCE_DIR}/imgui_tables.cpp
     ${imgui_SOURCE_DIR}/imgui_widgets.cpp
-    ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
-    ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp)
+    ${IMGUI_BACKEND_SOURCES})
+if(APPLE)
+    set_source_files_properties(${imgui_SOURCE_DIR}/backends/imgui_impl_metal.mm
+        PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+endif()
 # SYSTEM includes: warnings from third-party headers (e.g. clang's
 # -Wnontrivial-memcall on imgui.h's memset constructors) must not drown
 # out warnings from our own code.
 target_include_directories(imgui SYSTEM PUBLIC
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends)
-target_link_libraries(imgui PUBLIC glfw OpenGL::GL)
+target_link_libraries(imgui PUBLIC glfw)
+if(NOT APPLE)
+    target_link_libraries(imgui PUBLIC OpenGL::GL)
+endif()
 # imgui's own .cpps include imgui.h with quoted includes, which resolve
 # next to the source file (not via the SYSTEM path above), so silence the
 # clang-only warning for the library's own translation units as well.
@@ -127,8 +150,19 @@ add_executable(radar_app
     src/radar_app/ui/AScopeView.cpp
     src/radar_app/ui/BScopeView.cpp
     src/radar_app/ui/Panels.cpp)
+if(APPLE)
+    target_sources(radar_app PRIVATE src/radar_app/ui/MetalContext.mm)
+    set_source_files_properties(src/radar_app/ui/MetalContext.mm
+        PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+endif()
 target_include_directories(radar_app PRIVATE src/radar_app)
-target_link_libraries(radar_app PRIVATE radar_common imgui implot glfw OpenGL::GL)
+target_link_libraries(radar_app PRIVATE radar_common imgui implot glfw)
+if(APPLE)
+    target_link_libraries(radar_app PRIVATE
+        "-framework Metal" "-framework QuartzCore" "-framework Cocoa")
+else()
+    target_link_libraries(radar_app PRIVATE OpenGL::GL)
+endif()
 
 # --- Target generator application -------------------------------------------
 add_executable(target_gen

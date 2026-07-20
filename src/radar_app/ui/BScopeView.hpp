@@ -3,25 +3,34 @@
 //  - 360 x 256 intensity buffer, decaying phosphor-style
 //  - detections splatted as small gaussian spots (amplitude from SNR)
 //  - black -> blue -> green -> yellow -> red gradient via LUT
-//  - uploaded to a GL texture once per frame, drawn as an ImGui::Image
+//  - uploaded to a GPU texture once per frame, drawn as an ImGui::Image
 //  - overlaid: track markers with IDs, dashed sector boundary lines
 
 #include <vector>
 
 #include <imgui.h>
+#if !defined(__APPLE__)
 #include <GLFW/glfw3.h>   // GL texture handle
+#endif
 
 #include "../DataBus.hpp"
 
 namespace radar::ui {
+
+class MetalContext; // Apple: fwd-decl keeps this header GL/Metal-free
 
 class BScopeView {
 public:
     BScopeView() = default;
     ~BScopeView();
 
+#if defined(__APPLE__)
+    void init_texture(MetalContext& ctx);    // call AFTER Metal is up
+    void release_texture(MetalContext& ctx);
+#else
     void init_gl();   // call AFTER the GL context is current
     void release_gl(); // call BEFORE the GL context is destroyed
+#endif
     void splat(const app::BlipView& b);
     // Crash-investigation knob: upload the heat texture every n-th frame
     // instead of every frame (values < 1 are treated as 1).
@@ -40,7 +49,12 @@ private:
     std::vector<float> heat_{size_t(kAzBins) * kRangeBins, 0.0f};
     std::vector<unsigned char> rgba_;       // lazily sized W*H*4
     unsigned char lut_[256][4]{};           // gradient lookup table
+#if defined(__APPLE__)
+    void* tex_ = nullptr;                   // bridged MTLTexture
+    MetalContext* ctx_ = nullptr;
+#else
     GLuint tex_ = 0;
+#endif
     bool lut_built_ = false;
     // Upload decimation: 1 = upload every frame (default); 4 = 15 Hz.
     int upload_decimation_ = 1;

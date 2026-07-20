@@ -6,7 +6,9 @@
 #include <imgui.h>
 #include <implot.h>
 #include <backends/imgui_impl_glfw.h>
+#if !defined(__APPLE__)
 #include <backends/imgui_impl_opengl3.h>
+#endif
 
 #include "Panels.hpp"
 #include "SimClock.hpp"
@@ -23,11 +25,9 @@ bool UiApp::init() {
     }
 
 #if defined(__APPLE__)
-    const char* glsl_version = "#version 150";
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    // Native Metal renderer: NO OpenGL context anywhere in the process.
+    // Apple's deprecated GL->Metal shim was the prime crash suspect.
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 #else
     const char* glsl_version = "#version 130";
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -41,8 +41,10 @@ bool UiApp::init() {
         std::cerr << "GLFW window creation failed\n";
         return false;
     }
+#if !defined(__APPLE__)
     glfwMakeContextCurrent(window_);
     glfwSwapInterval(swap_interval_); // vsync: 1 = 60 FPS cap, 2 = 30 FPS
+#endif
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -59,17 +61,30 @@ bool UiApp::init() {
     io.FontGlobalScale = sx;              // crisp text on Retina/HiDPI
     theme::apply_style(sx);
 
+#if defined(__APPLE__)
+    ImGui_ImplGlfw_InitForOther(window_, true);
+    if (!metal_.init(window_)) {
+        std::cerr << "Metal init failed\n";
+        return false;
+    }
+    bscope_.init_texture(metal_);
+#else
     ImGui_ImplGlfw_InitForOpenGL(window_, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
-
     bscope_.init_gl();
+#endif
     return true;
 }
 
 void UiApp::shutdown() {
     if (!window_) return;
+#if defined(__APPLE__)
+    bscope_.release_texture(metal_);
+    metal_.shutdown(); // ImGui_ImplMetal_Shutdown + device/queue/layer
+#else
     bscope_.release_gl(); // delete GL objects while the context is current
     ImGui_ImplOpenGL3_Shutdown();
+#endif
     ImGui_ImplGlfw_Shutdown();
     ImPlot::DestroyContext();
     ImGui::DestroyContext();
@@ -108,7 +123,15 @@ int UiApp::run() {
         const auto trace  = bus_.trace();
 
         // ---- render ----
+#if defined(__APPLE__)
+        if (!metal_.begin_frame()) {   // minimized: pump events, skip ImGui
+            glfwWaitEventsTimeout(0.05);
+            continue;
+        }
+        metal_.new_frame();            // ImGui_ImplMetal_NewFrame
+#else
         ImGui_ImplOpenGL3_NewFrame();
+#endif
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
@@ -160,6 +183,9 @@ int UiApp::run() {
                             ImVec2(w5, panel_h), console_);
 
         ImGui::Render();
+#if defined(__APPLE__)
+        metal_.render(); // encode + presentDrawable + commit
+#else
         int fb_w, fb_h;
         glfwGetFramebufferSize(window_, &fb_w, &fb_h);
         glViewport(0, 0, fb_w, fb_h);
@@ -167,6 +193,7 @@ int UiApp::run() {
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         glfwSwapBuffers(window_);
+#endif
     }
     return 0;
 }

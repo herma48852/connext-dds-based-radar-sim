@@ -259,6 +259,23 @@ Report back: ASan report (or "ASan silent + zombie/scribble output").
   span (clamped to 700 m/s); freshly-seeded tracks keep a widened gate
   for ~2 sweeps (cross_hits<4). Note: reported altitude remains
   bar-quantized by design (no monopulse) — ship alt reads ~R·sin 3°.
+- **Offline tracker harness + frozen-track root causes** (2026-07-20
+  late): extracted the DDS-free `TrackerCore` (association / α-β /
+  coast) from TrackManager, which is now a thin DDS adapter.
+  `tests/tracker_replay.cpp` replicates the beam raster, implant gates
+  and CFAR peak-pick and drives the production core — builds with NO
+  Connext (`cmake --build build --target tracker_replay`). First runs
+  found what three blind fix rounds couldn't: (1) **β-term velocity
+  explosion**: intra-burst dt clamps to 0.02 → β/dt = 10× any residual
+  → multi-km/s junk speeds (the "BAL 335 m/s fighter"); β updates now
+  gated to dt ≥ 0.25 s. (2) Slow-target rows legitimately LOOK frozen:
+  reported positions snap to 2.25° az cells (~2 km at 50 km), so the
+  ship's seeded speed ≈ 0 and range ticks only every ~30 s — physical
+  quantization, not a stall. (3) Air targets vanished overhead at
+  ~22 km (el cone top 19.5°): added a third bar at 25° → cone 30.5°,
+  fighter held to ~14 km; per-bar revisit 4.8 s; coast 9→12 s for az
+  dead stripes. Verified 200 s: ship/bomber/fighter/decoy all hold
+  q=100 tracks with truth-grade speeds; table rows tick every sweep.
 - **HMI-UI is now a real DomainParticipant** (`Radar.HMI-UI`,
   `src/radar_app/components/HmiUi.{hpp,cpp}`): subscribes TargetTrack,
   DetectionEvent, ShipPosition (key 0), CalibrationStatus. Every panel is
