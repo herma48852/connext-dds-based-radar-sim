@@ -346,6 +346,17 @@ transport swap (DDS is the demo's purpose).
 - Run from repo root (QoS path is CWD-relative: qos/radar_qos.xml).
 - Flags: `--headless --domain N --no-dispose --gl-throttle
   --swap-interval N` (last is a no-op with Metal).
+- **Monitoring Library 2.0 is disabled in code** (2026-07-20, K5):
+  `radds::disable_monitoring_lib()`, first line of both mains. Connext
+  7.7 AUTO-ENABLES it on shared libs; its rti/dds/monitoring/* topics
+  flooded Studio's System Visualization. The factory-QoS setting can NOT
+  be done in our XML (the factory singleton reads the DEFAULT provider,
+  not our QosProvider — learned the hard way: XML profile had zero
+  effect). Override per-process with `RTI_MONITORING2_ENABLE=true`.
+  Verify with `lsof -p <pid> | grep rtimonitoring` (empty = off) — a spy
+  on domain 0 can't see the monitoring DP (domain 101 + RTI_o11y tag),
+  and killed processes leave TRANSIENT_LOCAL ghosts until liveliness
+  expires.
 - .gitignore covers `build*/` — never commit build dirs or the
   fix-pack zip. macOS screenshot filenames contain U+202F — copy via
   glob. ASan needs `-fsanitize=address` in BOTH CMAKE_C_FLAGS and
