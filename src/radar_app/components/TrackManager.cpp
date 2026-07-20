@@ -104,7 +104,10 @@ void TrackManager::update_loop() {
 
         int published = 0;
         for (const auto& t : core_.tracks()) {
-            if (t.hits < 2) continue; // publish confirmed tracks only
+            // Publish at hits>=3 (was 2): aligns with the classification
+            // gate so every published row is classifiable on appearance —
+            // hits=2 noise fragments used to flood the table as UNK.
+            if (t.hits < 3) continue;
             ++published;
             auto hit = handles_.find(t.id);
             if (hit == handles_.end()) {

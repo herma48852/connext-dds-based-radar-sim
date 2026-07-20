@@ -64,6 +64,11 @@ public:
     // revisit, so 12 s covers an unlucky az dead-stripe crossing.
     static constexpr int64_t kCoastMs     = 12000;
     static constexpr int    kMaxTracks    = 256;
+    // Merge radius for az-cell split duplicates: 2.25 deg dwell cells are
+    // ~1.9 km at 50 km; 4 km covers second-adjacent splits. Velocity must
+    // match only when both tracks have it seeded (kMergeDvMps).
+    static constexpr double kMergeM     = 4000.0;
+    static constexpr double kMergeDvMps = 30.0;
 
 private:
     std::vector<CoreTrack> tracks_;

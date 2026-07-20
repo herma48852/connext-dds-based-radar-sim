@@ -20,10 +20,17 @@ void polar_to_enu(double range_m, double az_ship_deg, double el_deg,
     z = range_m * std::sin(el);
 }
 
-int classify(double speed, double z) {
-    if (speed > 300.0)            return TrackerCore::CLASS_BALLISTIC;
-    if (speed > 100.0)            return TrackerCore::CLASS_AIR_BREATHING;
-    if (speed < 30.0 && z < 50.0) return TrackerCore::CLASS_SURFACE;
+int classify(double speed, double range_xy_m, double z) {
+    if (speed > 300.0) return TrackerCore::CLASS_BALLISTIC;
+    if (speed > 100.0) return TrackerCore::CLASS_AIR_BREATHING;
+    // Surface contacts are only ever illuminated on the lowest (3 deg)
+    // elevation bar (higher bars' gates start at 8.5 deg, above any
+    // surface return), so a genuine surface track's reported z is
+    // R*sin(3deg) ~ 0.05 R. A slow track higher than that is elevated
+    // noise, not a ship. (Bare "speed < 30" misclassifies both elevated
+    // noise AND fast movers whose velocity hasn't seeded yet.)
+    if (speed < 30.0 && z < 0.07 * range_xy_m + 500.0)
+        return TrackerCore::CLASS_SURFACE;
     return TrackerCore::CLASS_UNKNOWN;
 }
 } // namespace
@@ -122,8 +129,40 @@ std::vector<int64_t> TrackerCore::update(const std::vector<CoreDetection>& dets,
         }
     }
 
-    // coast / drop + classify
+    // Merge duplicate tracks of one physical contact. Strong returns
+    // (the 35 dBsm ship) straddle adjacent 2.25 deg az cells (~1.9 km at
+    // 50 km) and otherwise spawn 2-3 persistent tracks per contact, all
+    // reaching q=100 — the pane then shows several "ships". Pairs within
+    // kMergeM in XY merge; velocity must match only when BOTH tracks have
+    // it seeded (an unseeded track just hasn't measured yet). The
+    // higher-hits track survives; the other is dropped (disposed by the
+    // adapter). z is not compared (bar-quantized, like the gate).
     std::vector<int64_t> dropped;
+    std::vector<int64_t> merge_drop;
+    for (size_t i = 0; i < tracks_.size(); ++i) {
+        if (std::find(merge_drop.begin(), merge_drop.end(), tracks_[i].id) != merge_drop.end())
+            continue;
+        for (size_t j = i + 1; j < tracks_.size(); ++j) {
+            if (std::find(merge_drop.begin(), merge_drop.end(), tracks_[j].id) != merge_drop.end())
+                continue;
+            const CoreTrack& a = tracks_[i];
+            const CoreTrack& b = tracks_[j];
+            const double dx = a.x - b.x, dy = a.y - b.y;
+            if (dx*dx + dy*dy >= kMergeM*kMergeM) continue;
+            if (a.v_init && b.v_init) {
+                const double dvx = a.vx - b.vx, dvy = a.vy - b.vy;
+                if (dvx*dvx + dvy*dvy >= kMergeDvMps*kMergeDvMps) continue;
+            }
+            merge_drop.push_back((a.hits >= b.hits ? b : a).id);
+        }
+    }
+    for (const int64_t id : merge_drop) dropped.push_back(id);
+    tracks_.erase(std::remove_if(tracks_.begin(), tracks_.end(),
+        [&](const CoreTrack& t) {
+            return std::find(merge_drop.begin(), merge_drop.end(), t.id) != merge_drop.end();
+        }), tracks_.end());
+
+    // coast / drop + classify
     for (auto it = tracks_.begin(); it != tracks_.end();) {
         if (now_ms - it->last_update_ms > kCoastMs) {
             dropped.push_back(it->id);
@@ -131,8 +170,11 @@ std::vector<int64_t> TrackerCore::update(const std::vector<CoreDetection>& dets,
             continue;
         }
         const double speed = std::sqrt(it->vx*it->vx + it->vy*it->vy + it->vz*it->vz);
-        if (it->hits >= 3 && it->classification == CLASS_UNKNOWN)
-            it->classification = classify(speed, it->z);
+        // Re-evaluate every cycle: velocity seeds on the SECOND cross-sweep
+        // hit, so a track classified at birth (v unseeded) would otherwise
+        // be stuck forever (fast movers read SURF/UNK at 240+ m/s).
+        if (it->hits >= 3)
+            it->classification = classify(speed, std::hypot(it->x, it->y), it->z);
 
         it->history.push_back({it->x, it->y, it->z});
         if (it->history.size() > 10) it->history.pop_front();

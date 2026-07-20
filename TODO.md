@@ -34,6 +34,38 @@ line is the full case log; this section is the executive summary.
   of them. Ladder stands: TSan next; `build-tsan/` is configured with
   `-fsanitize=thread` in C/CXX/OBJCXX + linker flags.
 
+### 2026-07-20 (eve, K5) — classification trilogy FIXED (the "only UNK" complaint)
+
+User saw the pane degrade to "only an occasional UNK". rtiddsspy on the
+live domain showed rows existed but were UNK-dominated, then SURF-dominated
+after a first fix. Three real defects, all in the classification path:
+
+1. **Stuck-at-birth classification (the big one):** `classify()` ran only
+   while `classification == UNK`, at hits≥3 — BEFORE velocity seeds
+   (cross_hits≥2). Fast movers classified with v=0 and were stuck
+   forever: rtiddsspy caught 240–260 m/s tracks reading SURF. Now
+   re-evaluated EVERY cycle at hits≥3.
+2. **Impossible SURF rule:** old `speed<30 && z<50` — z is bar-quantized
+   (ship reads ~2.6 km at 50 km), so SURF could never fire and the ship
+   read UNK forever. New rule from the deck-bar physics: surface contacts
+   only illuminate on the 3° bar (higher bars start at 8.5°), so z ≈
+   R·sin3° ≈ 0.05R; slow tracks above that are elevated noise → UNK.
+   (A first attempt "speed<30 alone" labeled elevated noise AND
+   unseeded fast movers as SURF — caught via spy, reverted into this.)
+3. **Publish/classify gate mismatch:** published at hits≥2 but classified
+   at hits≥3 — every hits=2 row was UNK by construction. Gate now
+   hits≥3 for both (TrackManager + TrackerCore aligned).
+
+Plus **track merging** (the multi-ship root cause): the 35 dBsm ship
+straddles adjacent 2.25° az cells (~1.9 km at 50 km) and spawned 2–3
+persistent q=100 tracks. TrackerCore::update now merges pairs within
+kMergeM=4 km (velocity must match only when BOTH are seeded; z not
+compared, bar-quantized); higher-hits survives, loser disposed.
+Verified offline: no replay sweep has two mature tracks near the same
+truth; deterministic replay unchanged (1761 dets, 198 births, 211
+deaths). Live-verified: pane = SURF ship + AIR fighters + a BAL +
+transient UNK; no stuck classifications.
+
 ### 2026-07-20 (late, K5) — scenario-lifecycle decay explained; target RESPAWN added
 
 - **User report:** track pane degraded over several minutes to "only an
