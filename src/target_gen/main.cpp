@@ -30,6 +30,7 @@ void on_sigint(int) { g_running.store(false); }
 }
 
 int main(int argc, char** argv) {
+    radds::disable_monitoring_lib(); // no monitoring DPs (see DdsSupport)
     int32_t domain = 0;
     int num_targets = 8;
     double respawn_km = 120.0;

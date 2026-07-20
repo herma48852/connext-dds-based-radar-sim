@@ -71,6 +71,7 @@ void on_sigint(int) { g_running.store(false); }
 } // namespace
 
 int main(int argc, char** argv) {
+    radds::disable_monitoring_lib(); // no monitoring DPs (see DdsSupport)
     install_crash_handler();
     int32_t domain = 0;
     bool headless = false;

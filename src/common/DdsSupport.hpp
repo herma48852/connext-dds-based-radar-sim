@@ -50,6 +50,21 @@ inline dds::core::QosProvider& qos_provider() {
     return provider;
 }
 
+// Disable RTI Monitoring Library 2.0 for this process. In Connext 7.7 it
+// is AUTO-ENABLED by default on the shared libs (librtimonitoring2 ships
+// in the target lib dir): every process spawned a monitoring participant
+// and flooded Connext Studio's System Visualization with
+// rti/dds/monitoring/* topics. This project uses ddsspy for data
+// inspection instead. Call FIRST in main(): the setting lives on the
+// DomainParticipantFactory singleton, which our XML QosProvider cannot
+// reach (it only carries entity profiles). The RTI_MONITORING2_ENABLE
+// env var takes precedence if set.
+inline void disable_monitoring_lib() {
+    auto fqos = dds::domain::DomainParticipant::participant_factory_qos();
+    fqos << rti::core::policy::Monitoring::Disabled();
+    dds::domain::DomainParticipant::participant_factory_qos(fqos);
+}
+
 inline dds::domain::DomainParticipant make_participant(
         int32_t domain_id,
         const std::string& participant_profile,
