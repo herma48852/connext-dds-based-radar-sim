@@ -17,8 +17,8 @@ public:
     void start() override;
 
 private:
-    static constexpr double kDwellPeriodSec = 0.02;  // 50 Hz
-    static constexpr double kAzStepDeg      = 2.25;  // 160 dwells / revolution
+    static constexpr double kDwellPeriodSec = 0.01;  // 100 Hz
+    static constexpr double kAzStepDeg      = 2.25;  // 160 dwells / revolution (1.6 s)
 
     DataBus& bus_;
     dds::pub::DataWriter<types::BeamCommand> writer_{dds::core::null};

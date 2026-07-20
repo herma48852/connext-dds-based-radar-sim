@@ -33,6 +33,7 @@ private:
         int64_t id;
         double x, y, z;          // ENU [m]
         double vx, vy, vz;       // ENU [m/s]
+        bool   v_init;           // velocity seeded by a cross-sweep hit
         int    hits;
         int    classification;
         int    quality;
@@ -41,9 +42,12 @@ private:
     };
 
     static constexpr double kGateM        = 750.0;
+    static constexpr double kInitSpeedMps = 350.0; // capture gate: velocity uncertainty of an un-seeded track
     static constexpr double kAlpha        = 0.55;
     static constexpr double kBeta         = 0.20;
-    static constexpr int64_t kCoastMs     = 5000;
+    // Must exceed the worst-case revisit: 2 el bars x 1.6 s sweep = 3.2 s,
+    // plus margin for a missed bar at the elevation-gate edge.
+    static constexpr int64_t kCoastMs     = 9000;
     static constexpr int    kMaxTracks    = 256;
 
     void on_detection(const types::DetectionEvent& det);

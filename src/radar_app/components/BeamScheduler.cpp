@@ -35,7 +35,8 @@ void BeamScheduler::start() {
         auto next = std::chrono::steady_clock::now();
 
         while (!stop_.load()) {
-            next += std::chrono::milliseconds(20); // 50 Hz
+            next += std::chrono::milliseconds(
+                static_cast<int>(kDwellPeriodSec * 1000.0)); // 100 Hz
 
             const int32_t mode = bus_.radar_mode.load();
             types::BeamCommand cmd;
