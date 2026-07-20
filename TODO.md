@@ -1,5 +1,147 @@
 # AesaRadarSim — Continuation TODO
 
+## 0. HANDOFF — read this first (2026-07-20 late, K3)
+
+Written for a fresh agent session (e.g. Kimi Code). Everything below the
+line is the full case log; this section is the executive summary.
+
+### Current state — all working
+
+- Build green; both apps run. UI is native Metal on macOS (no OpenGL
+  anywhere; GL path kept under `#else` for other platforms). PPI blips
+  are SNR-colored (with_alpha alpha-mask bug fixed); cursor range/bearing
+  readout added; Retina layout fixed.
+- Tracking VERIFIED via `tests/tracker_replay` (offline harness, no
+  Connext needed): ship/bomber/fighter/decoy each hold one q=100 track
+  with truth-grade speeds over 200 s. TrackerCore is DDS-free;
+  TrackManager is a thin adapter.
+- Beam: 3-bar elevation raster (3/14/25°), 100 Hz dwell, 1.6 s sweep,
+  4.8 s per-bar revisit; tracker coast 12 s.
+
+### Expected behavior — NOT bugs (don't "fix" these)
+
+- Air targets vanish overhead above ~30.5° elevation (cone of silence)
+  and are re-acquired outbound with a NEW track id.
+- Slow ship's table row barely changes: reported position snaps to
+  2.25° az cells (~2 km at 50 km); seeded speed ≈ 0; alt is
+  bar-quantized (ship shows ~R·sin 3°). Physical, honest.
+- The two missiles (11–12 km alt, −10 dBsm) stay invisible: SNR range
+  (~9 km) < cone-entry range. Want them? More/higher el bars (ties into
+  RMA Tier 2/3 work).
+- Track rows step every ~4.8 s (bar revisit); no dead-reckoning between
+  bursts (3-line patch available: publish x + vx·age in
+  TrackManager::update_loop).
+
+### Crash investigation — status and ranked next steps
+
+Windowed radar_app SIGSEGV/SIGBUS at 12–111 s. **9 victims** now:
+Connext REDA pools/database/writer (4), AppKit window bookkeeping (2),
+QuartzCore commit, AGX Metal pipeline, HIToolbox, SwiftUI/AttributeGraph
+(victim #9: `AG::LayoutDescriptor::Compare` / `AGGraphSetOutputValue`
+during NSWindow display-cycle flush on the SwiftUI AsyncRenderer
+thread, 45.7 s). Headless is ALWAYS clean (11 min ×2) with identical
+DDS components/rates. Note: the last two windowed crashes both landed
+at ~45 s (45.4, 45.7) — possibly converging on a period, possibly
+coincidence; log exact wall-times of future crashes.
+
+Ruled out: dispose path; GL→Metal shim (native Metal port crashed at
+45 s anyway); **unbundled-app legacy AppKit path** (MACOSX_BUNDLE test
+ran 2026-07-20 — crashed identically at 45.7 s, victim #9; bundle
+experiment FAILED, keep the bundle anyway, it removes the tab-indexing
+warning); our shared-state code (full audit: SPSC queues are textbook
+single-producer/single-consumer with all-POD payloads — CmdReq/BlipView/
+BeamView; DataBus stores all mutexed; DataWriter writes confined to one
+WriterThread; listeners only queue-and-return). ASan caught only
+victims; watchpoints inconclusive. Signature remains: random Apple
+window-furniture + Connext internals tripping over corruption they
+didn't cause — i.e. someone else's memory is being stepped on.
+
+Surviving suspects, ranked:
+1. **Latent race in our code (TOP PRIORITY — run this first)**:
+   `cmake -S . -B build-tsan -DCMAKE_C_FLAGS="-fsanitize=thread"
+   -DCMAKE_CXX_FLAGS="-fsanitize=thread"
+   -DCMAKE_OBJCXX_FLAGS="-fsanitize=thread" && cmake --build
+   build-tsan -j8` then run windowed with target_gen until it fires
+   (or for 30 min). Any TSan report naming our code = found. TSan
+   also watches Connext internals — expect noise from REDA; races
+   rooted in src/ are the signal.
+2. **Heap corruption TSan can't see** (SPSC indices, vector growth,
+   bridged MTLTexture lifetime in MetalContext.mm): re-run the ASan
+   build windowed with `ASAN_OPTIONS=halt_on_error=1` for a full 30 min
+   with target_gen — past ASan runs were short and only caught victims.
+3. **Below user space** (driver/WindowServer): restart wrapper for
+   demos; headless + Admin Console/Studio for soaks; escalate to RTI
+   with the 9 backtraces (7.7.0, arm64Darwin23clang16.0).
+
+Oddity to glance at (don't theorize on truncated symbols): in victim
+#9's crash log, thread 0 (com.apple.main-thread) shows Connext's
+KeventScanner/kevent frames — verify the UI loop is really on the
+main thread and no Connext waitset/scanner got parked there.
+
+Behavior note (2026-07-20): the new TrackerCore only PUBLISHES tracks
+at hits≥2 (noise suppression). A solo radar_app run (no target_gen)
+now legitimately shows an EMPTY track table — old builds flickered
+noise tracks, new build stays quiet.
+
+**Empty-table incident (2026-07-20, UNRESOLVED):** bundled run, 45.7 s,
+user saw ZERO tracks the whole run — with target_gen CONFIRMED running
+non-stop. Not noise suppression: the ship (35 dBsm) must publish within
+seconds. Static audit of the full chain read clean (DetectionEvent
+listener registered; pending_ drained at 10 Hz; hits≥2 publish gate;
+HmiUi TrackListener → tracks_ map → 5 Hz housekeeping → bus store →
+Panels table). The same build family crashed inside this very thread
+(victim #8, writer_.write), so early corruption wedging the pipeline is
+a live hypothesis alongside a plain regression or a one-off.
+
+HEARTBEAT BUILD deployed to localize it (first task for the next
+session — run BEFORE TSan, 90 s windowed + target_gen, watch stdout):
+- `[TrackManager] hb dets_in=N alive=N published=N handles=N` every 2 s
+- `[HmiUi] hb tracks=N views=N` every 2 s
+- `[TrackManager] reset consumed` if a spurious reset fires
+Read it as a decision table:
+  dets_in stuck at 0      → upstream: DetectionProcessor not publishing
+                            or listener not firing
+  dets_in>0, alive=0      → association failing in-app (heading? gate?)
+  alive>0, published=0    → hits never reach 2 (fragmented detections)
+  published>0, HMI tracks=0 → TargetTrack write/read path
+  HMI tracks>0, table empty → Panels/rendering
+  TM heartbeat STOPS mid-run, window keeps rendering → TrackManager
+                            thread wedged = corruptor caught in the act;
+                            empty table and crashes become ONE bug.
+
+REJECTED with reasoning: waitsets/listener conversion (listeners run
+identically in clean headless runs; UI thread never calls DDS); DDS
+transport swap (DDS is the demo's purpose).
+
+### Pending feature work (in order)
+
+1. **target_gen stages**: Stage 0 PASSED (rtiddsspy: 16168 TargetTruth,
+   404 ShipPosition, 0 dispose). Stage 1 first-contact checklist
+   (expected detection ranges: ship/bomber immediate, decoy ~49 km,
+   fighter ~28 km, missile ~9 km, drone ~5 km). Stage 2 scenario sweep.
+   Stage 3 15–30 min soak.
+2. **RMA-offline feature** (approved in principle): Tier 1 = commands +
+   element mask + gain/beamwidth + LEDs; Tier 2 = +squint/sidelobe
+   ghosts/beam spoiling; Tier 3 = +array factor + live pattern panel.
+   Hooks exist: element_drift_db, SystemCommand.parameters. Gated on #1.
+3. Optional polish: dead-reckoning publish (above); track-table AZ
+   column is RELATIVE bearing — label it or convert to true.
+
+### Operational notes
+
+- Build: `cd build && cmake .. && cmake --build . -j8` (re-configure
+  when CMakeLists changes). Offline harness (no Connext):
+  `cmake --build build --target tracker_replay && ./build/tracker_replay 300`.
+- Run from repo root (QoS path is CWD-relative: qos/radar_qos.xml).
+- Flags: `--headless --domain N --no-dispose --gl-throttle
+  --swap-interval N` (last is a no-op with Metal).
+- .gitignore covers `build*/` — never commit build dirs or the
+  fix-pack zip. macOS screenshot filenames contain U+202F — copy via
+  glob. ASan needs `-fsanitize=address` in BOTH CMAKE_C_FLAGS and
+  CMAKE_CXX_FLAGS (GLFW is C).
+
+---
+
 State as of 2026-07-20 (evening). Build is green; both apps run. One open
 crash investigation. Read this first when resuming with a fresh context.
 
@@ -276,6 +418,32 @@ Report back: ASan report (or "ASan silent + zombie/scribble output").
   fighter held to ~14 km; per-bar revisit 4.8 s; coast 9→12 s for az
   dead stripes. Verified 200 s: ship/bomber/fighter/decoy all hold
   q=100 tracks with truth-grade speeds; table rows tick every sweep.
+- **Metal renderer port** (2026-07-20 late): the windowed crashes (7+
+  random victims, windowed-only, ASan-invisible, watchpoint-immune)
+  pointed at Apple's deprecated OpenGL→Metal shim. radar_app on macOS
+  now renders NATIVELY via Metal: GLFW_NO_API window + CAMetalLayer +
+  imgui_impl_metal — no OpenGL context exists in the process, so the
+  shim and its drivers are gone entirely. New MetalContext.hpp/.mm
+  (device/queue/layer, per-frame drawable acquire + present, B-scope
+  RGBA texture). The old GL path is retained under `#else` for
+  non-Apple platforms. `--swap-interval` is a no-op on macOS
+  (nextDrawable paces presents); `--gl-throttle` still works. NOTE:
+  the ObjC++ was written without a macOS SDK to compile against —
+  expect possible first-build fixes.
+- **Metal port did NOT stop the crashes** (2026-07-20 late): 45 s
+  SIGSEGV in TrackManager's TargetTrack writer (REDACursor / victim
+  #8), same pattern as pre-port. GL-shim theory dead; the surviving
+  windowed-only delta is Apple's compositing stack itself + the app
+  being UNBUNDLED ("missing main bundle identifier", 3 early AppKit
+  victims). Code audit meanwhile exonerated our shared state: SPSC
+  queues single-producer (HmiUi listener / BeamScheduler), all bus
+  stores mutexed, TrackManager writer single-threaded and identical
+  in headless (11 min clean). Next experiments: (a) MACOSX_BUNDLE
+  (done in CMakeLists — run
+  ./build/radar_app.app/Contents/MacOS/radar_app); (b) TSan build
+  (-fsanitize=thread in C/CXX/OBJCXX flags) to prove/disprove a race
+  in our code; (c) if both fail, the corruptor is below user space →
+  restart wrapper or headless+Studio.
 - **HMI-UI is now a real DomainParticipant** (`Radar.HMI-UI`,
   `src/radar_app/components/HmiUi.{hpp,cpp}`): subscribes TargetTrack,
   DetectionEvent, ShipPosition (key 0), CalibrationStatus. Every panel is

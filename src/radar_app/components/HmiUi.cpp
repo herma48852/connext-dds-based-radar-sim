@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
+#include <iostream>
 #include <memory>
 #include <vector>
 
@@ -155,13 +157,16 @@ void HmiUi::on_calibration(const types::CalibrationStatus& c) {
 void HmiUi::housekeeping_loop() {
     using namespace std::chrono;
     auto next = steady_clock::now();
+    int hb_cycles = 0; // heartbeat diagnostics: 2 s cadence, see TrackManager
     while (!stop_.load()) {
         next += milliseconds(200); // 5 Hz view refresh
 
         const int64_t now_ms = SimClock::sim_millis();
         std::vector<TrackView> views;
+        std::size_t map_size = 0;
         {
             std::lock_guard lk(tracks_mutex_);
+            map_size = tracks_.size();
             for (auto it = tracks_.begin(); it != tracks_.end();) {
                 if (now_ms - it->second.sim_millis > kTrackStaleMs)
                     it = tracks_.erase(it); // dispose missed; age out
@@ -172,6 +177,12 @@ void HmiUi::housekeeping_loop() {
             }
         }
         bus_.update_tracks(views);
+
+        if (++hb_cycles >= 10) { // 2 s at 5 Hz
+            hb_cycles = 0;
+            std::cout << "[HmiUi] hb tracks=" << map_size
+                      << " views=" << views.size() << std::endl;
+        }
 
         std::this_thread::sleep_until(next);
     }

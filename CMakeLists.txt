@@ -154,6 +154,15 @@ if(APPLE)
     target_sources(radar_app PRIVATE src/radar_app/ui/MetalContext.mm)
     set_source_files_properties(src/radar_app/ui/MetalContext.mm
         PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+    # Bundle the app: unbundled GUI processes take a legacy AppKit /
+    # WindowServer path on modern macOS ("Cannot index window tabs due to
+    # missing main bundle identifier") — the remaining crash suspect now
+    # that the GL shim is gone. Run the binary inside the bundle to keep
+    # stdout:  ./build/radar_app.app/Contents/MacOS/radar_app
+    set_target_properties(radar_app PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_GUI_IDENTIFIER "com.aesaradarsim.radarapp"
+        MACOSX_BUNDLE_BUNDLE_NAME "AesaRadarSim")
 endif()
 target_include_directories(radar_app PRIVATE src/radar_app)
 target_link_libraries(radar_app PRIVATE radar_common imgui implot glfw)
@@ -201,5 +210,7 @@ add_custom_target(copy_qos ALL
             "${CMAKE_CURRENT_SOURCE_DIR}/qos" "$<TARGET_FILE_DIR:radar_app>/qos"
     COMMENT "Copying QoS profiles")
 
-install(TARGETS radar_app target_gen RUNTIME DESTINATION bin)
+install(TARGETS radar_app target_gen
+        RUNTIME DESTINATION bin
+        BUNDLE  DESTINATION .)
 install(DIRECTORY qos/ DESTINATION bin/qos)

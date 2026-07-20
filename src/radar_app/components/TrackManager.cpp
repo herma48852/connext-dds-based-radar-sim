@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
+#include <iostream>
 #include <memory>
 
 #include "SimClock.hpp"
@@ -53,12 +55,20 @@ void TrackManager::update_loop() {
     using namespace std::chrono;
     auto next = steady_clock::now();
 
+    // Heartbeat diagnostics (2026-07-20): localizes empty-track-table
+    // reports. Prints every 2 s; if the line stops while the app keeps
+    // rendering, this thread wedged — that ties the empty table to the
+    // windowed-crash corruptor (victim #8 died inside writer_.write here).
+    uint64_t dets_in = 0;
+    int hb_cycles = 0;
+
     while (!stop_.load()) {
         next += milliseconds(100); // 10 Hz track update
 
         if (bus_.reset_requested.exchange(false)) {
             // Dispose every live instance so subscribers (HMI-UI, Studio)
             // watch the tracks vanish instead of timing out.
+            std::cout << "[TrackManager] reset consumed — tracks cleared" << std::endl;
             if (bus_.dispose_enabled.load())
                 for (auto& [id, h] : handles_) writer_.dispose_instance(h);
             handles_.clear();
@@ -70,6 +80,7 @@ void TrackManager::update_loop() {
             std::lock_guard lk(pending_mutex_);
             batch.swap(pending_);
         }
+        dets_in += batch.size();
 
         std::vector<CoreDetection> dets;
         dets.reserve(batch.size());
@@ -90,8 +101,10 @@ void TrackManager::update_loop() {
             }
         }
 
+        int published = 0;
         for (const auto& t : core_.tracks()) {
             if (t.hits < 2) continue; // publish confirmed tracks only
+            ++published;
             auto hit = handles_.find(t.id);
             if (hit == handles_.end()) {
                 types::TargetTrack reg;
@@ -119,6 +132,14 @@ void TrackManager::update_loop() {
                 static_cast<types::TrackClassification>(t.classification);
             msg.quality = t.quality;
             writer_.write(msg);
+        }
+
+        if (++hb_cycles >= 20) { // 2 s at 10 Hz
+            hb_cycles = 0;
+            std::cout << "[TrackManager] hb dets_in=" << dets_in
+                      << " alive=" << core_.tracks().size()
+                      << " published=" << published
+                      << " handles=" << handles_.size() << std::endl;
         }
 
         std::this_thread::sleep_until(next);
