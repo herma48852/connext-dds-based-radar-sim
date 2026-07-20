@@ -85,6 +85,11 @@ source $CONNEXTDDS_DIR/resource/scripts/rtisetenv_arm64Darwin23clang16.0.bash
 Both apps accept `--domain N` (default 0). The radar UI also has a
 **SCENARIOS** panel (bottom-right) issuing `Radar/SystemCommand`s:
 search/sector mode, degrade/restore array, self test, track reset.
+The **ARRAY FACE** panel issues `CMD_RMA_OFFLINE`/`CMD_RMA_ONLINE`:
+click an RMA block (16 blocks of 64 T/R elements) to toggle it, or
+**ALL ONLINE** to restore. Offline RMAs darken the block, set the bit
+in `CalibrationStatus.rma_offline_mask`, and reduce implant gain and
+beamwidth accordingly.
 
 > **macOS note (shared memory):** the shipped profiles use **UDPv4 only**.
 > macOS defaults allow very few System V shared-memory segments, and the
@@ -141,7 +146,7 @@ on-demand diagnostic endpoints `target_gen` creates with
 | `Radar/DetectionEvent` | DetectionEvent | ~100 Hz | DetectionEventProfile | BEST_EFFORT CFAR blips; consumed by TrackManager and HMI-UI (PPI) |
 | `Radar/BeamCommand` | BeamCommand | 50 Hz | BeamCommandProfile | RELIABLE dwell schedule |
 | `Radar/TargetTrack` | TargetTrack | 10 Hz | TargetTrackProfile | RELIABLE + TRANSIENT_LOCAL + 100 ms deadline; consumed by HMI-UI (track list) |
-| `Radar/CalibrationStatus` | CalibrationStatus | 1 Hz | CalibrationStatusProfile | array health, 1024 elements; consumed by HMI-UI (health panel) |
+| `Radar/CalibrationStatus` | CalibrationStatus | 1 Hz | CalibrationStatusProfile | array health: 1024-element drift + `rma_offline_mask`; consumed by HMI-UI (health + ARRAY FACE panels) |
 | `Radar/SystemCommand` | SystemCommand | bursty | SystemCommandProfile | RELIABLE, WaitSet-handled |
 | `Ship/ShipPosition` | ShipPosition | 10 Hz | ShipPositionProfile | keyed: 0 = INS, 1 = truth; key 0 consumed by HMI-UI (ship panel) |
 | `TargetGen/TargetTruth` | TargetTruth | 50 Hz/target | TargetTruthProfile | keyed per target |
