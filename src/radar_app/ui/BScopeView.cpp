@@ -107,10 +107,16 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
             std::copy_n(rgba_.data() + size_t(r) * row_bytes, row_bytes,
                         flipped.data() + size_t(kRangeBins - 1 - r) * row_bytes);
 
-        glBindTexture(GL_TEXTURE_2D, tex_);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, kAzBins, kRangeBins,
-                        GL_RGBA, GL_UNSIGNED_BYTE, flipped.data());
-        glBindTexture(GL_TEXTURE_2D, 0);
+        // Upload decimation (--gl-throttle): pushing 360x256 RGBA every
+        // frame is ~22 MB/s through Apple's deprecated GL->Metal shim,
+        // the prime suspect in the windowed crashes. At 4x decimation
+        // (15 Hz) the phosphor decay (4 s half-life) looks identical.
+        if (upload_frame_++ % upload_decimation_ == 0) {
+            glBindTexture(GL_TEXTURE_2D, tex_);
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, kAzBins, kRangeBins,
+                            GL_RGBA, GL_UNSIGNED_BYTE, flipped.data());
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
 
         ImGui::Image((ImTextureID)(intptr_t)tex_, ImVec2(w, h));
     }

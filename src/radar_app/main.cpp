@@ -74,6 +74,8 @@ int main(int argc, char** argv) {
     int32_t domain = 0;
     bool headless = false;
     bool no_dispose = false;
+    bool gl_throttle = false;
+    int swap_interval = 1;
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--domain") == 0 && i + 1 < argc)
             domain = std::atoi(argv[++i]);
@@ -81,13 +83,20 @@ int main(int argc, char** argv) {
             headless = true;
         else if (std::strcmp(argv[i], "--no-dispose") == 0)
             no_dispose = true;
+        else if (std::strcmp(argv[i], "--gl-throttle") == 0)
+            gl_throttle = true;
+        else if (std::strcmp(argv[i], "--swap-interval") == 0 && i + 1 < argc)
+            swap_interval = std::atoi(argv[++i]);
         else if (std::strcmp(argv[i], "--help") == 0) {
             std::cout << "radar_app [--domain N] [--headless] [--no-dispose]\n"
-                         "  --headless    run components only (no window); the\n"
-                         "                crash-bisect soak test: same DDS traffic,\n"
-                         "                zero GLFW/ImGui/AppKit in the process\n"
-                         "  --no-dispose  TrackManager never calls dispose_instance;\n"
-                         "                isolates the dispose path as crash suspect\n";
+                         "          [--gl-throttle] [--swap-interval N]\n"
+                         "  --headless       components only (no window); crash-bisect\n"
+                         "                   soak: same DDS traffic, zero GLFW/ImGui/AppKit\n"
+                         "  --no-dispose     TrackManager never calls dispose_instance\n"
+                         "  --gl-throttle    upload the B-scope texture every 4th frame\n"
+                         "                   (15 Hz); tests GL driver load as crash suspect\n"
+                         "  --swap-interval  glfwSwapInterval(N); 2 halves all GL traffic\n"
+                         "                   to 30 fps (default 1 = vsync 60 fps)\n";
             return 0;
         }
     }
@@ -136,6 +145,14 @@ int main(int argc, char** argv) {
         }
     } else {
         radar::ui::UiApp app(bus, console);
+        if (gl_throttle) {
+            app.set_bscope_upload_decimation(4);
+            std::cout << "[radar_app] --gl-throttle: B-scope upload at 15 Hz\n";
+        }
+        if (swap_interval != 1) {
+            app.set_swap_interval(swap_interval);
+            std::cout << "[radar_app] swap interval " << swap_interval << "\n";
+        }
         rc = app.run(); // blocks until the window closes
     }
 

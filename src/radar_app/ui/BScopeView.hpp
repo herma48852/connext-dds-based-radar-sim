@@ -23,6 +23,9 @@ public:
     void init_gl();   // call AFTER the GL context is current
     void release_gl(); // call BEFORE the GL context is destroyed
     void splat(const app::BlipView& b);
+    // Crash-investigation knob: upload the heat texture every n-th frame
+    // instead of every frame (values < 1 are treated as 1).
+    void set_upload_decimation(int n) { upload_decimation_ = n < 1 ? 1 : n; }
     void render(const char* title, ImVec2 pos, ImVec2 size,
                 const std::vector<app::TrackView>& tracks,
                 const app::ShipView& ship,
@@ -39,6 +42,9 @@ private:
     unsigned char lut_[256][4]{};           // gradient lookup table
     GLuint tex_ = 0;
     bool lut_built_ = false;
+    // Upload decimation: 1 = upload every frame (default); 4 = 15 Hz.
+    int upload_decimation_ = 1;
+    int upload_frame_ = 0;
 };
 
 } // namespace radar::ui

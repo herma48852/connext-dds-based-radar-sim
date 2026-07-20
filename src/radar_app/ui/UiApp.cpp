@@ -42,7 +42,7 @@ bool UiApp::init() {
         return false;
     }
     glfwMakeContextCurrent(window_);
-    glfwSwapInterval(1); // vsync: 60 FPS cap
+    glfwSwapInterval(swap_interval_); // vsync: 1 = 60 FPS cap, 2 = 30 FPS
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();

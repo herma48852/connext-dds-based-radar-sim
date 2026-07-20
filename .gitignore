@@ -9,3 +9,4 @@ generated/
 CMakeCache.txt
 CMakeFiles/
 compile_commands.json
+build*/

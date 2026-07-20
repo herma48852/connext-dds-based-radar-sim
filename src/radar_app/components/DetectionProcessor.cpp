@@ -120,7 +120,9 @@ void DetectionProcessor::return_synthesis_loop() {
                     continue; // outside this dwell's beam
 
                 const double el_t = std::atan2(t.z, range_xy) / kDeg2Rad;
-                if (std::fabs(el_t - el_deg) > 3.0)
+                // Elevation gate: +/-6.5 deg so the scheduler's 3/14 deg
+                // raster bars give continuous cover from -3.5 to +20.5 deg.
+                if (std::fabs(el_t - el_deg) > 6.5)
                     continue; // outside elevation beam
 
                 const double rcs_lin = std::pow(10.0, t.rcs_dbsm / 10.0);

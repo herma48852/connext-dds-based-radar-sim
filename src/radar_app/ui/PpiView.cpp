@@ -20,7 +20,10 @@ inline ImVec2 enu_to_screen(double cx, double cy, double radius_px,
 }
 
 inline ImU32 with_alpha(ImU32 c, int a) {
-    return (c & IM_COL32_A_MASK) | ((ImU32)a << IM_COL32_A_SHIFT);
+    // IM_COL32_A_MASK is the ALPHA mask (0xFF000000): keep RGB via its
+    // complement. (The old code masked WITH it, discarding RGB -> black.)
+    a = a < 0 ? 0 : (a > 255 ? 255 : a);
+    return (c & ~IM_COL32_A_MASK) | ((ImU32)a << IM_COL32_A_SHIFT);
 }
 } // namespace
 
@@ -135,9 +138,9 @@ void PpiView::render(const char* title, ImVec2 pos, ImVec2 size,
         const int base_a = (int)(255 * (1.0f - age));
         if (base_a < 12) continue;
         const ImU32 c = theme::col_snr(b.snr_db);
-        dl->AddCircleFilled(p, 7.0f, with_alpha(c, base_a / 8));  // halo
+        dl->AddCircleFilled(p, 6.5f, with_alpha(c, base_a / 6));  // halo
         dl->AddCircleFilled(p, 3.5f, with_alpha(c, base_a / 2));  // bloom
-        dl->AddCircleFilled(p, 1.8f, with_alpha(c, base_a));      // core
+        dl->AddCircleFilled(p, 2.2f, with_alpha(c, base_a));      // core
     }
 
     // --- tracks: diamond + velocity vector + fading 10-pt trail ---
@@ -194,6 +197,25 @@ void PpiView::render(const char* title, ImVec2 pos, ImVec2 size,
     std::snprintf(buf, sizeof buf, "HDG %05.1f  SPD %04.1f kn  RNG %.0f km",
                   ship.heading_deg, ship.speed_mps * 1.94384, range_m_smooth_ / 1000.0);
     dl->AddText(ImVec2(wp.x + 4, wp.y), theme::col_text(), buf);
+
+    // --- cursor range/bearing readout (mouse over the scope) ---
+    if (ImGui::IsWindowHovered()) {
+        const ImVec2 m = ImGui::GetIO().MousePos;
+        const double dx  = (double)m.x - cx;
+        const double dyn = cy - (double)m.y;          // north-up display
+        const double rfrac = std::hypot(dx, dyn) / R;
+        if (rfrac <= 1.0) {
+            double brg = std::atan2(dx, dyn) / kDeg2Rad;
+            if (brg < 0.0) brg += 360.0;
+            dl->AddCircle(m, 4.0f, theme::col_text_dim(), 0, 1.0f);
+            char cur[64];
+            std::snprintf(cur, sizeof cur, "CUR %5.1f km  BRG %06.1f",
+                          rfrac * range_m_smooth_ / 1000.0, brg);
+            dl->AddText(ImVec2(wp.x + 4,
+                               wp.y + h - ImGui::GetTextLineHeightWithSpacing()),
+                        theme::col_text_dim(), cur);
+        }
+    }
 
     ImGui::End();
 }

@@ -23,14 +23,18 @@ public:
 
     int run();  // blocks until the window closes; returns exit code
 
+    // Crash-investigation knobs (apply BEFORE run()):
+    void set_bscope_upload_decimation(int n) { bscope_.set_upload_decimation(n); }
+    void set_swap_interval(int n) { swap_interval_ = n < 0 ? 0 : n; }
+
 private:
     bool init();
     void shutdown();
-    void frame(float dt, int64_t now_ms);
 
     app::DataBus&        bus_;
     app::CommandConsole& console_;
     GLFWwindow*          window_ = nullptr;
+    int                  swap_interval_ = 1;   // glfwSwapInterval; 2 = 30 fps
 
     PpiView    ppi_;
     AScopeView ascope_;

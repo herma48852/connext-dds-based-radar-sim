@@ -125,9 +125,41 @@ TrackManager thread, inside Connext's writer-history buffer pool:
   3.4: no Cocoa crash fixes (post-3.4 work is Wayland/X11) — bump stays
   as a low-expectation last resort.
 
+### Third crash capture (2026-07-20 late) — inside the GPU driver itself
+
+Windowed run (`--no-dispose`), 85 s, SIGBUS:
+
+```
+2  AGXMetalG16X    -[AGXG16XFamilyRenderContext setRenderPipelineState:]
+4  AppleMetalOpenGLRenderer  GLDContextRec::setRenderState
+7  GLEngine        glDrawArrays_IMM_Exec
+13 AppKit          -[NSOpenGLContext flushBuffer]
+14 radar_app       swapBuffersNSGL  (glfwSwapBuffers)
+```
+
+- The deprecated **OpenGL→Metal shim** (`AppleMetalOpenGLRenderer`) died
+  inside the real GPU driver (`AGXMetalG16X`) executing our queued
+  draws at swap time. Our GL calls are all legal (re-verified).
+- All three windowed crashes are Apple-framework objects walked into
+  garbage (titlebar views → window cache → Metal pipeline state); E1
+  headless is clean TWICE. **PRIME SUSPECT: the GL-on-Metal path under
+  our per-frame workload** — chiefly the B-scope's 368 KB texture
+  re-upload every frame (~22 MB/s) + ImGui's per-frame buffer churn.
+- New runtime flags to test GL-load causality WITHOUT rebuild toggles:
+  - `--gl-throttle` — B-scope texture upload every 4th frame (15 Hz;
+    invisible on the 4 s phosphor decay)
+  - `--swap-interval N` — N=2 halves ALL GL traffic (30 fps)
+- If either flag materially extends time-to-crash → GL shim load is
+  causal; the durable fix is then porting rendering to
+  `imgui_impl_metal` (bypasses the deprecated GL shim entirely).
+
 ### Experiment ladder (final form; in order)
 
-1. **ASan, windowed, solo** — covers our UI code + ImGui + ImPlot +
+1. **GL-load flags (one rebuild, then runtime A/B):**
+   `./build/radar_app --gl-throttle` and, separately,
+   `./build/radar_app --swap-interval 2`. Baseline crash window is
+   ~12–90 s, so survival past ~5–10 min is a strong positive signal.
+2. **ASan, windowed, solo** — covers our UI code + ImGui + ImPlot +
    GLFW entirely (all FetchContent/source-built). **CRITICAL: GLFW is C
    — pass the sanitizer in CMAKE_C_FLAGS too or GLFW stays
    uninstrumented:**
@@ -141,20 +173,21 @@ TrackManager thread, inside Connext's writer-history buffer pool:
    ```
    Repro takes <60 s. Paste the first ASan report verbatim.
    (Connext dylibs are uninstrumented — fine; they're exonerated by E1.)
-2. **No rebuild:** `NSZombieEnabled=YES ./build/radar_app` — a dangling
+3. **No rebuild:** `NSZombieEnabled=YES ./build/radar_app` — a dangling
    NSView/NSWindow gets a console log naming the freed object's class
    and address. Then `MallocScribble=1 MallocPreScribble=1
    ./build/radar_app` — poisoned freed memory crashes the FIRST reader
    (0x55... pattern), closer to the cause.
-3. **GL-on-Metal theory:** throttle the B-scope texture upload to every
-   4th frame (patch ready on request). Crash gone → driver path; keep
-   the throttle as the fix (15 Hz is invisible on a 4 s phosphor).
-4. **Connext debug libs** (`cmake -B build-dbg
+4. **If the GL flags confirm causality:** the durable fix is porting
+   rendering to `imgui_impl_metal` (bypasses the deprecated GL shim
+   entirely); `--gl-throttle` alone is an acceptable permanent
+   mitigation meanwhile.
+5. **Connext debug libs** (`cmake -B build-dbg
    -DCMAKE_BUILD_TYPE=Debug`) — retained only as a formality; E1 makes
    Connext involvement unlikely.
-5. **GLFW master bump** (`GIT_TAG 3.4` → `master` in CMakeLists) —
+6. **GLFW master bump** (`GIT_TAG 3.4` → `master` in CMakeLists) —
    cheap, but no relevant Cocoa fixes per the changelog.
-6. TSan last (noisy with Connext internals, as before).
+7. TSan last (noisy with Connext internals, as before).
 
 Report back: ASan report (or "ASan silent + zombie/scribble output").
 
@@ -180,6 +213,27 @@ Report back: ASan report (or "ASan silent + zombie/scribble output").
   (title bar excluded) with the HDG/SPD/RNG readout on a reserved top
   line; health/ship panels widened (15%→18%, text was clipped);
   redundant in-content "SCENARIOS" title removed so 7 buttons fit.
+- **PPI black-dots fix** (2026-07-20 late): `with_alpha()` in
+  PpiView.cpp masked colors with `IM_COL32_A_MASK` (= 0xFF000000, the
+  ALPHA mask), discarding all RGB — every blip, track trail, velocity
+  vector and the sweep fade rendered BLACK. Fixed with
+  `~IM_COL32_A_MASK` + alpha clamp; blip core 1.8→2.2, halo /8→/6.
+  Added a real cursor readout (CUR km / BRG°, bottom-left, when the
+  mouse is inside the scope circle) — previously nothing tracked the
+  mouse except wheel zoom.
+- **Single-target fix** (2026-07-20 late): only the surface ship ever
+  appeared in the track pane. Root cause: BeamScheduler parked the beam
+  at el = 2.0° forever and DetectionProcessor's elevation gate was ±3°,
+  so only targets between −1°…+5° elevation were ever implanted — the
+  ship (0°) and nothing airborne (a fighter at 8 km alt is at ~16°
+  elevation by the time it's in SNR range). Fix: two-bar elevation
+  raster (3°/14°, toggles per revolution / sector bounce) + gate
+  widened to ±6.5° → continuous cover deck-to-20.5°. Also fixed two
+  latent tracker bugs exposed by fast movers: association now gates on
+  the PREDICTED position (a 250 m/s fighter moves ~800 m per 3.2 s
+  sweep > 750 m gate) and velocity is seeded from the first detection
+  pair (track initiation). High-dive missiles above ~20° elevation at
+  close range remain outside the cone — realistic surveillance ceiling.
 - **HMI-UI is now a real DomainParticipant** (`Radar.HMI-UI`,
   `src/radar_app/components/HmiUi.{hpp,cpp}`): subscribes TargetTrack,
   DetectionEvent, ShipPosition (key 0), CalibrationStatus. Every panel is

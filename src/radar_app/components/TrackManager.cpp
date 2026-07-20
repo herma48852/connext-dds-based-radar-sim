@@ -101,17 +101,30 @@ void TrackManager::update_loop() {
             polar_to_enu(det.range_m, det.azimuth_deg, det.elevation_deg,
                          ship.heading_deg, x, y, z);
 
-            // nearest-neighbour association
+            // nearest-neighbour association, gated on the PREDICTED position:
+            // at a 3.2 s sweep a 250 m/s fighter moves ~800 m between
+            // illuminations — gating on the stale position would fragment
+            // every fast track (the gate is 750 m).
             Track* best = nullptr;
             double best_d2 = kGateM * kGateM;
             for (auto& tr : tracks) {
-                const double dx = tr.x - x, dy = tr.y - y, dz = tr.z - z;
+                const double dtg = std::max(0.02, (now_ms - tr.last_update_ms) / 1000.0);
+                const double dx = tr.x + tr.vx * dtg - x;
+                const double dy = tr.y + tr.vy * dtg - y;
+                const double dz = tr.z + tr.vz * dtg - z;
                 const double d2 = dx*dx + dy*dy + dz*dz;
                 if (d2 < best_d2) { best_d2 = d2; best = &tr; }
             }
 
             if (best) {
                 const double dt = std::max(0.02, (now_ms - best->last_update_ms) / 1000.0);
+                // Track initiation: seed velocity from the first detection
+                // pair so the predictor is useful from the second hit on.
+                if (best->hits == 1 && dt > 0.5) {
+                    best->vx = (x - best->x) / dt;
+                    best->vy = (y - best->y) / dt;
+                    best->vz = (z - best->z) / dt;
+                }
                 // alpha-beta filter
                 const double rx = x - (best->x + best->vx * dt);
                 const double ry = y - (best->y + best->vy * dt);
