@@ -552,6 +552,11 @@ Report back: ASan report (or "ASan silent + zombie/scribble output").
 
 ## 2. Recently completed (don't redo)
 
+- **Beam Schedule panel plots elevation** (2026-07-20 eve, K5): was
+  az-only (0–360 sawtooth); the 3-bar el raster (3/14/25°, one bar per
+  1.6 s revolution) was invisible. Now a second series on a right-side
+  Y2 axis (0–30°), orange step line vs the green az sawtooth.
+
 - **Full heap-corruption audit of the entire codebase** (2026-07-20):
   every file read; no OOB write found. Four hardening fixes applied
   (RawReturn seq-length bound, B-scope NaN-safe binning, atomic

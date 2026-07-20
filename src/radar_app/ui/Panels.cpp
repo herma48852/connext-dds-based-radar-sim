@@ -89,18 +89,29 @@ void render_beam_timeline(const char* title, ImVec2 pos, ImVec2 size,
 
     if (history.size() >= 2 && ImPlot::BeginPlot("##beamtl", ImVec2(-1, -1),
                                                  ImPlotFlags_NoMenus)) {
-        static thread_local std::vector<double> xs, ys;
+        static thread_local std::vector<double> xs, ys, ys2;
         xs.resize(history.size());
         ys.resize(history.size());
+        ys2.resize(history.size());
         const double t0 = history.front().sim_millis / 1000.0;
         for (size_t i = 0; i < history.size(); ++i) {
-            xs[i] = history[i].sim_millis / 1000.0 - t0;
-            ys[i] = history[i].azimuth_deg;
+            xs[i]  = history[i].sim_millis / 1000.0 - t0;
+            ys[i]  = history[i].azimuth_deg;
+            ys2[i] = history[i].elevation_deg;
         }
+        // az on the left axis (0-360 sawtooth); el on a right Y2 axis —
+        // the 3-bar raster (3/14/25 deg, one bar per 1.6 s revolution) is
+        // invisible on the 0-360 scale.
         ImPlot::SetupAxes("t [s]", "az [deg]", 0, 0);
+        ImPlot::SetupAxis(ImAxis_Y2, "el [deg]", ImPlotAxisFlags_AuxDefault);
         ImPlot::SetupAxesLimits(xs.front(), xs.back() + 0.5, 0, 360, ImGuiCond_Always);
+        ImPlot::SetupAxisLimits(ImAxis_Y2, 0, 30, ImGuiCond_Always);
+        ImPlot::SetAxes(ImAxis_X1, ImAxis_Y1);
         ImPlot::SetNextLineStyle(ImVec4(0.35f, 1.0f, 0.55f, 1.0f), 1.5f);
         ImPlot::PlotLine("beam az", xs.data(), ys.data(), (int)xs.size());
+        ImPlot::SetAxes(ImAxis_X1, ImAxis_Y2);
+        ImPlot::SetNextLineStyle(ImVec4(1.0f, 0.75f, 0.30f, 1.0f), 1.5f);
+        ImPlot::PlotLine("beam el", xs.data(), ys2.data(), (int)xs.size());
         ImPlot::EndPlot();
     }
     ImGui::End();
