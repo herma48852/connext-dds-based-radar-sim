@@ -153,7 +153,7 @@ void TargetFleet::loop() {
                 std::hypot(tgt.x - ship_e, tgt.y - ship_n) > respawn_range_m_) {
                 std::cout << "[target_gen] target " << tgt.id
                           << " respawned inbound (range > "
-                          << respawn_range_m_ / 1000.0 << " km)\n";
+                          << respawn_range_m_ / 1000.0 << " km)" << std::endl;
                 respawn(tgt, ship_e, ship_n);
             }
 
