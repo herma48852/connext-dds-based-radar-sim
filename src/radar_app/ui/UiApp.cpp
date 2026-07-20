@@ -183,7 +183,8 @@ int UiApp::run() {
         render_ship_panel("SHIP POSITION", ImVec2(w1 + w2 + w3, y0),
                           ImVec2(w4, panel_h), ship);
         render_array_panel("ARRAY FACE", ImVec2(w1 + w2 + w3 + w4, y0),
-                           ImVec2(w5, panel_h), bus_.array_grid(), console_);
+                           ImVec2(w5, panel_h), bus_.array_grid(),
+                           bus_.rma_offline_mask.load(), console_);
         render_scenario_bar("SCENARIOS", ImVec2(w1 + w2 + w3 + w4 + w5, y0),
                             ImVec2(w6, panel_h), console_);
 

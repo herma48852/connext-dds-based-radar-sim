@@ -102,12 +102,13 @@ void DetectionProcessor::return_synthesis_loop() {
         const double el_deg = dwell_el_deg_.load();
 
         // RMA-offline effect (Tier-1 physics): array gain ~ N_active,
-        // azimuth beamwidth ~ 1/sqrt(N_active) (aperture shrink). Floored
-        // at 10% so the all-offline case stays finite. The elevation gate
-        // is untouched — the 3-bar raster tiling depends on it.
+        // azimuth beamwidth ~ 1/sqrt(N_active) (aperture shrink). Floor is
+        // 1%, NOT 10%: at 10% the 35 dBsm ship still clears CFAR at 50 km
+        // (amp 0.45 > 0.26) — "array offline" must actually go dark.
+        // Elevation gate untouched — the 3-bar raster tiling depends on it.
         const uint32_t rma_mask = bus_.rma_offline_mask.load();
         const double active = std::max(
-            0.1, 1.0 - 64.0 * std::popcount(rma_mask & 0xFFFFu) / 1024.0);
+            0.01, 1.0 - 64.0 * std::popcount(rma_mask & 0xFFFFu) / 1024.0);
         const double az_half_beam = kBeamwidthDeg * 0.5 / std::sqrt(active);
 
         // Noise floor

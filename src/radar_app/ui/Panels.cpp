@@ -168,7 +168,7 @@ void render_ship_panel(const char* title, ImVec2 pos, ImVec2 size,
 }
 
 void render_array_panel(const char* title, ImVec2 pos, ImVec2 size,
-                        const app::ArrayGridView& grid,
+                        const app::ArrayGridView& grid, uint32_t live_mask,
                         app::CommandConsole& console) {
     begin_panel(title, pos, size);
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -191,23 +191,33 @@ void render_array_panel(const char* title, ImVec2 pos, ImVec2 size,
         }
     }
 
-    // 4x4 RMA blocks: separators, offline outline, click-to-toggle
+    // 4x4 RMA blocks: separators; offline blocks outlined from the LIVE
+    // mask (instant feedback; the DDS-fed drift heatmap lags ~1 s).
     int n_off = 0;
     for (int br = 0; br < 4; ++br) {
         for (int bc = 0; bc < 4; ++bc) {
             const int rma = br * 4 + bc;
             const ImVec2 p0(wp.x + bc * 8 * cell,       wp.y + br * 8 * cell);
             const ImVec2 p1(wp.x + (bc + 1) * 8 * cell, wp.y + (br + 1) * 8 * cell);
-            const bool off = (grid.rma_mask >> rma) & 1u;
+            const bool off = (live_mask >> rma) & 1u;
             if (off) ++n_off;
             dl->AddRect(p0, p1, off ? theme::col_led_fault() : theme::col_border(),
                         0.0f, 0, off ? 2.0f : 1.0f);
-            ImGui::SetCursorScreenPos(p0);
-            ImGui::PushID(rma);
-            // CMD_RMA_OFFLINE = 6, CMD_RMA_ONLINE = 7 (idl CommandType)
-            if (ImGui::InvisibleButton("##rma", ImVec2(p1.x - p0.x, p1.y - p0.y)))
-                console.send(off ? 7 : 6, 0.0, 0.0, std::to_string(rma).c_str());
-            ImGui::PopID();
+        }
+    }
+
+    // Click-to-toggle: manual hit test against the block rects (the
+    // InvisibleButton version never fired — no widget IDs involved here).
+    // CMD_RMA_OFFLINE = 6, CMD_RMA_ONLINE = 7 (idl CommandType).
+    if (ImGui::IsWindowHovered() &&
+        ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        const ImVec2 m = ImGui::GetIO().MousePos;
+        const int bc = static_cast<int>((m.x - wp.x) / (8.0f * cell));
+        const int br = static_cast<int>((m.y - wp.y) / (8.0f * cell));
+        if (bc >= 0 && bc < 4 && br >= 0 && br < 4) {
+            const int rma = br * 4 + bc;
+            const bool off = (live_mask >> rma) & 1u;
+            console.send(off ? 7 : 6, 0.0, 0.0, std::to_string(rma).c_str());
         }
     }
 

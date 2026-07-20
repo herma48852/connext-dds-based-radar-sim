@@ -27,8 +27,10 @@ void render_ship_panel(const char* title, ImVec2 pos, ImVec2 size,
 
 // ARRAY FACE: 32x32 element drift heatmap with the 4x4 RMA block grid;
 // clicking an RMA toggles it offline/online (via the CommandConsole).
+// live_mask = DataBus::rma_offline_mask snapshot (instant feedback; the
+// drift heatmap itself stays DDS-fed via CalibrationStatus).
 void render_array_panel(const char* title, ImVec2 pos, ImVec2 size,
-                        const app::ArrayGridView& grid,
+                        const app::ArrayGridView& grid, uint32_t live_mask,
                         app::CommandConsole& console);
 
 void render_scenario_bar(const char* title, ImVec2 pos, ImVec2 size,
