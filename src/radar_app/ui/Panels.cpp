@@ -44,7 +44,13 @@ void render_track_list(const char* title, ImVec2 pos, ImVec2 size,
     if (ImGui::BeginTable("tracks", 7,
             ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg |
             ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY)) {
-        ImGui::TableSetupColumn("ID");
+        // ID width from the rendered text itself ("T" + 4 pool digits):
+        // CalcTextSize is FontGlobalScale-aware, so the column fits on
+        // Retina too — the old equal-stretch share clipped the 4th digit
+        // at 2x UI scale. The other six columns keep stretching.
+        const float id_w = ImGui::CalcTextSize("T0000").x
+                         + 2.0f * ImGui::GetStyle().CellPadding.x;
+        ImGui::TableSetupColumn("ID", ImGuiTableColumnFlags_WidthFixed, id_w);
         ImGui::TableSetupColumn("CLASS");
         ImGui::TableSetupColumn("RANGE");
         ImGui::TableSetupColumn("AZ");
