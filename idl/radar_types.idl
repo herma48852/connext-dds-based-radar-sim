@@ -84,7 +84,9 @@ module types {
         CMD_SELF_TEST,        // run built-in self test
         CMD_RESET,            // reset tracks and restart scan
         CMD_DEGRADE_ARRAY,    // demo: inject element failures
-        CMD_RESTORE_ARRAY     // demo: restore array to nominal
+        CMD_RESTORE_ARRAY,    // demo: restore array to nominal
+        CMD_RMA_OFFLINE,      // take a Radar Modular Assembly out of service
+        CMD_RMA_ONLINE        // return a Radar Modular Assembly to service
     };
 
     enum TargetType {
@@ -184,6 +186,7 @@ module types {
         sequence<float, MAX_ARRAY_ELEMENTS> element_drift_db; // per-element gain drift
         ArrayHealth overall_status;
         long        failed_element_count;
+        long        rma_offline_mask; // bit i = RMA i offline (16 RMAs x 64 elements)
     };
 
     // Operator / external system command into the radar.

@@ -13,6 +13,7 @@
 //       the degraded-array scenario can be driven from this app too.
 
 #include <atomic>
+#include <string>
 #include <thread>
 
 #include "DdsSupport.hpp"
@@ -28,9 +29,15 @@ public:
     void inject_qos_mismatch();
     void inject_type_mismatch();
     void send_degrade_command();
+    // One-shot SystemCommand(CMD_RMA_OFFLINE, params) — params is the RMA
+    // index "0".."15" or "all". Scripted counterpart of the pane click.
+    void send_rma_offline(const std::string& params);
     void stop();
 
 private:
+    void send_system_command(radar::types::CommandType type,
+                             const std::string& params);
+
     int32_t domain_id_;
     std::atomic<bool> stop_{false};
     std::thread mismatch_writer_thread_;

@@ -25,6 +25,12 @@ void render_health_panel(const char* title, ImVec2 pos, ImVec2 size,
 void render_ship_panel(const char* title, ImVec2 pos, ImVec2 size,
                        const app::ShipView& ship);
 
+// ARRAY FACE: 32x32 element drift heatmap with the 4x4 RMA block grid;
+// clicking an RMA toggles it offline/online (via the CommandConsole).
+void render_array_panel(const char* title, ImVec2 pos, ImVec2 size,
+                        const app::ArrayGridView& grid,
+                        app::CommandConsole& console);
+
 void render_scenario_bar(const char* title, ImVec2 pos, ImVec2 size,
                          app::CommandConsole& console);
 

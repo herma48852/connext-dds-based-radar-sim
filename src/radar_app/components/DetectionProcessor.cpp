@@ -1,6 +1,7 @@
 #include "DetectionProcessor.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <chrono>
 #include <cmath>
 #include <memory>
@@ -100,6 +101,15 @@ void DetectionProcessor::return_synthesis_loop() {
         const double az_deg = dwell_az_deg_.load();
         const double el_deg = dwell_el_deg_.load();
 
+        // RMA-offline effect (Tier-1 physics): array gain ~ N_active,
+        // azimuth beamwidth ~ 1/sqrt(N_active) (aperture shrink). Floored
+        // at 10% so the all-offline case stays finite. The elevation gate
+        // is untouched — the 3-bar raster tiling depends on it.
+        const uint32_t rma_mask = bus_.rma_offline_mask.load();
+        const double active = std::max(
+            0.1, 1.0 - 64.0 * std::popcount(rma_mask & 0xFFFFu) / 1024.0);
+        const double az_half_beam = kBeamwidthDeg * 0.5 / std::sqrt(active);
+
         // Noise floor
         for (int i = 0; i < 2 * kRangeBins; ++i)
             sample.iq_samples[i] = noise_(rng_);
@@ -116,7 +126,7 @@ void DetectionProcessor::return_synthesis_loop() {
                 // world ENU azimuth -> ship-relative azimuth
                 const double az_world = std::atan2(t.x, t.y) / kDeg2Rad;
                 const double az_ship  = wrap180(az_world - heading);
-                if (std::fabs(wrap180(az_ship - az_deg)) > kBeamwidthDeg * 0.5)
+                if (std::fabs(wrap180(az_ship - az_deg)) > az_half_beam)
                     continue; // outside this dwell's beam
 
                 const double el_t = std::atan2(t.z, range_xy) / kDeg2Rad;
@@ -128,7 +138,7 @@ void DetectionProcessor::return_synthesis_loop() {
                     continue; // outside elevation beam
 
                 const double rcs_lin = std::pow(10.0, t.rcs_dbsm / 10.0);
-                const double amp = kSignalScale * std::sqrt(rcs_lin) / (range * range);
+                const double amp = kSignalScale * active * std::sqrt(rcs_lin) / (range * range);
 
                 const double bin_f = range / kRangeMaxM * kRangeBins;
                 const int b0 = static_cast<int>(bin_f);

@@ -10,7 +10,7 @@ Two applications, one CMake monorepo, one DDS domain (default: domain 0):
 
 | App          | Purpose |
 |--------------|---------|
-| `radar_app`  | Simulated radar on a moving ship. Internal components (BeamScheduler, DetectionProcessor, TrackManager, CalibrationMonitor, CommandHandler, CommandConsole, HMI-UI) communicate **exclusively via DDS topics**. ImGui/GLFW/OpenGL 3.3 UI with PPI, A-scope, B-scope, track list, beam timeline, health and ship panels. |
+| `radar_app`  | Simulated radar on a moving ship. Internal components (BeamScheduler, DetectionProcessor, TrackManager, CalibrationMonitor, CommandHandler, CommandConsole, HMI-UI) communicate **exclusively via DDS topics**. ImGui UI (native Metal on macOS, OpenGL 3.3 elsewhere) with PPI, A-scope, B-scope, track list, beam timeline, health, ship and ARRAY FACE panels (click an RMA block to take it offline). |
 | `target_gen` | Synthetic target generator (configurable trajectories, RCS, kinematics) publishing `TargetGen/TargetTruth` + ship-motion ground truth. Can inject QoS/type mismatches and the degraded-array scenario on demand. |
 
 ```
@@ -73,6 +73,9 @@ source $CONNEXTDDS_DIR/resource/scripts/rtisetenv_arm64Darwin23clang16.0.bash
 ./build/target_gen --inject-qos-mismatch     # RELIABLE reader vs BEST_EFFORT writer
 ./build/target_gen --inject-type-mismatch    # wrong type on TargetGen/TargetTruth
 ./build/target_gen --degrade-array           # sends CMD_DEGRADE_ARRAY at t+5s
+./build/target_gen --rma-offline 3           # sends CMD_RMA_OFFLINE (RMA 3) at t+5s
+                                             # ("all" = whole face; restore via the
+                                             # ARRAY FACE pane's ALL ONLINE button)
 ```
 
 > On macOS, Connext shared libraries are resolved via `@rpath`; sourcing

@@ -1,8 +1,10 @@
 #include "Panels.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <cstdio>
+#include <string>
 
 #include <implot.h>
 
@@ -33,6 +35,14 @@ const char* class_name(int c) {
     case 4: return "CLTR";
     default: return "UNK";
     }
+}
+
+// Element drift [dB] -> heatmap color for the ARRAY FACE pane.
+ImU32 drift_color(float db) {
+    if (db < -20.0f) return IM_COL32(35, 12, 14, 255);   // RMA offline: dark
+    if (db < -1.0f)  return IM_COL32(200, 50, 45, 255);  // hard fail
+    if (db < -0.45f) return IM_COL32(190, 140, 45, 255); // amber drift
+    return IM_COL32(45, 170, 70, 255);                    // nominal
 }
 } // namespace
 
@@ -137,6 +147,7 @@ void render_health_panel(const char* title, ImVec2 pos, ImVec2 size,
     ImGui::Text("TEMP    %5.1f C", h.temperature_c);
     ImGui::Text("FAILED  %d / %d", h.failed_element_count, h.total_elements);
     ImGui::Text("DRIFT   %5.2f dB avg", h.mean_abs_drift_db);
+    ImGui::Text("RMA OFF %2d / 16", std::popcount(h.rma_mask & 0xFFFFu));
 
     const float frac = h.total_elements > 0
         ? (float)h.failed_element_count / h.total_elements : 0.0f;
@@ -153,6 +164,58 @@ void render_ship_panel(const char* title, ImVec2 pos, ImVec2 size,
     ImGui::Text("COG  %6.1f deg", s.course_deg);
     ImGui::Text("SOG  %6.1f kn", s.speed_mps * 1.94384);
     ImGui::Text("PIT  %5.1f  ROL %5.1f", s.pitch_deg, s.roll_deg);
+    ImGui::End();
+}
+
+void render_array_panel(const char* title, ImVec2 pos, ImVec2 size,
+                        const app::ArrayGridView& grid,
+                        app::CommandConsole& console) {
+    begin_panel(title, pos, size);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImVec2 wp = ImGui::GetCursorScreenPos();
+    const float w = ImGui::GetContentRegionAvail().x;
+    const float h = ImGui::GetContentRegionAvail().y;
+    const float row_h = ImGui::GetTextLineHeightWithSpacing() + 10.0f;
+    const float cell  = std::max(1.0f, std::min(w, h - row_h) / 32.0f);
+    const float grid_px = cell * 32.0f;
+
+    // 32x32 element heatmap (row-major, element i -> RMA (i/256)*4+(i%32)/8)
+    const int n = static_cast<int>(grid.drift_db.size());
+    for (int r = 0; r < 32; ++r) {
+        for (int c = 0; c < 32; ++c) {
+            const int i = r * 32 + c;
+            const float d = i < n ? grid.drift_db[i] : 0.0f;
+            dl->AddRectFilled(ImVec2(wp.x + c * cell,       wp.y + r * cell),
+                              ImVec2(wp.x + (c + 1) * cell, wp.y + (r + 1) * cell),
+                              drift_color(d));
+        }
+    }
+
+    // 4x4 RMA blocks: separators, offline outline, click-to-toggle
+    int n_off = 0;
+    for (int br = 0; br < 4; ++br) {
+        for (int bc = 0; bc < 4; ++bc) {
+            const int rma = br * 4 + bc;
+            const ImVec2 p0(wp.x + bc * 8 * cell,       wp.y + br * 8 * cell);
+            const ImVec2 p1(wp.x + (bc + 1) * 8 * cell, wp.y + (br + 1) * 8 * cell);
+            const bool off = (grid.rma_mask >> rma) & 1u;
+            if (off) ++n_off;
+            dl->AddRect(p0, p1, off ? theme::col_led_fault() : theme::col_border(),
+                        0.0f, 0, off ? 2.0f : 1.0f);
+            ImGui::SetCursorScreenPos(p0);
+            ImGui::PushID(rma);
+            // CMD_RMA_OFFLINE = 6, CMD_RMA_ONLINE = 7 (idl CommandType)
+            if (ImGui::InvisibleButton("##rma", ImVec2(p1.x - p0.x, p1.y - p0.y)))
+                console.send(off ? 7 : 6, 0.0, 0.0, std::to_string(rma).c_str());
+            ImGui::PopID();
+        }
+    }
+
+    ImGui::SetCursorScreenPos(ImVec2(wp.x, wp.y + grid_px + 4.0f));
+    ImGui::Text("RMA OFF %2d/16", n_off);
+    ImGui::SameLine();
+    if (ImGui::SmallButton("ALL ONLINE"))
+        console.send(7, 0.0, 0.0, "all");   // CMD_RMA_ONLINE, all
     ImGui::End();
 }
 

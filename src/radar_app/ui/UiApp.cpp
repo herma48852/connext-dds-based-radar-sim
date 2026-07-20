@@ -168,12 +168,12 @@ int UiApp::run() {
                        bus_.sector_center_deg.load(),
                        bus_.sector_width_deg.load(), dt);
 
-        // bottom strip
+        // bottom strip: 6 panes. Widths tuned so text fits at 2x UI scale
+        // (health/ship need ~15%, scenario buttons ~14%, array grid ~16%).
         const float y0 = scope_h;
-        // Wider health/ship panels: at 2x UI scale their text was
-        // clipped by the old 15% widths ("DRIFT ... dB avg", "PIT/ROL").
-        const float w1 = W * 0.26f, w2 = W * 0.22f, w3 = W * 0.18f,
-                    w4 = W * 0.18f, w5 = W - w1 - w2 - w3 - w4;
+        const float w1 = W * 0.22f, w2 = W * 0.18f, w3 = W * 0.15f,
+                    w4 = W * 0.15f, w5 = W * 0.16f,
+                    w6 = W - w1 - w2 - w3 - w4 - w5;
         render_track_list("TARGET TRACKS", ImVec2(0, y0), ImVec2(w1, panel_h),
                           tracks, ship);
         render_beam_timeline("BEAM SCHEDULE", ImVec2(w1, y0), ImVec2(w2, panel_h),
@@ -182,8 +182,10 @@ int UiApp::run() {
                             ImVec2(w3, panel_h), health);
         render_ship_panel("SHIP POSITION", ImVec2(w1 + w2 + w3, y0),
                           ImVec2(w4, panel_h), ship);
-        render_scenario_bar("SCENARIOS", ImVec2(w1 + w2 + w3 + w4, y0),
-                            ImVec2(w5, panel_h), console_);
+        render_array_panel("ARRAY FACE", ImVec2(w1 + w2 + w3 + w4, y0),
+                           ImVec2(w5, panel_h), bus_.array_grid(), console_);
+        render_scenario_bar("SCENARIOS", ImVec2(w1 + w2 + w3 + w4 + w5, y0),
+                            ImVec2(w6, panel_h), console_);
 
         ImGui::Render();
 #if defined(__APPLE__)

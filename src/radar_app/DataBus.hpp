@@ -65,6 +65,16 @@ struct HealthView {
     double  temperature_c;
     double  mean_abs_drift_db;
     int64_t sim_millis;
+    uint32_t rma_mask = 0;       // bit i = RMA i offline (16 RMAs)
+};
+
+// Latest array-face state for the ARRAY FACE pane (HMI-UI's
+// CalibrationStatus reader -> render thread). Full 1024-value drift
+// vector at 1 Hz; copied per frame, negligible.
+struct ArrayGridView {
+    std::vector<float> drift_db;   // 1024 values, 32x32 row-major
+    uint32_t           rma_mask = 0;
+    int64_t            sim_millis = 0;
 };
 
 // Latest A-scope trace (double-buffered; writer swaps under lock).
@@ -128,6 +138,18 @@ public:
         return health_;
     }
 
+    void update_array_grid(const std::vector<float>& drift, uint32_t mask,
+                           int64_t ms) {
+        std::lock_guard lk(array_grid_mutex_);
+        array_grid_.drift_db   = drift;
+        array_grid_.rma_mask   = mask;
+        array_grid_.sim_millis = ms;
+    }
+    ArrayGridView array_grid() const {
+        std::lock_guard lk(array_grid_mutex_);
+        return array_grid_;
+    }
+
     void update_trace(const TraceBuffer& t) {
         std::lock_guard lk(trace_mutex_);
         if (trace_back_.magnitude.size() != t.magnitude.size())
@@ -146,6 +168,10 @@ public:
     std::atomic<double>  sector_center_deg{90.0};
     std::atomic<double>  sector_width_deg{60.0};
     std::atomic<bool>    degrade_array{false};     // demo: CalibrationStatus faults
+    // RMA-offline state (bit i = RMA i offline, 16 RMAs x 64 elements).
+    // Written only by CommandHandler (CMD_RMA_OFFLINE/ONLINE); read by
+    // CalibrationMonitor (drift/status) and DetectionProcessor (gain/beam).
+    std::atomic<uint32_t> rma_offline_mask{0};
     std::atomic<bool>    reset_requested{false};   // consumed by TrackManager
     std::atomic<bool>    self_test_requested{false};
     // Crash-investigation toggle (--no-dispose): when false, TrackManager
@@ -167,6 +193,8 @@ private:
     ShipView ship_display_{};
     mutable std::mutex health_mutex_;
     HealthView health_{};
+    mutable std::mutex array_grid_mutex_;
+    ArrayGridView array_grid_;
     mutable std::mutex trace_mutex_;
     TraceBuffer trace_front_, trace_back_;
 };

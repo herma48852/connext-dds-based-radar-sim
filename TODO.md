@@ -324,10 +324,10 @@ transport swap (DDS is the demo's purpose).
    (expected detection ranges: ship/bomber immediate, decoy ~49 km,
    fighter ~28 km, missile ~9 km, drone ~5 km). Stage 2 scenario sweep.
    Stage 3 15–30 min soak.
-2. **RMA-offline feature** (approved in principle): Tier 1 = commands +
-   element mask + gain/beamwidth + LEDs; Tier 2 = +squint/sidelobe
-   ghosts/beam spoiling; Tier 3 = +array factor + live pattern panel.
-   Hooks exist: element_drift_db, SystemCommand.parameters. Gated on #1.
+2. **RMA-offline feature**: **Tier 1 DONE (2026-07-20, K5)** — commands,
+   element mask, gain/beamwidth, ARRAY FACE pane (see §2). Tier 2 next:
+   +squint/sidelobe ghosts/beam spoiling; Tier 3: +array factor + live
+   pattern panel (design in the Phase B section of the K5 plan file).
 3. Optional polish: dead-reckoning publish (above); track-table AZ
    column is RELATIVE bearing — label it or convert to true.
 
@@ -552,6 +552,18 @@ Report back: ASan report (or "ASan silent + zombie/scribble output").
 
 ## 2. Recently completed (don't redo)
 
+- **RMA-offline, Tier 1** (2026-07-20, K5): 16 RMAs × 64 elements on a
+  4×4 grid over the 32×32 face. `CMD_RMA_OFFLINE/ONLINE` (SystemCommand
+  parameters "0".."15"/"all") drive `DataBus::rma_offline_mask`;
+  CalibrationMonitor darkens the block (−60 dB), counts 64 failures per
+  offline RMA and publishes the mask in CalibrationStatus
+  (`rma_offline_mask`, @appendable); DetectionProcessor scales implant
+  gain × N_active/1024 and widens the azimuth gate ÷√N_active (el gate
+  untouched — bar tiling). New ARRAY FACE pane: 32×32 drift heatmap +
+  RMA blocks, click a block to toggle it, ALL ONLINE button; health
+  panel shows RMA OFF n/16. `target_gen --rma-offline N|all` scripts it
+  (verified: command=6 params="3" → mask=8, DEGRADED, failed=64).
+  tracker_replay unchanged (1761 dets deterministic).
 - **Beam Schedule panel plots elevation** (2026-07-20 eve, K5): was
   az-only (0–360 sawtooth); the 3-bar el raster (3/14/25°, one bar per
   1.6 s revolution) was invisible. Now a second series on a right-side

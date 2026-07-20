@@ -34,6 +34,7 @@ int main(int argc, char** argv) {
     int num_targets = 8;
     double respawn_km = 120.0;
     bool qos_mismatch = false, type_mismatch = false, degrade = false;
+    std::string rma_offline;
 
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--domain") == 0 && i + 1 < argc)
@@ -48,14 +49,18 @@ int main(int argc, char** argv) {
             degrade = true;
         else if (std::strcmp(argv[i], "--respawn-range") == 0 && i + 1 < argc)
             respawn_km = std::atof(argv[++i]);
+        else if (std::strcmp(argv[i], "--rma-offline") == 0 && i + 1 < argc)
+            rma_offline = argv[++i];
         else if (std::strcmp(argv[i], "--help") == 0) {
             std::cout <<
                 "target_gen [--domain N] [--targets N] [--respawn-range KM]\n"
                 "           [--inject-qos-mismatch] [--inject-type-mismatch]\n"
-                "           [--degrade-array]\n"
+                "           [--degrade-array] [--rma-offline N|all]\n"
                 "  --respawn-range  targets past this ship-relative range are\n"
                 "                   recycled inbound (default 120 km, 0 disables);\n"
-                "                   keeps the demo picture busy indefinitely\n";
+                "                   keeps the demo picture busy indefinitely\n"
+                "  --rma-offline    send CMD_RMA_OFFLINE at t+5s (RMA index\n"
+                "                   0..15 or \"all\"); scripted degraded-array demo\n";
             return 0;
         }
     }
@@ -77,6 +82,12 @@ int main(int argc, char** argv) {
         std::thread([&injector] {
             std::this_thread::sleep_for(std::chrono::seconds(5));
             injector.send_degrade_command();
+        }).detach();
+    }
+    if (!rma_offline.empty()) {
+        std::thread([&injector, p = rma_offline] {
+            std::this_thread::sleep_for(std::chrono::seconds(5));
+            injector.send_rma_offline(p);
         }).detach();
     }
 

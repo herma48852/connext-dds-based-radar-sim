@@ -9,9 +9,11 @@ webinar runbook.
 
 1. Start the system:
    ```bash
-   ./build/radar_app &
+   ./build/radar_app.app/Contents/MacOS/radar_app &
    ./build/target_gen --targets 8 &
    ```
+   (macOS: `radar_app` is a bundle — run the binary inside it, not the
+   stale plain `./build/radar_app` path.)
 2. Open a **new, separate VS Code window/workspace** (File > New Window).
    It does not need to contain this project — an empty folder works.
 3. Open Connext Studio and join **domain 0** (the default for both apps;
@@ -55,7 +57,8 @@ Hierarchical names render as a tree: `Radar/...`, `Ship/...`,
   `source_id = 0` (radar INS) and `source_id = 1` (ground truth). Show
   per-instance filtering.
 - `Radar/CalibrationStatus` — TRANSIENT_LOCAL: a freshly joined Studio
-  immediately sees the last sample (durability demo).
+  immediately sees the last sample (durability demo). Includes the
+  per-element drift sequence and `rma_offline_mask` (bit per RMA).
 - `TargetGen/TargetTruth` — one instance per `target_id`.
 
 ### 2.3 QoS inspection
@@ -99,7 +102,20 @@ Run these while Studio is connected:
    ~12% of 1024, and the per-element drift sequence shows hard failures.
    Restore with **RESTORE ARRAY**.
 
-4. **Sector scan** — press **SECTOR SCAN** in the UI and watch
+4. **RMA offline** — click a block in the radar UI's **ARRAY FACE** pane
+   (each block = one Radar Modular Assembly, 64 T/R elements), or:
+   ```bash
+   ./build/target_gen --rma-offline 3      # or "all"
+   ```
+   Watch `Radar/CalibrationStatus`: `rma_offline_mask` gains the bit,
+   `failed_element_count` jumps by 64 per offline RMA, and the drift
+   sequence shows that 8×8 block dark. Then the physical effect: implant
+   gain drops `10·log10(N_active/1024)` dB and the azimuth beam widens —
+   chart `Radar/DetectionEvent` SNR for a fixed target falling, weaker
+   targets dropping out. Restore with **ALL ONLINE** in the pane (or a
+   second command with `CMD_RMA_ONLINE`).
+
+5. **Sector scan** — press **SECTOR SCAN** in the UI and watch
    `Radar/BeamCommand`: azimuth values bounce between 60 and 120 deg
    instead of wrapping 0..360. The B-scope shows dashed sector boundary
    lines.

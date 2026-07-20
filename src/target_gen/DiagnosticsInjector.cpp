@@ -65,11 +65,12 @@ void DiagnosticsInjector::inject_type_mismatch() {
     });
 }
 
-void DiagnosticsInjector::send_degrade_command() {
-    std::cout << "[target_gen] Sending CMD_DEGRADE_ARRAY\n";
-
-    commander_part_ = radds::make_participant(
-        domain_id_, dn::PROFILE_TARGETGEN_PARTICIPANT, "TargetGen.Commander");
+void DiagnosticsInjector::send_system_command(types::CommandType type,
+                                              const std::string& params) {
+    if (commander_part_ == dds::core::null) {
+        commander_part_ = radds::make_participant(
+            domain_id_, dn::PROFILE_TARGETGEN_PARTICIPANT, "TargetGen.Commander");
+    }
     dds::pub::Publisher pub(commander_part_);
     auto topic = radds::make_topic<types::SystemCommand>(
         commander_part_, dn::TOPIC_SYSTEM_COMMAND);
@@ -83,12 +84,24 @@ void DiagnosticsInjector::send_degrade_command() {
         types::SystemCommand cmd;
         cmd.command_id   = 9000 + i;
         cmd.timestamp    = SimClock::stamp();
-        cmd.command_type = types::CommandType::CMD_DEGRADE_ARRAY;
+        cmd.command_type = type;
         cmd.priority     = 1;
-        cmd.parameters   = "scenario=degraded_array";
+        cmd.parameters   = params;
         writer.write(cmd);
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
+}
+
+void DiagnosticsInjector::send_degrade_command() {
+    std::cout << "[target_gen] Sending CMD_DEGRADE_ARRAY\n";
+    send_system_command(types::CommandType::CMD_DEGRADE_ARRAY,
+                        "scenario=degraded_array");
+}
+
+void DiagnosticsInjector::send_rma_offline(const std::string& params) {
+    std::cout << "[target_gen] Sending CMD_RMA_OFFLINE \"" << params << "\"\n"
+              << std::flush;
+    send_system_command(types::CommandType::CMD_RMA_OFFLINE, params);
 }
 
 void DiagnosticsInjector::stop() {

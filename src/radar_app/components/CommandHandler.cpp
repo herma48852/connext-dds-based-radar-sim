@@ -1,5 +1,6 @@
 #include "CommandHandler.hpp"
 
+#include <cstdlib>
 #include <iostream>
 
 #include <dds/core/cond/WaitSet.hpp>
@@ -67,6 +68,27 @@ void CommandHandler::dispatch(const types::SystemCommand& cmd) {
     case types::CommandType::CMD_RESTORE_ARRAY:
         bus_.degrade_array.store(false);
         break;
+    case types::CommandType::CMD_RMA_OFFLINE:
+    case types::CommandType::CMD_RMA_ONLINE: {
+        // parameters: RMA index "0".."15" or "all"
+        const bool online = cmd.command_type == types::CommandType::CMD_RMA_ONLINE;
+        uint32_t mask = bus_.rma_offline_mask.load();
+        if (cmd.parameters == "all") {
+            mask = online ? 0u : 0xFFFFu;
+        } else {
+            char* end = nullptr;
+            const long idx = std::strtol(cmd.parameters.c_str(), &end, 10);
+            if (end == cmd.parameters.c_str() || idx < 0 || idx >= 16) {
+                RADAR_LOG << "[CommandHandler] bad RMA index \""
+                          << cmd.parameters << "\" (want 0..15 or all)\n";
+                break;
+            }
+            if (online) mask &= ~(1u << idx);
+            else        mask |=  (1u << idx);
+        }
+        bus_.rma_offline_mask.store(mask);
+        break;
+    }
     default:
         break;
     }

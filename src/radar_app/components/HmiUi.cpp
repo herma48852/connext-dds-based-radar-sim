@@ -150,7 +150,15 @@ void HmiUi::on_calibration(const types::CalibrationStatus& c) {
         n > 0 ? n : types::MAX_ARRAY_ELEMENTS,
         c.temperature_c,
         n > 0 ? drift_sum / n : 0.0,
-        c.timestamp.sim_millis});
+        c.timestamp.sim_millis,
+        static_cast<uint32_t>(c.rma_offline_mask)});
+
+    // ARRAY FACE pane: full drift vector + RMA mask (1 Hz, cheap copy;
+    // bounded_sequence is not std::vector, so copy element-wise).
+    bus_.update_array_grid(
+        std::vector<float>(c.element_drift_db.begin(), c.element_drift_db.end()),
+        static_cast<uint32_t>(c.rma_offline_mask),
+        c.timestamp.sim_millis);
 }
 
 // --- view publisher / age-out backstop -------------------------------------
