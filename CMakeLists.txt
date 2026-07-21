@@ -15,6 +15,7 @@ endif()
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+include(CTest)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "" FORCE)
@@ -174,12 +175,16 @@ else()
 endif()
 
 # --- Target generator application -------------------------------------------
+add_library(target_scenario_core STATIC
+    src/target_gen/TargetScenario.cpp)
+target_include_directories(target_scenario_core PUBLIC src/target_gen)
+
 add_executable(target_gen
     src/target_gen/main.cpp
     src/target_gen/TargetFleet.cpp
     src/target_gen/DiagnosticsInjector.cpp)
 target_include_directories(target_gen PRIVATE src/target_gen)
-target_link_libraries(target_gen PRIVATE radar_common)
+target_link_libraries(target_gen PRIVATE radar_common target_scenario_core)
 
 # Offline tracker replay harness: replicates the beam raster, implant gates
 # and CFAR peak-pick, and drives the production TrackerCore. No Connext
@@ -188,6 +193,31 @@ add_executable(tracker_replay
     tests/tracker_replay.cpp
     src/radar_app/components/TrackerCore.cpp)
 target_include_directories(tracker_replay PRIVATE src/radar_app/components)
+
+# Fast, display-free regression coverage. The UI smoke test drives the real
+# ImGui widgets through press/hold/release frames; the target scenario test
+# accelerates the 16-target webinar configuration; tracker replay checks its
+# deterministic golden output. None create DDS participants.
+if(BUILD_TESTING)
+    add_executable(ui_controls_smoke
+        tests/ui_controls_smoke.cpp
+        src/radar_app/ui/AScopeView.cpp
+        src/radar_app/ui/Panels.cpp)
+    target_include_directories(ui_controls_smoke PRIVATE src/radar_app src/common)
+    target_link_libraries(ui_controls_smoke PRIVATE imgui implot)
+
+    add_executable(target_scenario_regression
+        tests/target_scenario_regression.cpp)
+    target_link_libraries(target_scenario_regression PRIVATE target_scenario_core)
+
+    add_test(NAME ui_controls_smoke COMMAND ui_controls_smoke)
+    add_test(NAME target_scenario_regression COMMAND target_scenario_regression)
+    add_test(NAME tracker_replay_regression
+             COMMAND tracker_replay 300 --self-test --quiet)
+    set_tests_properties(
+        ui_controls_smoke target_scenario_regression tracker_replay_regression
+        PROPERTIES TIMEOUT 30 LABELS "smoke;regression")
+endif()
 
 if(WIN32)
     target_compile_definitions(radar_app PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)

@@ -1,27 +1,28 @@
-# Connext Studio monitoring guide
+# Connext Studio monitoring reference
 
 This system is built so that **Connext Studio** (RTI's VS Code extension,
 from RTI Labs) running in a **separate workspace** can dynamically monitor,
 visualize and diagnose all DDS traffic in real time. This document is the
-webinar runbook.
+lower-level topology, QoS, and diagnostics reference. For the operator's
+workspace-switching webinar runbook and AI visualization prompts, see
+[`../ConnextStudioDemo.md`](../ConnextStudioDemo.md).
 
 ## 1. Setup
 
 1. Start the system:
    ```bash
-   ./build/radar_app.app/Contents/MacOS/radar_app &
-   ./build/target_gen --targets 8 &
+   ./build/radar_app.app/Contents/MacOS/radar_app --domain 92 &
+   ./build/target_gen --domain 92 --targets 16 &
    ```
    (macOS: `radar_app` is a bundle — run the binary inside it, not the
    stale plain `./build/radar_app` path.)
 2. Open a **new, separate VS Code window/workspace** (File > New Window).
    It does not need to contain this project — an empty folder works.
-3. Open Connext Studio and join **domain 0** (the default for both apps;
-   `--domain N` changes it).
+3. Open Connext Studio and join **domain 92**. Domain 0 remains the application
+   default; the webinar runbook uses 92 to isolate the demo.
 4. No extra configuration is needed: discovery is standard Simple
-   Discovery over UDPv4 (+ shared memory on the same host), and all types
-   are discoverable through the builtin **TypeLookup Service**, so Studio
-   can decode samples without the IDL file.
+   Discovery over UDPv4, and all types are discoverable through the builtin
+   **TypeLookup Service**, so Studio can decode samples without the IDL file.
 
 ## 2. What to show, in order
 
@@ -31,7 +32,7 @@ Every component is a named participant:
 
 | Participant name | Role |
 |---|---|
-| `Radar.BeamScheduler` | publishes `Radar/BeamCommand` (50 Hz) |
+| `Radar.BeamScheduler` | publishes `Radar/BeamCommand` (100 Hz) |
 | `Radar.DetectionProcessor` | pub `Radar/RawReturn` + `Radar/DetectionEvent`; sub `Radar/BeamCommand`, `Radar/RawReturn`, `TargetGen/TargetTruth` |
 | `Radar.TrackManager` | publishes `Radar/TargetTrack` (10 Hz) |
 | `Radar.CalibrationMonitor` | publishes `Radar/CalibrationStatus` (1 Hz) |
@@ -73,11 +74,13 @@ self-explanatory in Studio's QoS views:
 
 ### 2.4 Live diagnostic scenarios
 
-Run these while Studio is connected:
+When using any command-line form below, stop the normal target generator and
+restart it with the shown flag while Studio remains connected. This avoids a
+duplicate target/truth publisher.
 
 1. **QoS mismatch** —
    ```bash
-   ./build/target_gen --inject-qos-mismatch
+   ./build/target_gen --domain 92 --targets 16 --inject-qos-mismatch
    ```
    Creates `TargetGen.RogueReader`: a RELIABLE DataReader on
    `Radar/DetectionEvent` whose writers are BEST_EFFORT. Discovery flags a
@@ -86,7 +89,7 @@ Run these while Studio is connected:
 
 2. **Type mismatch** —
    ```bash
-   ./build/target_gen --inject-type-mismatch
+   ./build/target_gen --domain 92 --targets 16 --inject-type-mismatch
    ```
    Creates `TargetGen.RogueWriter`: writes type `DetectionEvent` on the
    topic **name** `TargetGen/TargetTruth` (registered type `TargetTruth`).
@@ -95,7 +98,7 @@ Run these while Studio is connected:
 3. **Degraded array** — either press **DEGRADE ARRAY** in the radar UI's
    SCENARIOS panel, or:
    ```bash
-   ./build/target_gen --degrade-array
+   ./build/target_gen --domain 92 --targets 16 --degrade-array
    ```
    Watch `Radar/CalibrationStatus`: `overall_status` goes
    `ARRAY_NOMINAL -> ARRAY_DEGRADED`, `failed_element_count` jumps to
@@ -105,15 +108,14 @@ Run these while Studio is connected:
 4. **RMA offline** — click a block in the radar UI's **ARRAY FACE** pane
    (each block = one Radar Modular Assembly, 64 T/R elements), or:
    ```bash
-   ./build/target_gen --rma-offline 3      # or "all"
+   ./build/target_gen --domain 92 --targets 16 --rma-offline 3  # or "all"
    ```
    Watch `Radar/CalibrationStatus`: `rma_offline_mask` gains the bit,
    `failed_element_count` jumps by 64 per offline RMA, and the drift
-   sequence shows that 8×8 block dark. Then the physical effect: implant
-   gain drops `10·log10(N_active/1024)` dB and the azimuth beam widens —
-   chart `Radar/DetectionEvent` SNR for a fixed target falling, weaker
-   targets dropping out. Restore with **ALL ONLINE** in the pane (or a
-   second command with `CMD_RMA_ONLINE`).
+   sequence shows that 8×8 block dark. Then the physical effect: implanted
+   return amplitude falls with the active-aperture fraction and the azimuth
+   beam widens. Chart the `Radar/DetectionEvent` SNR distribution as RMAs go
+   offline and weaker targets drop out. Restore with **ALL ONLINE**.
 
 5. **Sector scan** — press **SECTOR SCAN** in the UI and watch
    `Radar/BeamCommand`: azimuth values bounce between 60 and 120 deg
@@ -122,8 +124,9 @@ Run these while Studio is connected:
 
 ## 3. Compatibility notes for Studio
 
-- Single domain (0), standard discovery, builtin transports only — Studio
-  sees everything a normal participant sees.
+- One shared domain (92 in the webinar runbook; 0 by default), standard
+  discovery, and UDPv4 transport — Studio sees everything a normal
+  participant sees.
 - All IDL types are `@appendable` with verbose field names and units in
   comments; future field additions will not break Studio sessions or
   older app versions.

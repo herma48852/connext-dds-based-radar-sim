@@ -6,10 +6,12 @@
 //
 // Build (no Connext needed):  cmake --build build --target tracker_replay
 // Run:                        ./build/tracker_replay [seconds]
+// Regression:                 ./build/tracker_replay 300 --self-test --quiet
 
 #include "TrackerCore.hpp"
 
 #include <cmath>
+#include <cstring>
 #include <cstdio>
 #include <cstdlib>
 #include <random>
@@ -49,7 +51,31 @@ constexpr double kOwnSpeed  = 20.0 * 0.514444;
 } // namespace
 
 int main(int argc, char** argv) {
-    const double sim_s = (argc > 1) ? std::atof(argv[1]) : 300.0;
+    double sim_s = 300.0;
+    bool self_test = false;
+    bool quiet = false;
+    bool duration_seen = false;
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--self-test") == 0) {
+            self_test = true;
+        } else if (std::strcmp(argv[i], "--quiet") == 0) {
+            quiet = true;
+        } else if (!duration_seen) {
+            char* end = nullptr;
+            const double parsed = std::strtod(argv[i], &end);
+            if (!end || *end != '\0' || parsed <= 0.0) {
+                std::fprintf(stderr,
+                             "usage: %s [seconds] [--self-test] [--quiet]\n",
+                             argv[0]);
+                return 2;
+            }
+            sim_s = parsed;
+            duration_seen = true;
+        } else {
+            std::fprintf(stderr, "unknown argument: %s\n", argv[i]);
+            return 2;
+        }
+    }
     std::mt19937 rng(42);
     std::normal_distribution<float> noise(0.0f, (float)kNoiseSigma);
 
@@ -74,6 +100,8 @@ int main(int argc, char** argv) {
     int64_t now_ms = 0;
     int64_t next_report_ms = 2000;
     int det_count = 0, births = 0, deaths = 0;
+    size_t max_tracks = 0;
+    bool id_pool_valid = true;
     std::vector<float> iq(2 * kRangeBins);
     std::vector<float> mag(kRangeBins);
 
@@ -136,10 +164,16 @@ int main(int argc, char** argv) {
             deaths += (int)dropped.size();
             if (core.tracks().size() > before)
                 births += (int)(core.tracks().size() - before);
+            if (core.tracks().size() > max_tracks)
+                max_tracks = core.tracks().size();
+            for (const auto& track : core.tracks()) {
+                if (track.id < 1000 || track.id >= 1000 + TrackerCore::kMaxTracks)
+                    id_pool_valid = false;
+            }
         }
 
         // --- report every 2 s ---
-        if (now_ms >= next_report_ms) {
+        if (!quiet && now_ms >= next_report_ms) {
             next_report_ms += 2000;
             std::printf("t=%5llds  det=%5d  trk=%2zu (births=%d deaths=%d)\n",
                         (long long)(now_ms/1000), det_count, core.tracks().size(),
@@ -172,5 +206,25 @@ int main(int argc, char** argv) {
     }
     std::printf("done. %d detections, %d births, %d deaths over %.0f s\n",
                 det_count, births, deaths, sim_s);
+    if (self_test) {
+        bool ok = true;
+        const auto check = [&](bool condition, const char* message) {
+            if (!condition) {
+                std::fprintf(stderr, "FAIL: %s\n", message);
+                ok = false;
+            }
+        };
+        check(std::fabs(sim_s - 300.0) < 1e-9,
+              "tracker golden regression requires a 300 second replay");
+        check(det_count == 1761, "expected 1761 deterministic detections");
+        check(births == 198, "expected 198 deterministic track births");
+        check(deaths == 211, "expected 211 deterministic track deaths");
+        check(max_tracks <= static_cast<size_t>(TrackerCore::kMaxTracks),
+              "track count exceeded the bounded instance pool");
+        check(id_pool_valid, "a track ID escaped the bounded 1000..1255 pool");
+        if (!ok) return 1;
+        std::printf("PASS: deterministic detection/tracker replay golden counts "
+                    "and ID bounds\n");
+    }
     return 0;
 }

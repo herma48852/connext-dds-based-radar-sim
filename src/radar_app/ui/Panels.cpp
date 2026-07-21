@@ -47,13 +47,17 @@ ImU32 drift_color(float db) {
 
 // Scenario button with active-state highlight: shows which scenario is
 // currently in play (persistent states only; momentary actions stay plain).
-bool scenario_button(const char* label, bool active) {
+bool scenario_button(const char* label, bool active, UiControl control,
+                     UiControlObserver* observer) {
     if (active) {
         ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.12f, 0.50f, 0.22f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.18f, 0.65f, 0.30f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.24f, 0.78f, 0.36f, 1.0f));
     }
     const bool clicked = ImGui::Button(label);
+    if (observer)
+        observer->observe(control, -1, ImGui::GetItemRectMin(),
+                          ImGui::GetItemRectMax());
     if (active) ImGui::PopStyleColor(3);
     return clicked;
 }
@@ -182,7 +186,8 @@ void render_ship_panel(const char* title, ImVec2 pos, ImVec2 size,
 
 void render_array_panel(const char* title, ImVec2 pos, ImVec2 size,
                         const app::ArrayGridView& grid, uint32_t live_mask,
-                        app::CommandConsole& console) {
+                        app::CommandSink& commands,
+                        UiControlObserver* observer) {
     begin_panel(title, pos, size);
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImVec2 wp = ImGui::GetCursorScreenPos();
@@ -216,6 +221,8 @@ void render_array_panel(const char* title, ImVec2 pos, ImVec2 size,
             if (off) ++n_off;
             dl->AddRect(p0, p1, off ? theme::col_led_fault() : theme::col_border(),
                         0.0f, 0, off ? 2.0f : 1.0f);
+            if (observer)
+                observer->observe(UiControl::RmaBlock, rma, p0, p1);
         }
     }
 
@@ -230,38 +237,59 @@ void render_array_panel(const char* title, ImVec2 pos, ImVec2 size,
         if (bc >= 0 && bc < 4 && br >= 0 && br < 4) {
             const int rma = br * 4 + bc;
             const bool off = (live_mask >> rma) & 1u;
-            console.send(off ? 7 : 6, 0.0, 0.0, std::to_string(rma).c_str());
+            commands.send(off ? 7 : 6, 0.0, 0.0,
+                          std::to_string(rma).c_str());
         }
     }
 
     ImGui::SetCursorScreenPos(ImVec2(wp.x, wp.y + grid_px + 4.0f));
     ImGui::Text("RMA OFF %2d/16", n_off);
     ImGui::SameLine();
-    if (ImGui::SmallButton("ALL ONLINE"))
-        console.send(7, 0.0, 0.0, "all");   // CMD_RMA_ONLINE, all
+    const bool all_online = ImGui::SmallButton("ALL ONLINE");
+    if (observer)
+        observer->observe(UiControl::AllOnline, -1, ImGui::GetItemRectMin(),
+                          ImGui::GetItemRectMax());
+    if (all_online)
+        commands.send(7, 0.0, 0.0, "all");   // CMD_RMA_ONLINE, all
     ImGui::End();
 }
 
 void render_scenario_bar(const char* title, ImVec2 pos, ImVec2 size,
-                         app::CommandConsole& console,
-                         int32_t radar_mode, bool degraded) {
+                         app::CommandSink& commands,
+                         int32_t radar_mode, bool degraded,
+                         UiControlObserver* observer) {
     begin_panel(title, pos, size);
     // Persistent scenario states highlighted so the operator can see what
     // is in play; the app boots in search mode (radar_mode == 0).
-    if (scenario_button("SEARCH MODE", radar_mode == 0))
-        console.send(0, 0, 0, "search");            // CMD_SET_MODE
-    if (scenario_button("SECTOR SCAN", radar_mode == 1))
-        console.send(1, 90.0, 60.0);                 // CMD_SET_SECTOR
+    if (scenario_button("SEARCH MODE", radar_mode == 0,
+                        UiControl::SearchMode, observer))
+        commands.send(0, 0, 0, "search");            // CMD_SET_MODE
+    if (scenario_button("SECTOR SCAN", radar_mode == 1,
+                        UiControl::SectorScan, observer))
+        commands.send(1, 90.0, 60.0);                 // CMD_SET_SECTOR
     ImGui::Separator();
-    if (scenario_button("DEGRADE ARRAY", degraded))
-        console.send(4);                             // CMD_DEGRADE_ARRAY
-    if (ImGui::Button("RESTORE ARRAY"))
-        console.send(5);                             // CMD_RESTORE_ARRAY
+    if (scenario_button("DEGRADE ARRAY", degraded,
+                        UiControl::DegradeArray, observer))
+        commands.send(4);                             // CMD_DEGRADE_ARRAY
+    const bool restore = ImGui::Button("RESTORE ARRAY");
+    if (observer)
+        observer->observe(UiControl::RestoreArray, -1,
+                          ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+    if (restore)
+        commands.send(5);                             // CMD_RESTORE_ARRAY
     ImGui::Separator();
-    if (ImGui::Button("SELF TEST"))
-        console.send(2);                             // CMD_SELF_TEST
-    if (ImGui::Button("RESET TRACKS"))
-        console.send(3);                             // CMD_RESET
+    const bool self_test = ImGui::Button("SELF TEST");
+    if (observer)
+        observer->observe(UiControl::SelfTest, -1,
+                          ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+    if (self_test)
+        commands.send(2);                             // CMD_SELF_TEST
+    const bool reset = ImGui::Button("RESET TRACKS");
+    if (observer)
+        observer->observe(UiControl::ResetTracks, -1,
+                          ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+    if (reset)
+        commands.send(3);                             // CMD_RESET
 
     ImGui::End();
 }

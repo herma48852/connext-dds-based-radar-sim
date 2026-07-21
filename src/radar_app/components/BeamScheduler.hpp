@@ -1,6 +1,6 @@
 #pragma once
-// BeamScheduler: publishes BeamCommand at 50 Hz.
-//  - Search mode: continuous 360 deg rotation (full revolution ~3.2 s)
+// BeamScheduler: publishes BeamCommand at 100 Hz.
+//  - Search mode: continuous 360 deg rotation (full revolution ~1.6 s)
 //  - Sector mode: back-and-forth scan inside the commanded sector
 // Sector/mode changes arrive via SystemCommand -> CommandHandler -> DataBus.
 

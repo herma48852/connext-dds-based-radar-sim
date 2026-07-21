@@ -110,7 +110,7 @@
       </datareader_qos>
     </qos_profile>
 
-    <!-- BeamCommand: 50 Hz steering commands. Reliable, single-slot:
+    <!-- BeamCommand: 100 Hz steering commands. Reliable, single-slot:
          only the newest command matters. -->
     <qos_profile name="BeamCommandProfile">
       <datawriter_qos>

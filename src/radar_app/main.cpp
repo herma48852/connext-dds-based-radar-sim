@@ -2,7 +2,7 @@
 // Radar simulation application - AESA SPY-6 class phased array radar.
 //
 // Internal components communicate exclusively over DDS topics (same domain):
-//   Radar.BeamScheduler        -> Radar/BeamCommand          (50 Hz)
+//   Radar.BeamScheduler        -> Radar/BeamCommand         (100 Hz)
 //   Radar.DetectionProcessor   -> Radar/RawReturn (1 kHz), Radar/DetectionEvent
 //   Radar.TrackManager         -> Radar/TargetTrack          (10 Hz)
 //   Radar.CalibrationMonitor   -> Radar/CalibrationStatus    (1 Hz)

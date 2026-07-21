@@ -25,7 +25,9 @@ AesaRadarSim/
 │   │                            # DomainParticipant each (topology demo)
 │   ├── ui/                      # PpiView, AScopeView, BScopeView, Panels
 │   └── main.cpp
-├── src/target_gen/              # TargetFleet + DiagnosticsInjector
+├── src/target_gen/              # DDS adapter + testable target scenario core
+├── tests/                       # headless UI, target, and tracker regressions
+├── ConnextStudioDemo.md         # live webinar workspace-switching runbook
 └── docs/CONNEXT_STUDIO.md       # monitoring / diagnostics demo guide
 ```
 
@@ -52,6 +54,32 @@ cmake --build build -j
 The QoS file is copied next to the binaries automatically
 (`build/qos/radar_qos.xml`). Override at runtime with `RADAR_QOS_FILE`.
 
+## Regression tests
+
+The default build registers three fast, headless CTest regressions:
+
+```bash
+cmake --build build -j
+ctest --test-dir build --output-on-failure
+```
+
+- `ui_controls_smoke` renders the production ImGui A-scope and panels in
+  memory, performs real mouse press/hold/release frames, and verifies all six
+  scenario buttons, manual RMA offline/online, and **ALL ONLINE**. The A-scope
+  azimuth/elevation changes throughout to cover the focus-loss regression.
+- `target_scenario_regression` accelerates 30 minutes of the production
+  16-target webinar scenario and checks stable IDs/profile mix, bounded motion,
+  deterministic seeded behavior, the missile altitude floor, and periodic
+  120 km respawns.
+- `tracker_replay_regression` converts the existing deterministic detection →
+  tracker replay into a failing test using golden event counts and track-ID
+  pool bounds. Running `./build/tracker_replay [seconds]` directly retains its
+  original periodic diagnostic output; assertions are enabled only by CTest's
+  `--self-test` flag.
+
+These tests create no DDS participants, graphics window, or renderer, so they
+do not alter or compete with a live webinar run.
+
 ## Run
 
 ```bash
@@ -64,10 +92,11 @@ source $CONNEXTDDS_DIR/resource/scripts/rtisetenv_arm64Darwin23clang16.0.bash
 ./build/radar_app.app/Contents/MacOS/radar_app
 
 # Terminal 2 — the target generator
-# (targets fly inbound and are recycled past 120 km so the picture stays
-# busy; tune with --respawn-range KM, 0 disables)
+# Live webinars use exactly 16 targets (two repeats of the eight-profile mix).
+# Targets fly inbound and are recycled past 120 km so the picture stays busy;
+# tune with --respawn-range KM, 0 disables.
 source $CONNEXTDDS_DIR/resource/scripts/rtisetenv_arm64Darwin23clang16.0.bash
-./build/target_gen --targets 8
+./build/target_gen --targets 16
 
 # Diagnostic scenarios (combinable):
 ./build/target_gen --inject-qos-mismatch     # RELIABLE reader vs BEST_EFFORT writer
@@ -144,7 +173,7 @@ on-demand diagnostic endpoints `target_gen` creates with
 |---|---|---|---|---|
 | `Radar/RawReturn` | RawReturn | 1 kHz | RawReturnProfile | BEST_EFFORT, 500us latency budget. The "receiver wire", looped back inside DetectionProcessor |
 | `Radar/DetectionEvent` | DetectionEvent | ~100 Hz | DetectionEventProfile | BEST_EFFORT CFAR blips; consumed by TrackManager and HMI-UI (PPI) |
-| `Radar/BeamCommand` | BeamCommand | 50 Hz | BeamCommandProfile | RELIABLE dwell schedule |
+| `Radar/BeamCommand` | BeamCommand | 100 Hz | BeamCommandProfile | RELIABLE dwell schedule |
 | `Radar/TargetTrack` | TargetTrack | 10 Hz | TargetTrackProfile | RELIABLE + TRANSIENT_LOCAL + 100 ms deadline; consumed by HMI-UI (track list) |
 | `Radar/CalibrationStatus` | CalibrationStatus | 1 Hz | CalibrationStatusProfile | array health: 1024-element drift + `rma_offline_mask`; consumed by HMI-UI (health + ARRAY FACE panels) |
 | `Radar/SystemCommand` | SystemCommand | bursty | SystemCommandProfile | RELIABLE, WaitSet-handled |
@@ -224,6 +253,8 @@ ship-relative polar for detections, ship-relative ENU for tracks/truth.
 
 ## Connext Studio
 
-See **[docs/CONNEXT_STUDIO.md](docs/CONNEXT_STUDIO.md)** for the full demo
-script: separate workspace setup, topology map, live data inspection, QoS
-mismatch diagnostics, and the injected-failure scenarios.
+See **[ConnextStudioDemo.md](ConnextStudioDemo.md)** for the webinar
+play-by-play: prepare a steady-state Studio view, activate a scenario in the
+radar workspace, return to observe the DDS changes, and reshape the live view
+with Studio AI. See **[docs/CONNEXT_STUDIO.md](docs/CONNEXT_STUDIO.md)** for
+the lower-level topology, QoS, TypeLookup, and mismatch reference.

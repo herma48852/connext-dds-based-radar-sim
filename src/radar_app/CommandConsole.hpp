@@ -8,6 +8,7 @@
 #include <cstring>
 #include <thread>
 
+#include "CommandSink.hpp"
 #include "DdsSupport.hpp"
 #include "SimClock.hpp"
 #include "SpscQueue.hpp"
@@ -15,7 +16,7 @@
 
 namespace radar::app {
 
-class CommandConsole {
+class CommandConsole final : public CommandSink {
 public:
     explicit CommandConsole(int32_t domain_id)
         : participant_(radds::make_participant(
@@ -60,7 +61,7 @@ public:
 
     // Render-thread safe: never touches DDS.
     void send(int32_t type, double center = 0.0, double width = 0.0,
-              const char* params = "", int32_t priority = 3) {
+              const char* params = "", int32_t priority = 3) override {
         CmdReq req{};
         req.type = type;
         req.center = center;

@@ -34,6 +34,18 @@ detections, 198 births, 211 deaths). Rebuilt bundle on isolated domain 92:
 `SECTOR SCAN` produced `[CommandHandler] command=1`, and `ALL ONLINE`
 produced `[CommandHandler] command=7 params="all"`.
 
+**Regression coverage added (2026-07-21):** CTest now runs three headless,
+assertion-based tests in ~2 seconds. `ui_controls_smoke` drives production
+ImGui widgets with real press/hold/release frames and covers all six SCENARIOS
+buttons, RMA offline/online, ALL ONLINE, the dynamic A-scope focus regression,
+and stable ImGui window count. `target_scenario_regression` accelerates a
+30-minute run of the production 16-target webinar scenario, including the
+repeated eight-profile mix and periodic 120 km respawns. The existing
+`tracker_replay` is registered as a golden regression (1761/198/211 plus
+bounded track IDs) while its normal manual diagnostic mode is unchanged.
+Run all with `ctest --test-dir build --output-on-failure`; all 3 pass. No test
+opens a display or creates a DDS participant.
+
 **Geometry gotcha retained:** the OS may resize the app window from its
 requested 1800x1100 dimensions, and the user may resize it further. Never
 trust frame-1 geometry when diagnosing hit testing.
