@@ -308,7 +308,206 @@ be added later if a console-free presentation is desired.
 - It does not depend on the source tree or a Visual Studio installation.
 - The demo launcher diagnoses missing DLL, license, QoS, and firewall setup.
 
-## 10. Final acceptance gate
+## 10. Manage one repository across both platforms
+
+Use one repository and one `main` branch for macOS and Windows. Do not create
+permanent `mac` and `windows` branches; long-lived platform branches drift,
+duplicate fixes, and make it difficult to prove that both artifacts came from
+the same source.
+
+### Branch and merge strategy
+
+- Keep `main` buildable on both supported platforms.
+- Use `port/windows-x64` for the initial port.
+- Use short-lived branches for focused work, for example:
+  - `feature/windows-dpi`
+  - `feature/windows-packaging`
+  - `fix/macos-metal`
+  - `fix/shared-tracker`
+- Merge the Windows port incrementally as its platform-neutral and Windows
+  phases pass their acceptance checks. Avoid one large final port merge.
+- Protect `main` with the portable regression checks that are always
+  available.
+- Require platform-specific checks when a change affects that platform's
+  renderer, launcher, packaging, or runtime integration.
+- Tag known webinar builds, for example:
+  - `demo-2026.07-macos`
+  - `demo-2026.08-cross-platform`
+
+Platform-specific work should enter the same Git history as shared work so a
+single commit identifies the complete system on both platforms.
+
+### Source and platform boundaries
+
+Keep radar behavior, DDS types, topic names, QoS intent, target motion, and
+regression logic platform-neutral. Concentrate platform conditions at defined
+boundaries:
+
+- Rendering backend: Metal on macOS, OpenGL on Windows.
+- Window resources, application manifest, DPI, and icon handling.
+- Crash diagnostics and process control.
+- Demo launch scripts.
+- Packaging and runtime dependency collection.
+
+Avoid spreading `#if defined(__APPLE__)` and `#if defined(_WIN32)` through
+radar processing and DDS components. If a platform-specific implementation
+grows beyond a small conditional block, give it a platform-specific source
+file behind a common interface.
+
+A useful target structure is:
+
+```text
+CMakeLists.txt
+CMakePresets.json
+CMakeUserPresets.json.example
+
+cmake/
+  toolchain-macos-arm64.cmake
+  platform/
+    MacPackaging.cmake
+    WindowsPackaging.cmake
+
+src/
+  common/
+  radar_app/
+    components/
+    ui/
+      backends/
+        MetalContext.mm
+        WindowsApp.manifest
+        WindowsResources.rc
+  target_gen/
+
+scripts/
+  macos/
+    run-demo.sh
+  windows/
+    run-demo.ps1
+    smoke-test.ps1
+
+tests/
+  ui_controls_smoke.cpp
+  target_scenario_regression.cpp
+  tracker_replay.cpp
+
+.github/workflows/
+  portable-tests.yml
+  macos-build.yml
+  windows-build.yml
+```
+
+The IDL remains the single source of truth. Do not commit generated Connext
+source, CMake build trees, fetched dependencies, or compiler output.
+
+### Presets and local configuration
+
+Check in shared configure, build, and test presets for:
+
+- `macos-arm64`
+- `windows-vs2022-x64`
+- `macos-relwithdebinfo`
+- `windows-relwithdebinfo`
+
+Use separate build directories:
+
+```text
+build/macos-arm64/
+build/windows-x64/
+```
+
+Never reuse a CMake build directory between operating systems, compilers, or
+generators. Keep local Connext installation paths, licenses, SDK experiments,
+and developer overrides in an ignored `CMakeUserPresets.json`; committed
+presets should use `CONNEXTDDS_DIR` or `NDDSHOME` from the environment.
+
+Continue pinning GLFW, Dear ImGui, and ImPlot to the same versions on both
+platforms so a dependency upgrade is reviewed as one cross-platform change.
+
+### Line-ending and ignore policy
+
+Add a committed `.gitattributes` policy similar to:
+
+```gitattributes
+* text=auto
+*.cpp text eol=lf
+*.hpp text eol=lf
+*.mm text eol=lf
+*.cmake text eol=lf
+CMakeLists.txt text eol=lf
+*.md text eol=lf
+*.xml text eol=lf
+*.idl text eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+```
+
+Ensure `.gitignore` covers at least:
+
+```gitignore
+build/
+build-*/
+CMakeUserPresets.json
+.vs/
+*.user
+*.suo
+out/
+```
+
+Do not commit RTI licenses, Connext DLLs, Visual Studio intermediate files, or
+downloaded dependency trees.
+
+### Cross-platform test policy
+
+Use three levels of validation:
+
+1. **Every pull request:** portable CTest regressions, format checks, and
+   static checks on both macOS and `windows-2022` where licensing permits.
+2. **Platform build checks:** macOS Metal build and Windows MSVC/OpenGL build,
+   including platform packaging and DPI/resource validation.
+3. **Release validation:** full DDS integration, Connext Studio observation,
+   and windowed soak tests on licensed machines.
+
+Run portable tests on hosted CI. Run the complete Connext builds and DDS smoke
+tests on licensed self-hosted macOS and Windows runners. A self-hosted runner
+that is temporarily unavailable should not silently allow a release; record
+the full platform validation as a release gate.
+
+### Documentation ownership
+
+Keep shared architecture and behavior in `README.md`, then maintain focused
+platform and presentation documents:
+
+- `README.md` — common architecture, build overview, and topic model.
+- `WindowsPortPlan.md` — port implementation and acceptance plan.
+- `docs/RUN_MACOS.md` — macOS setup, launch, and troubleshooting.
+- `docs/RUN_WINDOWS.md` — Windows setup, launch, firewall, and troubleshooting.
+- `ConnextStudioDemo.md` — platform-neutral webinar choreography.
+
+Avoid copying common behavioral explanations into both platform runbooks.
+Link to the shared source so updates cannot diverge unnoticed.
+
+### Releases and artifacts
+
+Build platform-specific artifacts from the same tagged commit, for example:
+
+```text
+AesaRadarSim-1.1.0-macos-arm64.zip
+AesaRadarSim-1.1.0-windows-x64.zip
+```
+
+Record the Git commit in each artifact and keep application version numbers
+identical. This makes cross-platform results and webinar reports directly
+comparable.
+
+Do not store binary release artifacts in the source repository. Publish them
+through the release system or CI artifact storage. Add Connext runtime DLLs
+only during authorized packaging and only after confirming RTI redistribution
+terms; never package an RTI license file.
+
+The governing rule is: **shared source and shared history, with
+platform-specific build products, launchers, renderers, and packaging.**
+
+## 11. Final acceptance gate
 
 The Windows port is complete when all of the following are true:
 
