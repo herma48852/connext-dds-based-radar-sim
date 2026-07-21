@@ -34,6 +34,7 @@ void render_array_panel(const char* title, ImVec2 pos, ImVec2 size,
                         app::CommandConsole& console);
 
 void render_scenario_bar(const char* title, ImVec2 pos, ImVec2 size,
-                         app::CommandConsole& console);
+                         app::CommandConsole& console,
+                         int32_t radar_mode, bool degraded);
 
 } // namespace radar::ui

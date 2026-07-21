@@ -44,6 +44,19 @@ ImU32 drift_color(float db) {
     if (db < -0.45f) return IM_COL32(190, 140, 45, 255); // amber drift
     return IM_COL32(45, 170, 70, 255);                    // nominal
 }
+
+// Scenario button with active-state highlight: shows which scenario is
+// currently in play (persistent states only; momentary actions stay plain).
+bool scenario_button(const char* label, bool active) {
+    if (active) {
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.12f, 0.50f, 0.22f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.18f, 0.65f, 0.30f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.24f, 0.78f, 0.36f, 1.0f));
+    }
+    const bool clicked = ImGui::Button(label);
+    if (active) ImGui::PopStyleColor(3);
+    return clicked;
+}
 } // namespace
 
 void render_track_list(const char* title, ImVec2 pos, ImVec2 size,
@@ -230,18 +243,17 @@ void render_array_panel(const char* title, ImVec2 pos, ImVec2 size,
 }
 
 void render_scenario_bar(const char* title, ImVec2 pos, ImVec2 size,
-                         app::CommandConsole& console) {
+                         app::CommandConsole& console,
+                         int32_t radar_mode, bool degraded) {
     begin_panel(title, pos, size);
-    // (No in-content title: the window title bar already reads
-    // "SCENARIOS" — removing it keeps all seven buttons inside the
-    // reduced bottom-strip height.)
-
-    if (ImGui::Button("SEARCH MODE"))
+    // Persistent scenario states highlighted so the operator can see what
+    // is in play; the app boots in search mode (radar_mode == 0).
+    if (scenario_button("SEARCH MODE", radar_mode == 0))
         console.send(0, 0, 0, "search");            // CMD_SET_MODE
-    if (ImGui::Button("SECTOR SCAN"))
+    if (scenario_button("SECTOR SCAN", radar_mode == 1))
         console.send(1, 90.0, 60.0);                 // CMD_SET_SECTOR
     ImGui::Separator();
-    if (ImGui::Button("DEGRADE ARRAY"))
+    if (scenario_button("DEGRADE ARRAY", degraded))
         console.send(4);                             // CMD_DEGRADE_ARRAY
     if (ImGui::Button("RESTORE ARRAY"))
         console.send(5);                             // CMD_RESTORE_ARRAY

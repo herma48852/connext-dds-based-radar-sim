@@ -5,6 +5,39 @@
 Written for a fresh agent session (e.g. Kimi Code). Everything below the
 line is the full case log; this section is the executive summary.
 
+### 2026-07-21 — RESOLVED: SCENARIOS and ALL ONLINE buttons
+
+**Symptom:** all six SCENARIOS buttons and ARRAY FACE's `ALL ONLINE`
+button were dead, while the manually hit-tested RMA blocks worked. Mouse
+hover/press and the DDS command pipeline were healthy, but ImGui cleared a
+button's ActiveID one frame after press and before release.
+
+**Root cause captured under LLDB:** `AScopeView::render()` included live
+azimuth/elevation values in the string passed to `ImGui::Begin()`. ImGui uses
+the full window name as its ID, so every beam-value change created a newly
+appearing A-scope window. On the next frame its `Begin()` called
+`FocusWindow()`, which correctly cleared the ActiveID owned by the SCENARIOS
+or ARRAY FACE window. Exact stack:
+
+`ClearActiveID → FocusWindow (imgui.cpp:7235) → Begin (imgui.cpp:6958) → AScopeView::render (AScopeView.cpp:24) → UiApp::run`.
+
+**Fix:** append the stable hidden ID `###A_SCOPE` to the dynamic A-scope
+heading. The az/el readout still changes visibly, but ImGui now reuses one
+window and no longer steals focus every frame. This also stops accumulation
+of one ImGui window record per distinct heading. The temporary
+`imgui_internal.h`/ActiveID/click diagnostics were removed; the keeper
+`scenario_button()` active-state highlight and `radar_mode`/`degraded` inputs
+remain.
+
+**Verified:** full build green; `tracker_replay 300` unchanged (1761
+detections, 198 births, 211 deaths). Rebuilt bundle on isolated domain 92:
+`SECTOR SCAN` produced `[CommandHandler] command=1`, and `ALL ONLINE`
+produced `[CommandHandler] command=7 params="all"`.
+
+**Geometry gotcha retained:** the OS may resize the app window from its
+requested 1800x1100 dimensions, and the user may resize it further. Never
+trust frame-1 geometry when diagnosing hit testing.
+
 ### 2026-07-20 (midday, K4) — heartbeat verdict: pipeline healthy; orphan incident
 
 - **Heartbeat runs (fresh 12:07 build):** tracking chain verified end-to-end

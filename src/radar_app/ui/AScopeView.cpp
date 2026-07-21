@@ -19,7 +19,13 @@ void AScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
         el_deg_ = trace.elevation_deg;
         range_max_m_ = trace.range_max_m;
     }
-    std::snprintf(heading, sizeof heading, "%s  AZ %05.1f  EL %04.1f", title, az_deg_, el_deg_);
+    // Keep the visible beam readout dynamic while giving ImGui a stable
+    // window identity. Without the ### suffix, every az/el change creates a
+    // newly appearing window; focusing it clears ActiveID held by buttons in
+    // the SCENARIOS and ARRAY FACE windows before mouse release.
+    std::snprintf(heading, sizeof heading,
+                  "%s  AZ %05.1f  EL %04.1f###A_SCOPE", title,
+                  az_deg_, el_deg_);
 
     ImGui::Begin(heading, nullptr,
                  ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove |

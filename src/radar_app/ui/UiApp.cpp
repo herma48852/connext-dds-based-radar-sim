@@ -186,7 +186,8 @@ int UiApp::run() {
                            ImVec2(w5, panel_h), bus_.array_grid(),
                            bus_.rma_offline_mask.load(), console_);
         render_scenario_bar("SCENARIOS", ImVec2(w1 + w2 + w3 + w4 + w5, y0),
-                            ImVec2(w6, panel_h), console_);
+                            ImVec2(w6, panel_h), console_,
+                            bus_.radar_mode.load(), bus_.degrade_array.load());
 
         ImGui::Render();
 #if defined(__APPLE__)
