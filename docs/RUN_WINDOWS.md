@@ -10,7 +10,9 @@
   license.
 - A vendor OpenGL 3.3-capable display driver for the windowed radar UI.
 
-Open an x64 Native Tools PowerShell and initialize Connext in that shell:
+Open **Developer PowerShell for VS 2022** and initialize Connext in that
+shell. A PowerShell prompt starts with `PS` (for example,
+`PS C:\path\to\AesaRadarSim>`):
 
 ```powershell
 $env:CONNEXTDDS_DIR = "C:\Program Files\rti_connext_dds-7.7.0"
@@ -18,6 +20,21 @@ $env:NDDSHOME = $env:CONNEXTDDS_DIR
 $env:PATH = "$env:CONNEXTDDS_DIR\bin;$env:CONNEXTDDS_DIR\lib\x64Win64VS2017;$env:PATH"
 rtiddsgen -version
 ```
+
+If the prompt does not start with `PS` (for example,
+`C:\Program Files\Microsoft Visual Studio\2022\Community>`), the shell is
+Command Prompt (`cmd.exe`) even if it was opened from a PowerShell or Windows
+Terminal shortcut. Use CMD syntax instead:
+
+```bat
+set "CONNEXTDDS_DIR=C:\Program Files\rti_connext_dds-7.7.0"
+set "NDDSHOME=%CONNEXTDDS_DIR%"
+set "PATH=%CONNEXTDDS_DIR%\bin;%CONNEXTDDS_DIR%\lib\x64Win64VS2017;%PATH%"
+rtiddsgen -version
+```
+
+These variables apply only to the current shell. Run the remaining commands
+from the repository root in the same shell.
 
 ## Configure and Build
 

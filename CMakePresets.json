@@ -17,6 +17,7 @@
         "RADAR_BUILD_APPLICATIONS": "ON",
         "RADAR_BUILD_UI_TESTS": "ON",
         "BUILD_TESTING": "ON",
+        "CONNEXTDDS_ARCH": "x64Win64VS2017",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/windows-x64"
       },
       "condition": {
