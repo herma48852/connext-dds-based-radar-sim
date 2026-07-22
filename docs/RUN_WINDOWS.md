@@ -117,6 +117,13 @@ system, compiler, or generator.
 
 ## 6. Run the DDS Integration Smoke Test
 
+On their first launch, Windows Defender Firewall may ask whether
+`radar_app.exe` or `target_gen.exe` can communicate on the network. Allow each
+application only on the network profile on which the demo will run. Respond
+before the timed test finishes; if the prompt delays DDS discovery and the
+test fails, resolve the prompt and rerun the command below. Do not disable the
+firewall.
+
 Enter:
 
 ```bat
@@ -131,10 +138,6 @@ PASS: Windows DDS integration smoke completed on domain 92.
 
 The line after `PASS` gives the log directory. Do not launch the demo until
 the smoke test passes.
-
-If Windows Defender Firewall asks for permission, allow the applications only
-on the network profile on which the demo will run. Do not disable the
-firewall.
 
 ## 7. Run the Demo
 

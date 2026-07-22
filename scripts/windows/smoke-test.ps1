@@ -71,6 +71,9 @@ $radar = $null
 $target = $null
 
 try {
+    Write-Host "Starting radar_app and target_gen."
+    Write-Host "On first launch, Windows Defender Firewall may ask for network access."
+    Write-Host "Allow only the intended demo network profile; rerun this test if the prompt delays DDS discovery."
     $radar = Start-Process -FilePath $radarExe -PassThru `
         -ArgumentList @("--domain", $Domain, "--headless", "--run-seconds", $DurationSeconds) `
         -RedirectStandardOutput $radarOut -RedirectStandardError $radarErr
