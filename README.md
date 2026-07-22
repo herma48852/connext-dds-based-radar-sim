@@ -7,9 +7,9 @@ VS Code extension) monitors, visualizes and diagnoses every DDS sample in a
 separate workspace.
 
 > **Windows 11 users:** Start with the
-> **[Windows 11 Runbook](docs/RUN_WINDOWS.md)** for prerequisites, x64 Native
-> Tools Command Prompt setup, build and test commands, and demo launch
-> instructions.
+> **[Windows 11 Clean-Machine Runbook](docs/RUN_WINDOWS.md)**. It gives one
+> complete, numbered path from installing prerequisites and cloning the
+> repository through building, testing, and launching the demo.
 
 Two applications, one CMake monorepo, one DDS domain (default: domain 0):
 
@@ -166,29 +166,18 @@ beamwidth accordingly.
 
 ## Windows 11 port (Visual Studio 2022)
 
-Install Connext DDS 7.7.0 with the `x64Win64VS2017` target package, open
-**x64 Native Tools Command Prompt for VS 2022**, and use the checked-in
-Visual Studio presets:
-
-```bat
-set "CONNEXTDDS_DIR=C:\Program Files\rti_connext_dds-7.7.0"
-set "NDDSHOME=%CONNEXTDDS_DIR%"
-set "PATH=%CONNEXTDDS_DIR%\bin;%CONNEXTDDS_DIR%\lib\x64Win64VS2017;%PATH%"
-cmake --preset windows-vs2022-x64
-cmake --build --preset windows-relwithdebinfo
-ctest --preset windows-relwithdebinfo
-scripts\windows\smoke-test.cmd -Domain 92
-scripts\windows\run-demo.cmd -Domain 92 -Targets 16
-```
+For a clean Windows 11 machine, follow
+**[docs/RUN_WINDOWS.md](docs/RUN_WINDOWS.md) from Step 1 without skipping
+steps**. Enter its commands in a regular Command Prompt (`cmd.exe`). The
+runbook clones the repository, changes to the repository root once, verifies
+every prerequisite, and keeps all setup, build, test, and launch commands in
+that directory.
 
 - Connext target: `x64Win64VS2017` (binary-compatible with VS2022).
 - The UI embeds Per-Monitor V2 DPI awareness and uses GLFW/OpenGL 3.3.
 - `windows-portable` builds all three regressions without Connext.
 - FetchContent supplies pinned GLFW, ImGui, and ImPlot sources.
 - Put the Connext target DLL directory on `PATH` before running.
-
-See [docs/RUN_WINDOWS.md](docs/RUN_WINDOWS.md) for environment setup,
-firewall guidance, integration automation, DPI validation, and packaging.
 
 ---
 

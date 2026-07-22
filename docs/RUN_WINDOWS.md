@@ -1,30 +1,102 @@
-# Windows 11 Runbook
+# Windows 11 Clean-Machine Runbook
 
-## Prerequisites
+This is the complete setup for a clean 64-bit Windows 11 development machine.
+Follow the numbered steps in order. Do not skip a verification step.
 
-- Windows 11 x64.
-- Visual Studio 2022 with Desktop development with C++, MSVC v143, and a
-  Windows 11 SDK.
-- CMake 3.21 or newer and Git.
-- RTI Connext DDS 7.7.0 with the `x64Win64VS2017` target package and a valid
-  license.
-- A vendor OpenGL 3.3-capable display driver for the windowed radar UI.
+Rules for this runbook:
 
-Open **x64 Native Tools Command Prompt for VS 2022**. This is Command Prompt
-(`cmd.exe`) with the MSVC x64 build environment initialized. Configure
-Connext in that shell:
+- Enter every command in a regular **Command Prompt** (`cmd.exe`).
+- Copy only the text inside each command block; do not type the explanatory
+  text or the `C:\...>` prompt itself.
+- Enter commands one line at a time. If a command reports an error, stop and
+  fix that error before continuing.
+- The commands assume that RTI Connext DDS is installed in
+  `C:\Program Files\rti_connext_dds-7.7.0`. If it is elsewhere, change only
+  the `CONNEXTDDS_DIR` line in Step 4.
+- Step 3 changes to the repository root. Stay in that directory for every
+  remaining setup, build, test, launch, and packaging command.
+
+## 1. Install Every Prerequisite
+
+Install all of the following before opening Command Prompt:
+
+1. **Visual Studio 2022**. In Visual Studio Installer, select the
+   **Desktop development with C++** workload. Confirm that the installation
+   includes **MSVC v143**, a **Windows 11 SDK**, and **C++ CMake tools for
+   Windows**.
+2. **Git for Windows**. The installer must make `git` available from Command
+   Prompt.
+3. **CMake 3.21 or newer**. Select the installer option that adds CMake to
+   `PATH` so `cmake` is available from Command Prompt.
+4. **RTI Connext DDS Professional 7.7.0**, including both the host tools and
+   the **`x64Win64VS2017` target package**. Installing only the host tools is
+   not enough. Install a valid RTI license using RTI's installer or launcher.
+5. The current graphics driver from the computer's GPU vendor. The windowed
+   radar requires OpenGL 3.3; the Microsoft fallback driver is insufficient.
+6. Internet access to GitHub. Cloning and the first CMake configure download
+   source dependencies.
+
+Finish every installer and restart Windows if an installer requests it.
+
+## 2. Open Command Prompt and Verify the Tools
+
+Press the Windows key, type **Command Prompt**, and open it. Enter:
+
+```bat
+where git
+git --version
+where cmake
+cmake --version
+cmake --help | findstr /C:"Visual Studio 17 2022"
+```
+
+All five commands must succeed. The version output must show CMake 3.21 or
+newer, and the last command must print a `Visual Studio 17 2022` generator.
+If Windows says a command is not recognized or `where` cannot find it, stop,
+repair that installation, and open a new Command Prompt.
+
+## 3. Clone the Repository and Enter Its Root
+
+Enter:
+
+```bat
+cd /d "%USERPROFILE%"
+git clone https://github.com/herma48852/connext-dds-based-radar-sim.git
+cd /d "%USERPROFILE%\connext-dds-based-radar-sim"
+dir /b CMakePresets.json
+```
+
+This creates the clone at
+`%USERPROFILE%\connext-dds-based-radar-sim`. The last command must print
+`CMakePresets.json`, and the prompt should end in
+`connext-dds-based-radar-sim>`. This is the repository root. Do not change
+directories again while following this runbook.
+
+## 4. Configure and Verify Connext
+
+Enter these commands in the same Command Prompt. If Connext was installed in
+a different directory, edit the first line only.
 
 ```bat
 set "CONNEXTDDS_DIR=C:\Program Files\rti_connext_dds-7.7.0"
 set "NDDSHOME=%CONNEXTDDS_DIR%"
 set "PATH=%CONNEXTDDS_DIR%\bin;%CONNEXTDDS_DIR%\lib\x64Win64VS2017;%PATH%"
+if exist "%CONNEXTDDS_DIR%\bin" (echo OK: Connext host tools found) else (echo ERROR: Connext host tools not found)
+if exist "%CONNEXTDDS_DIR%\lib\x64Win64VS2017" (echo OK: Connext target found) else (echo ERROR: x64Win64VS2017 target not found)
+where rtiddsgen
 rtiddsgen -version
 ```
 
-These variables apply only to the current shell. Run the remaining commands
-from the repository root in the same shell.
+Both checks must print `OK`, `where` must find `rtiddsgen`, and the version
+must be 7.7.0. If any check fails, stop. Correct `CONNEXTDDS_DIR` or install
+the missing Connext host or target package before continuing.
 
-## Configure and Build
+These environment variables apply only to this Command Prompt. Keep it open
+until the build, tests, smoke test, and demo are finished.
+
+## 5. Configure, Build, and Run the Regression Tests
+
+Enter each command and wait for it to finish before entering the next:
 
 ```bat
 cmake --preset windows-vs2022-x64
@@ -32,54 +104,66 @@ cmake --build --preset windows-relwithdebinfo
 ctest --preset windows-relwithdebinfo
 ```
 
-The portable tests can be built on a machine without Connext:
+The first configure can take several minutes while it downloads pinned GLFW,
+Dear ImGui, and ImPlot sources. Success requires all of the following:
+
+- Configure ends with `Configuring done` and `Generating done`.
+- Build completes without an error.
+- CTest reports `100% tests passed`.
+
+Do not continue if any of these checks fails. Because this is a clean clone,
+do not copy in or reuse a `build` directory from another computer, operating
+system, compiler, or generator.
+
+## 6. Run the DDS Integration Smoke Test
+
+Enter:
+
+```bat
+scripts\windows\smoke-test.cmd -Domain 92
+```
+
+The test runs for about 20 seconds. It must finish with:
+
+```text
+PASS: Windows DDS integration smoke completed on domain 92.
+```
+
+The line after `PASS` gives the log directory. Do not launch the demo until
+the smoke test passes.
+
+If Windows Defender Firewall asks for permission, allow the applications only
+on the network profile on which the demo will run. Do not disable the
+firewall.
+
+## 7. Run the Demo
+
+Enter:
+
+```bat
+scripts\windows\run-demo.cmd -Domain 92 -Targets 16
+```
+
+The radar window should open and Command Prompt should report that the AESA
+radar demo is running. Leave that Command Prompt open. To stop both processes
+cleanly, press ENTER or Q in Command Prompt, or close the radar window.
+
+The `.cmd` files are the supported launch commands. They handle the bundled
+implementation automatically. Do not open or invoke a `.ps1` file directly.
+The demo launcher also supports `-Headless`, `-RunSeconds N`, and
+`-StopExisting` when those behaviors are intentionally needed.
+
+## Optional: Portable Tests Without Connext
+
+This is not part of the clean-machine demo path above. On a machine without
+Connext, the three portable regressions can be built and run from the
+repository root with:
 
 ```bat
 cmake --preset windows-portable
 cmake --build --preset windows-portable-relwithdebinfo
 ctest --preset windows-portable-relwithdebinfo
 ```
-
-Do not reuse a CMake build directory created by another operating system,
-compiler, or generator.
-
-## Integration Smoke
-
-The smoke runner starts both executables on an isolated domain, uses 16
-targets, verifies live detections, saves separate logs, and lets both processes
-shut down normally:
-
-```bat
-scripts\windows\smoke-test.cmd -Domain 92
-```
-
-## Run the Demo
-
-```bat
-scripts\windows\run-demo.cmd -Domain 92 -Targets 16
-```
-
-The `.cmd` launchers are the supported user interface. They invoke the bundled
-PowerShell implementation internally with the required options, so users do
-not need to enter PowerShell commands or manage script execution policy. Do
-not invoke a `.ps1` file directly from CMD because CMD follows the machine's
-`.ps1` file association, which may open the script in an editor.
-
-Press ENTER or Q in the launcher, or close the radar window, to stop both
-processes cooperatively. Pass `-Headless` for a DDS-only run. The launcher
-rejects stale demo processes unless `-StopExisting` is explicitly supplied.
-`-RunSeconds N` provides a finite unattended demo run.
-
-For manual terminals, add
-`%NDDSHOME%\lib\x64Win64VS2017` to `PATH`, then run:
-
-```bat
-.\build\windows-x64\RelWithDebInfo\radar_app.exe --domain 92
-.\build\windows-x64\RelWithDebInfo\target_gen.exe --domain 92 --targets 16
-```
-
-`RADAR_QOS_FILE` can override QoS discovery. Otherwise each executable looks
-beside itself and in the current working directory for `qos\radar_qos.xml`.
 
 ## GPU and DPI Checklist
 
@@ -119,11 +203,38 @@ the authorized Connext runtime or place its `x64Win64VS2017` DLL directory on
 
 ## Troubleshooting
 
-- `rtiddsgen` missing: run the RTI environment script and verify
-  `CONNEXTDDS_DIR`.
-- DLL load failure: add the Connext target `lib` directory to `PATH`.
-- QoS load failure: set `RADAR_QOS_FILE` to the absolute XML path.
-- GLFW/OpenGL initialization failure: install the GPU vendor's current driver;
-  the Microsoft GDI OpenGL fallback is insufficient.
-- No discovery: check domain IDs, stale processes, network profile, VPNs, and
-  per-application firewall rules.
+- **`git` or `cmake` is not recognized:** reinstall the missing tool with its
+  `PATH` option enabled. Close Command Prompt, open a new one, and repeat the
+  verification in Step 2.
+- **Clone says the destination already exists:** do not clone over it and do
+  not delete it. Enter
+  `cd /d "%USERPROFILE%\connext-dds-based-radar-sim"`, run
+  `dir /b CMakePresets.json`, and continue only if that file is printed.
+- **Command Prompt was closed:** open a new Command Prompt, enter
+  `cd /d "%USERPROFILE%\connext-dds-based-radar-sim"`, repeat every command
+  in Step 4, and then resume at the step that was interrupted.
+- **CMake cannot find Visual Studio 2022 or MSVC:** open Visual Studio
+  Installer, choose **Modify**, and install the workload and all three
+  components listed in Step 1. Reboot if requested, then start again at
+  Step 2.
+- **The Connext host or target check prints `ERROR`:** correct the first line
+  in Step 4 if Connext is installed elsewhere. If the directory is correct,
+  modify the Connext installation and add the missing host tools or
+  `x64Win64VS2017` target package.
+- **CMake or `rtiddsgen` reports a license error:** activate or install the
+  Connext 7.7.0 license with RTI's installer or launcher, then repeat Step 4.
+- **CMake fails while downloading GLFW, ImGui, or ImPlot:** confirm that the
+  machine can reach GitHub and that its proxy permits Git and CMake downloads,
+  then rerun the first command in Step 5.
+- **An executable reports a DLL load failure:** the current Command Prompt
+  does not have the Connext runtime directory on `PATH`. Repeat all of Step 4
+  in that same Command Prompt and retry.
+- **The application reports a QoS load failure:** confirm that the prompt is
+  still at the repository root and that `qos\radar_qos.xml` exists there.
+- **The radar window reports a GLFW or OpenGL initialization failure:**
+  install the current graphics driver directly from the GPU vendor and
+  reboot. The Microsoft fallback OpenGL driver is insufficient.
+- **The smoke test or demo reports no DDS discovery:** confirm that both
+  applications use the same domain, close stale `radar_app.exe` and
+  `target_gen.exe` processes, disconnect unnecessary VPNs, and check the
+  per-application firewall rules. Do not disable the firewall globally.
