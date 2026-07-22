@@ -15,10 +15,12 @@
 #include <atomic>
 #include <chrono>
 #include <csignal>
+#include <condition_variable>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <iostream>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -109,28 +111,43 @@ int main(int argc, char** argv) {
 
     target_gen::DiagnosticsInjector injector(domain);
     std::vector<std::thread> delayed_commands;
+    std::mutex delayed_mutex;
+    std::condition_variable delayed_cv;
+    bool cancel_delayed_commands = false;
+    const auto delay_completed = [&] {
+        std::unique_lock lock(delayed_mutex);
+        return !delayed_cv.wait_for(
+            lock, std::chrono::seconds(5),
+            [&] { return cancel_delayed_commands; });
+    };
     if (qos_mismatch)  injector.inject_qos_mismatch();
     if (type_mismatch) injector.inject_type_mismatch();
     if (degrade) {
-        delayed_commands.emplace_back([&injector] {
-            std::this_thread::sleep_for(std::chrono::seconds(5));
-            injector.send_degrade_command();
+        delayed_commands.emplace_back([&injector, &delay_completed] {
+            if (delay_completed())
+                injector.send_degrade_command();
         });
     }
     if (!rma_offline.empty()) {
-        delayed_commands.emplace_back([&injector, p = rma_offline] {
-            std::this_thread::sleep_for(std::chrono::seconds(5));
-            injector.send_rma_offline(p);
-        });
+        delayed_commands.emplace_back(
+            [&injector, &delay_completed, p = rma_offline] {
+                if (delay_completed())
+                    injector.send_rma_offline(p);
+            });
     }
 
     std::cout << "[target_gen] running; Ctrl+C to stop\n";
     while (g_running.load() && !stop_requested())
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
-    std::cout << "[target_gen] shutting down\n";
+    {
+        std::lock_guard lock(delayed_mutex);
+        cancel_delayed_commands = true;
+    }
+    delayed_cv.notify_all();
     for (auto& thread : delayed_commands)
         thread.join();
+    std::cout << "[target_gen] shutting down\n";
     injector.stop();
     fleet.stop();
     return 0;

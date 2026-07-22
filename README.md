@@ -26,6 +26,7 @@ AesaRadarSim/
 │   ├── ui/                      # PpiView, AScopeView, BScopeView, Panels
 │   └── main.cpp
 ├── src/target_gen/              # DDS adapter + testable target scenario core
+├── scripts/run-demo.sh          # one-command Bash demo launcher
 ├── tests/                       # headless UI, target, and tracker regressions
 ├── ConnextStudioDemo.md         # live webinar workspace-switching runbook
 └── docs/CONNEXT_STUDIO.md       # monitoring / diagnostics demo guide
@@ -81,6 +82,35 @@ These tests create no DDS participants, graphics window, or renderer, so they
 do not alter or compete with a live webinar run.
 
 ## Run
+
+The Bash launcher starts both applications, selects either the preset or
+legacy build automatically, configures the Connext runtime and QoS paths,
+writes separate logs, and stops both processes together:
+
+```bash
+./scripts/run-demo.sh --domain 92 --targets 16
+
+# Unattended DDS-only run:
+./scripts/run-demo.sh --domain 92 --targets 16 --headless --run-seconds 20
+```
+
+It uses `CONNEXTDDS_DIR` or `NDDSHOME`, and on macOS also detects the default
+`/Applications/rti_connext_dds-7.7.0` installation. Close the radar window or
+press Ctrl-C in the launcher to stop both processes cooperatively.
+
+Launcher options:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--build-dir PATH` | Auto-detect | Use a specific CMake build directory instead of searching `build/macos-arm64`, `build`, and the repository installation layout. |
+| `--connext-dir PATH` | Environment/auto-detect | Use a specific RTI Connext installation instead of `CONNEXTDDS_DIR`, `NDDSHOME`, or the default macOS installation. |
+| `--domain N` | `92` | Select DDS domain `0..232`. |
+| `--targets N` | `16` | Launch `target_gen` with `1..256` targets. |
+| `--run-seconds N` | `0` | Stop automatically after `N` seconds (`0..604800`); zero runs until window close or Ctrl-C. |
+| `--headless` | Off | Run `radar_app` without the graphics window. |
+| `-h`, `--help` | — | Print launcher usage and exit. |
+
+To run the applications manually in separate terminals:
 
 ```bash
 # Terminal 1 — the radar console (opens the GUI)
