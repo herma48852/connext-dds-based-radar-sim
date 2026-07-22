@@ -10,21 +10,9 @@
   license.
 - A vendor OpenGL 3.3-capable display driver for the windowed radar UI.
 
-Open **Developer PowerShell for VS 2022** and initialize Connext in that
-shell. A PowerShell prompt starts with `PS` (for example,
-`PS C:\path\to\AesaRadarSim>`):
-
-```powershell
-$env:CONNEXTDDS_DIR = "C:\Program Files\rti_connext_dds-7.7.0"
-$env:NDDSHOME = $env:CONNEXTDDS_DIR
-$env:PATH = "$env:CONNEXTDDS_DIR\bin;$env:CONNEXTDDS_DIR\lib\x64Win64VS2017;$env:PATH"
-rtiddsgen -version
-```
-
-If the prompt does not start with `PS` (for example,
-`C:\Program Files\Microsoft Visual Studio\2022\Community>`), the shell is
-Command Prompt (`cmd.exe`) even if it was opened from a PowerShell or Windows
-Terminal shortcut. Use CMD syntax instead:
+Open **x64 Native Tools Command Prompt for VS 2022**. This is Command Prompt
+(`cmd.exe`) with the MSVC x64 build environment initialized. Configure
+Connext in that shell:
 
 ```bat
 set "CONNEXTDDS_DIR=C:\Program Files\rti_connext_dds-7.7.0"
@@ -38,7 +26,7 @@ from the repository root in the same shell.
 
 ## Configure and Build
 
-```powershell
+```bat
 cmake --preset windows-vs2022-x64
 cmake --build --preset windows-relwithdebinfo
 ctest --preset windows-relwithdebinfo
@@ -46,7 +34,7 @@ ctest --preset windows-relwithdebinfo
 
 The portable tests can be built on a machine without Connext:
 
-```powershell
+```bat
 cmake --preset windows-portable
 cmake --build --preset windows-portable-relwithdebinfo
 ctest --preset windows-portable-relwithdebinfo
@@ -61,29 +49,21 @@ The smoke runner starts both executables on an isolated domain, uses 16
 targets, verifies live detections, saves separate logs, and lets both processes
 shut down normally:
 
-```powershell
-.\scripts\windows\smoke-test.ps1 -Domain 92
-```
-
-From Command Prompt (`cmd.exe`):
-
 ```bat
 scripts\windows\smoke-test.cmd -Domain 92
 ```
 
 ## Run the Demo
 
-```powershell
-.\scripts\windows\run-demo.ps1 -Domain 92 -Targets 16
-```
-
-From Command Prompt (`cmd.exe`), invoke the wrapper rather than the `.ps1`
-file. CMD otherwise follows the machine's `.ps1` file association, which may
-open the script in an editor:
-
 ```bat
 scripts\windows\run-demo.cmd -Domain 92 -Targets 16
 ```
+
+The `.cmd` launchers are the supported user interface. They invoke the bundled
+PowerShell implementation internally with the required options, so users do
+not need to enter PowerShell commands or manage script execution policy. Do
+not invoke a `.ps1` file directly from CMD because CMD follows the machine's
+`.ps1` file association, which may open the script in an editor.
 
 Press ENTER or Q in the launcher, or close the radar window, to stop both
 processes cooperatively. Pass `-Headless` for a DDS-only run. The launcher
@@ -93,7 +73,7 @@ rejects stale demo processes unless `-StopExisting` is explicitly supplied.
 For manual terminals, add
 `%NDDSHOME%\lib\x64Win64VS2017` to `PATH`, then run:
 
-```powershell
+```bat
 .\build\windows-x64\RelWithDebInfo\radar_app.exe --domain 92
 .\build\windows-x64\RelWithDebInfo\target_gen.exe --domain 92 --targets 16
 ```
@@ -126,7 +106,7 @@ Connext Studio should observe the topology and transitions described in
 
 ## Packaging
 
-```powershell
+```bat
 cmake --install build\windows-x64 --config RelWithDebInfo
 cpack --config build\windows-x64\CPackConfig.cmake -C RelWithDebInfo
 ```

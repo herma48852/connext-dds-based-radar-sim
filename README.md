@@ -6,6 +6,11 @@ modern **C++20**. Designed as a live webinar demo: **Connext Studio** (RTI's
 VS Code extension) monitors, visualizes and diagnoses every DDS sample in a
 separate workspace.
 
+> **Windows 11 users:** Start with the
+> **[Windows 11 Runbook](docs/RUN_WINDOWS.md)** for prerequisites, x64 Native
+> Tools Command Prompt setup, build and test commands, and demo launch
+> instructions.
+
 Two applications, one CMake monorepo, one DDS domain (default: domain 0):
 
 | App          | Purpose |
@@ -161,21 +166,17 @@ beamwidth accordingly.
 
 ## Windows 11 port (Visual Studio 2022)
 
-Install Connext DDS 7.7.0 with the `x64Win64VS2017` target package, then use
-the checked-in Visual Studio presets:
+Install Connext DDS 7.7.0 with the `x64Win64VS2017` target package, open
+**x64 Native Tools Command Prompt for VS 2022**, and use the checked-in
+Visual Studio presets:
 
-```powershell
-$env:CONNEXTDDS_DIR = "C:\Program Files\rti_connext_dds-7.7.0"
+```bat
+set "CONNEXTDDS_DIR=C:\Program Files\rti_connext_dds-7.7.0"
+set "NDDSHOME=%CONNEXTDDS_DIR%"
+set "PATH=%CONNEXTDDS_DIR%\bin;%CONNEXTDDS_DIR%\lib\x64Win64VS2017;%PATH%"
 cmake --preset windows-vs2022-x64
 cmake --build --preset windows-relwithdebinfo
 ctest --preset windows-relwithdebinfo
-.\scripts\windows\smoke-test.ps1 -Domain 92
-.\scripts\windows\run-demo.ps1 -Domain 92 -Targets 16
-```
-
-From a regular Command Prompt, use the `.cmd` wrappers instead:
-
-```bat
 scripts\windows\smoke-test.cmd -Domain 92
 scripts\windows\run-demo.cmd -Domain 92 -Targets 16
 ```

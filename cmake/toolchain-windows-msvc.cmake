@@ -1,5 +1,5 @@
 # Toolchain file: Windows 11, Visual Studio 2022 (MSVC v143, x64)
-# Usage (Developer PowerShell / x64 Native Tools prompt):
+# Usage (x64 Native Tools Command Prompt for VS 2022):
 #   cmake -B build -G "Visual Studio 17 2022" -A x64 ^
 #         -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-windows-msvc.cmake ^
 #         -DCONNEXTDDS_DIR="C:\Program Files\rti_connext_dds-7.7.0"
