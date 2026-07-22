@@ -31,7 +31,10 @@ public:
     HmiUi(int32_t domain_id, DataBus& bus)
         : ComponentBase(domain_id, "Radar.HMI-UI"), bus_(bus) {}
 
+    ~HmiUi() override { stop(); }
+
     void start() override;
+    void stop() override;
 
     // Listener callbacks (invoked on DDS receive threads).
     void on_track(const types::TargetTrack& t);

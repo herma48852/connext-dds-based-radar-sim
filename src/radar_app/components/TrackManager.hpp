@@ -23,7 +23,10 @@ public:
     TrackManager(int32_t domain_id, DataBus& bus)
         : ComponentBase(domain_id, "Radar.TrackManager"), bus_(bus) {}
 
+    ~TrackManager() override { stop(); }
+
     void start() override;
+    void stop() override;
 
 private:
     void on_detection(const types::DetectionEvent& det);

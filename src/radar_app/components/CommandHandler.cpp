@@ -4,9 +4,7 @@
 #include <iostream>
 
 #include <dds/core/cond/WaitSet.hpp>
-#include <dds/sub/cond/ReadCondition.hpp>
-#include <dds/sub/status/DataState.hpp>
-
+#include <dds/core/cond/StatusCondition.hpp>
 #include "Log.hpp"
 #include "SimClock.hpp"
 
@@ -19,23 +17,29 @@ void CommandHandler::start() {
         subscriber_, topic, dds_names::PROFILE_SYSTEM_COMMAND);
 
     spawn([this] {
-        // WaitSet pattern: block until a SystemCommand arrives (or 500 ms
-        // timeout so we can notice the stop flag). Multiple conditions
-        // (e.g. a second reader or status changes) can be attached here.
-        dds::sub::cond::ReadCondition read_cond(
-            reader_, dds::sub::status::DataState::new_data());
-        dds::core::cond::WaitSet waitset;
-        waitset.attach_condition(read_cond);
+        try {
+            dds::core::cond::StatusCondition condition(reader_);
+            condition.enabled_statuses(
+                dds::core::status::StatusMask::data_available());
 
-        while (!stop_.load()) {
-            // Unblocks on trigger OR timeout; after a timeout take() simply
-            // returns no samples, which is harmless.
-            waitset.dispatch(dds::core::Duration::from_millisecs(500));
-
-            auto samples = reader_.take();
-            for (const auto& s : samples)
-                if (s.info().valid())
-                    dispatch(s.data());
+            dds::core::cond::WaitSet waitset;
+            waitset += condition;
+            while (!stop_.load()) {
+                const auto active = waitset.wait(
+                    dds::core::Duration::from_millisecs(200));
+                if (stop_.load() || active.empty())
+                    continue;
+                types::SystemCommand sample;
+                dds::sub::SampleInfo info;
+                for (int i = 0;
+                     i < 64 && reader_.extensions().take(sample, info); ++i) {
+                    if (info.valid())
+                        dispatch(sample);
+                }
+            }
+        } catch (const std::exception& e) {
+            RADAR_LOG << "[CommandHandler] worker exception: "
+                      << e.what() << "\n";
         }
     });
 }

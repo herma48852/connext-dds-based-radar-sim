@@ -30,7 +30,10 @@ public:
     DetectionProcessor(int32_t domain_id, DataBus& bus)
         : ComponentBase(domain_id, "Radar.DetectionProcessor"), bus_(bus) {}
 
+    ~DetectionProcessor() override { stop(); }
+
     void start() override;
+    void stop() override;
 
 private:
     struct TruthState {

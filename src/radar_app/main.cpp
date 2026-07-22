@@ -18,10 +18,20 @@
 #include <atomic>
 #include <chrono>
 #include <csignal>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <iostream>
+#include <string>
 #include <thread>
+
+#if defined(_WIN32)
+#include <exception>
+#include <memory>
+#include <windows.h>
+#include <dbghelp.h>
+#endif
 
 // Crash diagnostics: dump a backtrace to stderr on fatal signals so the
 // failing thread is identifiable without a debugger attached (POSIX only).
@@ -46,6 +56,123 @@ void install_crash_handler() {
     std::signal(SIGSEGV, crash_handler);
     std::signal(SIGBUS,  crash_handler);
     std::signal(SIGABRT, crash_handler);
+}
+} // namespace
+#elif defined(_WIN32)
+namespace {
+void print_windows_stack() noexcept {
+    HANDLE process = GetCurrentProcess();
+    SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_UNDNAME);
+    if (!SymInitialize(process, nullptr, TRUE))
+        return;
+
+    void* frames[64]{};
+    const USHORT count = CaptureStackBackTrace(0, 64, frames, nullptr);
+    auto storage = std::make_unique<unsigned char[]>(
+        sizeof(SYMBOL_INFO) + MAX_SYM_NAME);
+    auto* symbol = reinterpret_cast<SYMBOL_INFO*>(storage.get());
+    symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+    symbol->MaxNameLen = MAX_SYM_NAME;
+
+    for (USHORT i = 0; i < count; ++i) {
+        const DWORD64 address = reinterpret_cast<DWORD64>(frames[i]);
+        DWORD64 displacement = 0;
+        if (SymFromAddr(process, address, &displacement, symbol)) {
+            std::fprintf(stderr, "  #%u %s + 0x%llx\n", i, symbol->Name,
+                         static_cast<unsigned long long>(displacement));
+        } else {
+            std::fprintf(stderr, "  #%u 0x%llx\n", i,
+                         static_cast<unsigned long long>(address));
+        }
+    }
+    SymCleanup(process);
+}
+
+[[noreturn]] void terminate_handler() noexcept {
+    std::fprintf(stderr, "[radar_app] std::terminate invoked");
+    if (const auto error = std::current_exception()) {
+        try {
+            std::rethrow_exception(error);
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, ": %s", e.what());
+        } catch (...) {
+            std::fprintf(stderr, ": non-standard exception");
+        }
+    }
+    std::fprintf(stderr, "\n");
+    print_windows_stack();
+    std::fflush(stderr);
+    TerminateProcess(GetCurrentProcess(), 134);
+    std::abort();
+}
+
+void abort_handler(int) noexcept {
+    std::fprintf(stderr, "[radar_app] SIGABRT\n");
+    print_windows_stack();
+    std::fflush(stderr);
+    TerminateProcess(GetCurrentProcess(), 134);
+}
+
+LONG WINAPI unhandled_exception_filter(EXCEPTION_POINTERS* details) noexcept {
+    const auto code = details->ExceptionRecord->ExceptionCode;
+    const auto address = details->ExceptionRecord->ExceptionAddress;
+    std::fprintf(stderr, "[radar_app] unhandled Windows exception 0x%08lx at %p\n",
+                 static_cast<unsigned long>(code), address);
+
+    HANDLE process = GetCurrentProcess();
+    SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_UNDNAME);
+    if (SymInitialize(process, nullptr, TRUE)) {
+        auto storage = std::make_unique<unsigned char[]>(
+            sizeof(SYMBOL_INFO) + MAX_SYM_NAME);
+        auto* symbol = reinterpret_cast<SYMBOL_INFO*>(storage.get());
+        symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+        symbol->MaxNameLen = MAX_SYM_NAME;
+        DWORD64 displacement = 0;
+        if (SymFromAddr(process, reinterpret_cast<DWORD64>(address),
+                        &displacement, symbol)) {
+            std::fprintf(stderr, "  %s + 0x%llx\n", symbol->Name,
+                         static_cast<unsigned long long>(displacement));
+        }
+
+#if defined(_M_X64)
+        CONTEXT context = *details->ContextRecord;
+        STACKFRAME64 frame{};
+        frame.AddrPC.Offset = context.Rip;
+        frame.AddrPC.Mode = AddrModeFlat;
+        frame.AddrFrame.Offset = context.Rbp;
+        frame.AddrFrame.Mode = AddrModeFlat;
+        frame.AddrStack.Offset = context.Rsp;
+        frame.AddrStack.Mode = AddrModeFlat;
+        for (unsigned int i = 0; i < 32; ++i) {
+            if (i != 0 && !StackWalk64(
+                    IMAGE_FILE_MACHINE_AMD64, process, GetCurrentThread(),
+                    &frame, &context, nullptr, SymFunctionTableAccess64,
+                    SymGetModuleBase64, nullptr)) {
+                break;
+            }
+            displacement = 0;
+            if (SymFromAddr(process, frame.AddrPC.Offset,
+                            &displacement, symbol)) {
+                std::fprintf(stderr, "  #%u %s + 0x%llx\n", i,
+                             symbol->Name,
+                             static_cast<unsigned long long>(displacement));
+            } else {
+                std::fprintf(stderr, "  #%u 0x%llx\n", i,
+                             static_cast<unsigned long long>(
+                                 frame.AddrPC.Offset));
+            }
+        }
+#endif
+        SymCleanup(process);
+    }
+    std::fflush(stderr);
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
+void install_crash_handler() {
+    std::set_terminate(terminate_handler);
+    std::signal(SIGABRT, abort_handler);
+    SetUnhandledExceptionFilter(unhandled_exception_filter);
 }
 } // namespace
 #else
@@ -79,6 +206,8 @@ int main(int argc, char** argv) {
     bool gl_throttle = false;
     bool no_titlebar = false;
     int swap_interval = 1;
+    double run_seconds = 0.0;
+    std::string stop_file;
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--domain") == 0 && i + 1 < argc)
             domain = std::atoi(argv[++i]);
@@ -92,9 +221,14 @@ int main(int argc, char** argv) {
             no_titlebar = true;
         else if (std::strcmp(argv[i], "--swap-interval") == 0 && i + 1 < argc)
             swap_interval = std::atoi(argv[++i]);
+        else if (std::strcmp(argv[i], "--run-seconds") == 0 && i + 1 < argc)
+            run_seconds = std::atof(argv[++i]);
+        else if (std::strcmp(argv[i], "--stop-file") == 0 && i + 1 < argc)
+            stop_file = argv[++i];
         else if (std::strcmp(argv[i], "--help") == 0) {
             RADAR_LOG << "radar_app [--domain N] [--headless] [--no-dispose]\n"
                          "          [--gl-throttle] [--swap-interval N]\n"
+                         "          [--run-seconds N] [--stop-file PATH]\n"
                          "  --headless       components only (no window); crash-bisect\n"
                          "                   soak: same DDS traffic, zero GLFW/ImGui/AppKit\n"
                          "  --no-dispose     TrackManager never calls dispose_instance\n"
@@ -102,11 +236,31 @@ int main(int argc, char** argv) {
                          "                   (15 Hz); tests GL driver load as crash suspect\n"
                          "  --swap-interval  legacy knob; no-op with the Metal renderer\n"
                          "                   to 30 fps (default 1 = vsync 60 fps)\n"
-                         "  --no-titlebar    undecorated window; removes AppKit titlebar\n"
-                         "                   code (crash-victim cluster) to test causality\n";
+                         "  --no-titlebar    undecorated window; removes native titlebar\n"
+                         "  --run-seconds    stop cleanly after N seconds (automation)\n"
+                         "  --stop-file      stop cleanly when PATH appears\n";
             return 0;
         }
     }
+
+    if (run_seconds < 0.0) {
+        std::cerr << "--run-seconds must be non-negative\n";
+        return 2;
+    }
+
+    const auto process_started = std::chrono::steady_clock::now();
+    const auto stop_requested = [&] {
+        if (run_seconds > 0.0 &&
+            std::chrono::duration<double>(std::chrono::steady_clock::now()
+                                          - process_started).count() >= run_seconds)
+            return true;
+        if (!stop_file.empty()) {
+            std::error_code ec;
+            if (std::filesystem::exists(stop_file, ec) && !ec)
+                return true;
+        }
+        return false;
+    };
 
     radar::SimClock::start();
     RADAR_LOG << "[radar_app] starting on DDS domain " << domain << "\n";
@@ -145,13 +299,18 @@ int main(int argc, char** argv) {
         // UI/windowing layer, not in the DDS/component layer.
         std::signal(SIGINT, on_sigint);
         RADAR_LOG << "[radar_app] headless soak mode; Ctrl+C to stop\n";
-        while (g_running.load()) {
-            std::this_thread::sleep_for(std::chrono::seconds(10));
-            RADAR_LOG << "[radar_app] alive t="
-                      << radar::SimClock::sim_millis() / 1000 << " s\n";
+        auto next_heartbeat = std::chrono::steady_clock::now();
+        while (g_running.load() && !stop_requested()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            if (std::chrono::steady_clock::now() >= next_heartbeat) {
+                next_heartbeat += std::chrono::seconds(10);
+                RADAR_LOG << "[radar_app] alive t="
+                          << radar::SimClock::sim_millis() / 1000 << " s\n";
+            }
         }
     } else {
         radar::ui::UiApp app(bus, console);
+        app.set_stop_requested(stop_requested);
         if (gl_throttle) {
             app.set_bscope_upload_decimation(4);
             RADAR_LOG << "[radar_app] --gl-throttle: B-scope upload at 15 Hz\n";
@@ -176,5 +335,6 @@ int main(int argc, char** argv) {
     processor.stop();
     scheduler.stop();
     ship.stop();
+    RADAR_LOG << "[radar_app] components stopped\n";
     return rc;
 }

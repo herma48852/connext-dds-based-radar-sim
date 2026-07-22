@@ -23,10 +23,13 @@ class ForwardingListener : public dds::sub::NoOpDataReaderListener<T> {
 public:
     explicit ForwardingListener(Owner* owner) : owner_(owner) {}
     void on_data_available(dds::sub::DataReader<T>& reader) override {
-        auto samples = reader.take();
-        for (const auto& s : samples)
-            if (s.info().valid())
-                (owner_->*Method)(s.data());
+        T sample;
+        dds::sub::SampleInfo info;
+        for (int i = 0;
+             i < 256 && reader.extensions().take(sample, info); ++i) {
+            if (info.valid())
+                (owner_->*Method)(sample);
+        }
     }
 private:
     Owner* owner_;
@@ -38,10 +41,12 @@ class TrackListener : public dds::sub::NoOpDataReaderListener<types::TargetTrack
 public:
     explicit TrackListener(HmiUi* owner) : owner_(owner) {}
     void on_data_available(dds::sub::DataReader<types::TargetTrack>& reader) override {
-        auto samples = reader.take();
-        for (const auto& s : samples) {
-            if (s.info().valid()) {
-                owner_->on_track(s.data());
+        types::TargetTrack sample;
+        dds::sub::SampleInfo info;
+        for (int i = 0;
+             i < 256 && reader.extensions().take(sample, info); ++i) {
+            if (info.valid()) {
+                owner_->on_track(sample);
                 continue;
             }
             // Invalid sample on take(): instance lifecycle event (dispose /
@@ -50,7 +55,7 @@ public:
             // the two-argument out-param form.)
             try {
                 types::TargetTrack key;
-                reader.key_value(key, s.info().instance_handle());
+                reader.key_value(key, info.instance_handle());
                 owner_->on_track_dropped(key.track_id);
             } catch (const dds::core::Error&) {
                 // instance already reclaimed; the age-out will catch it
@@ -98,6 +103,15 @@ void HmiUi::start() {
         dds::core::status::StatusMask::data_available());
 
     spawn([this] { housekeeping_loop(); });
+}
+
+void HmiUi::stop() {
+    stop_.store(true);
+    detach_listener(track_reader_);
+    detach_listener(det_reader_);
+    detach_listener(ship_reader_);
+    detach_listener(cal_reader_);
+    join_all();
 }
 
 // --- DDS callbacks (receive threads) ---------------------------------------

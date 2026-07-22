@@ -1,6 +1,7 @@
 #include "UiApp.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <iostream>
 
 #include <imgui.h>
@@ -33,17 +34,39 @@ bool UiApp::init() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+#if defined(_WIN32)
+    glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
+#endif
 #endif
     // Crash-investigation knob (--no-titlebar): strip AppKit titlebar code.
     if (undecorated_)
         glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
 
-    window_ = glfwCreateWindow(1800, 1100, "AESA Radar Console - SPY-6 class",
+    int window_width = 1800;
+    int window_height = 1100;
+#if defined(_WIN32)
+    int work_x = 0, work_y = 0, work_width = 1920, work_height = 1080;
+    GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+    if (monitor) {
+        glfwGetMonitorWorkarea(
+            monitor, &work_x, &work_y, &work_width, &work_height);
+        window_width = std::min(
+            {window_width, work_width, std::max(800, work_width * 95 / 100)});
+        window_height = std::min(
+            {window_height, work_height, std::max(600, work_height * 90 / 100)});
+    }
+#endif
+    window_ = glfwCreateWindow(window_width, window_height,
+                               "AESA Radar Console - SPY-6 class",
                                nullptr, nullptr);
     if (!window_) {
         std::cerr << "GLFW window creation failed\n";
         return false;
     }
+#if defined(_WIN32)
+    glfwSetWindowPos(window_, work_x + (work_width - window_width) / 2,
+                     work_y + (work_height - window_height) / 2);
+#endif
 #if !defined(__APPLE__)
     glfwMakeContextCurrent(window_);
     glfwSwapInterval(swap_interval_); // vsync: 1 = 60 FPS cap, 2 = 30 FPS
@@ -56,13 +79,7 @@ bool UiApp::init() {
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr; // keep the demo layout deterministic
 
-    float sx = 1.0f, sy = 1.0f;
-    glfwGetWindowContentScale(window_, &sx, &sy);
-    // Guard against a bogus 0/NaN content scale (reported on some macOS
-    // multi-monitor moves): a zero font scale crashes ImGui's atlas builder.
-    if (!(sx >= 1.0f && sx <= 4.0f)) sx = 1.0f;
-    io.FontGlobalScale = sx;              // crisp text on Retina/HiDPI
-    theme::apply_style(sx);
+    update_content_scale();
 
 #if defined(__APPLE__)
     ImGui_ImplGlfw_InitForOther(window_, true);
@@ -77,6 +94,18 @@ bool UiApp::init() {
     bscope_.init_gl();
 #endif
     return true;
+}
+
+void UiApp::update_content_scale() {
+    float sx = 1.0f, sy = 1.0f;
+    glfwGetWindowContentScale(window_, &sx, &sy);
+    if (!(sx >= 1.0f && sx <= 4.0f) || !std::isfinite(sx))
+        sx = 1.0f;
+    if (std::fabs(sx - content_scale_) < 0.01f)
+        return;
+    content_scale_ = sx;
+    ImGui::GetIO().FontGlobalScale = sx;
+    theme::apply_style(sx);
 }
 
 void UiApp::shutdown() {
@@ -101,6 +130,11 @@ int UiApp::run() {
 
     while (!glfwWindowShouldClose(window_)) {
         glfwPollEvents();
+        if (stop_requested_ && stop_requested_()) {
+            glfwSetWindowShouldClose(window_, GLFW_TRUE);
+            continue;
+        }
+        update_content_scale();
 
         const float dt = ImGui::GetIO().DeltaTime > 0.0f
             ? ImGui::GetIO().DeltaTime : 1.0f / 60.0f;

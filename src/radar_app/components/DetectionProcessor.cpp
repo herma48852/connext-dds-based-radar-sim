@@ -26,10 +26,13 @@ class ForwardingListener : public dds::sub::NoOpDataReaderListener<T> {
 public:
     explicit ForwardingListener(Owner* owner) : owner_(owner) {}
     void on_data_available(dds::sub::DataReader<T>& reader) override {
-        auto samples = reader.take();
-        for (const auto& s : samples)
-            if (s.info().valid())
-                (owner_->*Method)(s.data());
+        T sample;
+        dds::sub::SampleInfo info;
+        for (int i = 0;
+             i < 256 && reader.extensions().take(sample, info); ++i) {
+            if (info.valid())
+                (owner_->*Method)(sample);
+        }
     }
 private:
     Owner* owner_;
@@ -63,6 +66,14 @@ void DetectionProcessor::start() {
         dds::core::status::StatusMask::data_available());
 
     spawn([this] { return_synthesis_loop(); });
+}
+
+void DetectionProcessor::stop() {
+    stop_.store(true);
+    detach_listener(beam_reader_);
+    detach_listener(raw_reader_);
+    detach_listener(truth_reader_);
+    join_all();
 }
 
 void DetectionProcessor::on_beam_command(const types::BeamCommand& cmd) {

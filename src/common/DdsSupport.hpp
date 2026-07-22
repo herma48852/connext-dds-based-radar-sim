@@ -18,6 +18,14 @@
 #include <stdexcept>
 #include <string>
 
+#if defined(_WIN32)
+#  include <windows.h>
+#elif defined(__APPLE__)
+#  include <mach-o/dyld.h>
+#elif defined(__linux__)
+#  include <unistd.h>
+#endif
+
 #include <dds/core/ddscore.hpp>
 #include <dds/domain/ddsdomain.hpp>
 #include <dds/pub/ddspub.hpp>
@@ -28,6 +36,31 @@
 
 namespace radds {
 
+inline std::filesystem::path executable_directory() {
+#if defined(_WIN32)
+    std::wstring buffer(32768, L'\0');
+    const DWORD length = GetModuleFileNameW(
+        nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+    if (length == 0 || length == buffer.size())
+        return {};
+    buffer.resize(length);
+    return std::filesystem::path(buffer).parent_path();
+#elif defined(__APPLE__)
+    uint32_t size = 0;
+    (void)_NSGetExecutablePath(nullptr, &size);
+    std::string buffer(size, '\0');
+    if (_NSGetExecutablePath(buffer.data(), &size) != 0)
+        return {};
+    return std::filesystem::weakly_canonical(buffer).parent_path();
+#elif defined(__linux__)
+    std::error_code ec;
+    const auto executable = std::filesystem::read_symlink("/proc/self/exe", ec);
+    return ec ? std::filesystem::path{} : executable.parent_path();
+#else
+    return {};
+#endif
+}
+
 // Resolve the QoS file: $RADAR_QOS_FILE overrides; otherwise look for
 // "qos/radar_qos.xml" relative to CWD, then next to the executable tree.
 // Note: QosProvider accepts plain paths in its URL group; do NOT prefix
@@ -35,12 +68,17 @@ namespace radds {
 inline std::string qos_file_uri() {
     if (const char* env = std::getenv("RADAR_QOS_FILE"))
         return env;
-    const std::filesystem::path rel = "qos/radar_qos.xml";
-    if (std::filesystem::exists(rel))
-        return std::filesystem::absolute(rel).string();
-    const std::filesystem::path alt = "../qos/radar_qos.xml";
-    if (std::filesystem::exists(alt))
-        return std::filesystem::absolute(alt).string();
+    const auto executable_dir = executable_directory();
+    const std::filesystem::path candidates[] = {
+        "qos/radar_qos.xml",
+        "../qos/radar_qos.xml",
+        executable_dir / "qos/radar_qos.xml",
+        executable_dir / "../qos/radar_qos.xml"
+    };
+    for (const auto& candidate : candidates) {
+        if (!candidate.empty() && std::filesystem::exists(candidate))
+            return std::filesystem::absolute(candidate).lexically_normal().string();
+    }
     throw std::runtime_error(
         "qos/radar_qos.xml not found; set RADAR_QOS_FILE to its path");
 }

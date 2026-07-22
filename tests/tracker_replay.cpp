@@ -11,6 +11,7 @@
 #include "TrackerCore.hpp"
 
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
@@ -45,6 +46,28 @@ struct Truth {
     double rcs_dbsm;
 };
 
+// A standard engine has stable output, but std::normal_distribution does not.
+// Summing 12 exact 24-bit uniforms gives a deterministic, zero-mean,
+// unit-variance Gaussian approximation without implementation-defined state.
+class DeterministicNormal {
+public:
+    DeterministicNormal(uint32_t seed, float sigma)
+        : rng_(seed), sigma_(sigma) {}
+
+    float next() {
+        uint64_t sum = 0;
+        for (int i = 0; i < 12; ++i)
+            sum += rng_() >> 8;
+        constexpr double kUnit24 = 1.0 / 16777216.0;
+        return static_cast<float>((static_cast<double>(sum) * kUnit24 - 6.0)
+                                  * static_cast<double>(sigma_));
+    }
+
+private:
+    std::mt19937 rng_;
+    float sigma_;
+};
+
 // Own ship: straight course, heading 45 deg, 20 kn (matches UI screenshot)
 constexpr double kOwnHdgDeg = 45.0;
 constexpr double kOwnSpeed  = 20.0 * 0.514444;
@@ -76,8 +99,7 @@ int main(int argc, char** argv) {
             return 2;
         }
     }
-    std::mt19937 rng(42);
-    std::normal_distribution<float> noise(0.0f, (float)kNoiseSigma);
+    DeterministicNormal noise(42, static_cast<float>(kNoiseSigma));
 
     // Fleet: inbound profiles echoing target_gen (world ENU at t=0)
     std::vector<Truth> fleet = {
@@ -118,7 +140,7 @@ int main(int argc, char** argv) {
 
         // --- DetectionProcessor replica: 10 x 1 kHz pulses per 10 ms dwell ---
         for (int pulse = 0; pulse < 10; ++pulse) {
-            for (auto& v : iq) v = noise(rng);
+            for (auto& v : iq) v = noise.next();
             for (size_t ti = 0; ti < fleet.size(); ++ti) {
                 const auto& t = fleet[ti];
                 const double rx = t.x - own_x, ry = t.y - own_y;
@@ -216,9 +238,9 @@ int main(int argc, char** argv) {
         };
         check(std::fabs(sim_s - 300.0) < 1e-9,
               "tracker golden regression requires a 300 second replay");
-        check(det_count == 1761, "expected 1761 deterministic detections");
-        check(births == 198, "expected 198 deterministic track births");
-        check(deaths == 211, "expected 211 deterministic track deaths");
+        check(det_count == 1562, "expected 1562 deterministic detections");
+        check(births == 27, "expected 27 deterministic track births");
+        check(deaths == 34, "expected 34 deterministic track deaths");
         check(max_tracks <= static_cast<size_t>(TrackerCore::kMaxTracks),
               "track count exceeded the bounded instance pool");
         check(id_pool_valid, "a track ID escaped the bounded 1000..1255 pool");

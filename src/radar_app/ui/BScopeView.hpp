@@ -11,6 +11,9 @@
 #include <imgui.h>
 #if !defined(__APPLE__)
 #include <GLFW/glfw3.h>   // GL texture handle
+#ifndef GL_CLAMP_TO_EDGE
+#define GL_CLAMP_TO_EDGE 0x812F
+#endif
 #endif
 
 #include "../DataBus.hpp"

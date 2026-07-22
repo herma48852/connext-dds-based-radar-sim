@@ -1,0 +1,34 @@
+name: Portable tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake --preset windows-portable
+      - name: Build
+        run: cmake --build --preset windows-portable-relwithdebinfo
+      - name: Test
+        run: ctest --preset windows-portable-relwithdebinfo
+
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: >-
+          cmake -S . -B build/portable
+          -DRADAR_BUILD_APPLICATIONS=OFF
+          -DRADAR_BUILD_UI_TESTS=ON
+          -DBUILD_TESTING=ON
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
+      - name: Build
+        run: cmake --build build/portable --parallel
+      - name: Test
+        run: ctest --test-dir build/portable --output-on-failure

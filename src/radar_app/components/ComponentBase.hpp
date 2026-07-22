@@ -44,6 +44,12 @@ protected:
     template <typename F>
     void spawn(F&& fn) { threads_.emplace_back(std::forward<F>(fn)); }
 
+    template <typename T>
+    static void detach_listener(dds::sub::DataReader<T>& reader) {
+        if (reader != dds::core::null)
+            reader.set_listener(nullptr);
+    }
+
     void join_all() {
         for (auto& t : threads_)
             if (t.joinable()) t.join();

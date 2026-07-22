@@ -22,6 +22,26 @@ This should be a moderate port rather than a rewrite. The project already:
 The assumed target is native Windows 11 x64 with Visual Studio 2022 and
 Connext DDS 7.7.0.
 
+## Implementation status (2026-07-21)
+
+The native Windows implementation is now present on `main`'s working tree:
+
+- Visual Studio 2022 full and portable-test presets.
+- Shared Connext DLL linkage and generated Modern C++ types.
+- A GLFW/OpenGL 3.3 radar UI with an embedded Per-Monitor V2 manifest.
+- Cross-library deterministic tracker replay coverage.
+- PowerShell demo and DDS integration runners with cooperative shutdown.
+- Windows hosted portable CI, self-hosted full CI, ZIP packaging, and a
+  Windows runbook.
+
+Local Windows verification completed with all three CTest regressions, a
+16-target DDS integration smoke from both the source and installed layouts,
+a timed windowed OpenGL launch, embedded-manifest inspection, and ZIP
+generation. The remaining final-acceptance work is hardware/network/manual:
+the 30-minute DDS soak, 60-minute windowed soak, DPI checks at every supported
+scale, multi-host discovery, Connext Studio choreography, and execution on a
+clean Windows 11 machine.
+
 ## 1. Establish the Windows development environment
 
 Install:

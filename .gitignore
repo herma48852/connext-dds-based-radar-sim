@@ -9,6 +9,8 @@ generated/
 CMakeCache.txt
 CMakeFiles/
 compile_commands.json
+CMakeUserPresets.json
+logs/
 build*/
 RadarSim-crash-audit-fixes.zip
 RadarSim-crash-audit-fixes.zip

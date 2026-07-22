@@ -48,6 +48,7 @@ inline void bscope_gradient(float t, unsigned char& r, unsigned char& g, unsigne
 
 // Apply the flat dark style to the current ImGui context.
 inline void apply_style(float content_scale) {
+    ImGui::StyleColorsDark();
     ImGuiStyle& s = ImGui::GetStyle();
     s.WindowRounding    = 6.0f;
     s.ChildRounding     = 6.0f;

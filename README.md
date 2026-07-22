@@ -131,18 +131,33 @@ beamwidth accordingly.
 
 ## Windows 11 port (Visual Studio 2022)
 
-Everything is already portable; the only platform work is the toolchain:
+Install Connext DDS 7.7.0 with the `x64Win64VS2017` target package, then use
+the checked-in Visual Studio presets:
 
 ```powershell
-cmake -B build -G "Visual Studio 17 2022" -A x64 `
-      -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-windows-msvc.cmake `
-      -DCONNEXTDDS_DIR="C:\Program Files\rti_connext_dds-7.7.0"
-cmake --build build --config RelWithDebInfo
+$env:CONNEXTDDS_DIR = "C:\Program Files\rti_connext_dds-7.7.0"
+cmake --preset windows-vs2022-x64
+cmake --build --preset windows-relwithdebinfo
+ctest --preset windows-relwithdebinfo
+.\scripts\windows\smoke-test.ps1 -Domain 92
+.\scripts\windows\run-demo.ps1 -Domain 92 -Targets 16
+```
+
+From a regular Command Prompt, use the `.cmd` wrappers instead:
+
+```bat
+scripts\windows\smoke-test.cmd -Domain 92
+scripts\windows\run-demo.cmd -Domain 92 -Targets 16
 ```
 
 - Connext target: `x64Win64VS2017` (binary-compatible with VS2022).
-- GLFW/ImGui/ImPlot still come from FetchContent (vcpkg optional).
-- Put Connext DLLs on `PATH` (or copy next to the exe) before running.
+- The UI embeds Per-Monitor V2 DPI awareness and uses GLFW/OpenGL 3.3.
+- `windows-portable` builds all three regressions without Connext.
+- FetchContent supplies pinned GLFW, ImGui, and ImPlot sources.
+- Put the Connext target DLL directory on `PATH` before running.
+
+See [docs/RUN_WINDOWS.md](docs/RUN_WINDOWS.md) for environment setup,
+firewall guidance, integration automation, DPI validation, and packaging.
 
 ---
 

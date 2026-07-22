@@ -14,7 +14,6 @@
 #  - Connext DLLs must be on PATH when running (or copied next to the exe).
 
 set(CMAKE_SYSTEM_NAME Windows)
-set(CMAKE_GENERATOR_PLATFORM x64)
 
 # Connext Windows libraries are built with the dynamic CRT.
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>")
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")

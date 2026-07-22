@@ -1,0 +1,31 @@
+name: Full Windows Connext validation
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["demo-*-cross-platform", "v*"]
+
+jobs:
+  windows-connext:
+    runs-on: [self-hosted, Windows, X64, connext-7.7.0]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake --preset windows-vs2022-x64
+      - name: Build
+        run: cmake --build --preset windows-relwithdebinfo
+      - name: Regressions
+        run: ctest --preset windows-relwithdebinfo
+      - name: DDS integration smoke
+        shell: powershell
+        run: .\scripts\windows\smoke-test.ps1 -Domain 92
+      - name: Package
+        run: cpack --config build\windows-x64\CPackConfig.cmake -C RelWithDebInfo
+      - name: Upload logs and package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AesaRadarSim-windows-x64
+          path: |
+            build/windows-x64/smoke-logs/
+            build/windows-x64/package/*.zip
