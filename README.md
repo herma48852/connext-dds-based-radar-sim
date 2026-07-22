@@ -169,9 +169,9 @@ beamwidth accordingly.
 For a clean Windows 11 machine, follow
 **[docs/RUN_WINDOWS.md](docs/RUN_WINDOWS.md) from Step 1 without skipping
 steps**. Enter its commands in a regular Command Prompt (`cmd.exe`). The
-runbook clones the repository, changes to the repository root once, verifies
-every prerequisite, and keeps all setup, build, test, and launch commands in
-that directory.
+runbook clones the repository into a parent folder selected by the user,
+changes to the repository root once, verifies every prerequisite, and keeps
+all setup, build, test, and launch commands in that directory.
 
 - Connext target: `x64Win64VS2017` (binary-compatible with VS2022).
 - The UI embeds Per-Monitor V2 DPI awareness and uses GLFW/OpenGL 3.3.

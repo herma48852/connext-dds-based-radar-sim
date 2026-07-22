@@ -10,6 +10,7 @@ Rules for this runbook:
   text or the `C:\...>` prompt itself.
 - Enter commands one line at a time. If a command reports an error, stop and
   fix that error before continuing.
+- In Step 3, choose any existing folder where you want the repository cloned.
 - The commands assume that RTI Connext DDS is installed in
   `C:\Program Files\rti_connext_dds-7.7.0`. If it is elsewhere, change only
   the `CONNEXTDDS_DIR` line in Step 4.
@@ -57,20 +58,27 @@ repair that installation, and open a new Command Prompt.
 
 ## 3. Clone the Repository and Enter Its Root
 
-Enter:
+First, use `cd /d` to enter any existing folder where you want the repository
+directory created. For example, if you want the clone under `D:\Development`,
+enter:
 
 ```bat
-cd /d "%USERPROFILE%"
+cd /d "D:\Development"
+```
+
+Replace `D:\Development` with your chosen folder. Confirm that the Command
+Prompt now shows that location, then enter:
+
+```bat
 git clone https://github.com/herma48852/connext-dds-based-radar-sim.git
-cd /d "%USERPROFILE%\connext-dds-based-radar-sim"
+cd /d "connext-dds-based-radar-sim"
 dir /b CMakePresets.json
 ```
 
-This creates the clone at
-`%USERPROFILE%\connext-dds-based-radar-sim`. The last command must print
-`CMakePresets.json`, and the prompt should end in
-`connext-dds-based-radar-sim>`. This is the repository root. Do not change
-directories again while following this runbook.
+Git creates `connext-dds-based-radar-sim` inside the folder you selected. The
+last command must print `CMakePresets.json`, and the prompt should end in
+`connext-dds-based-radar-sim>`. This is the repository root. Remember its full
+path, and do not change directories again while following this runbook.
 
 ## 4. Configure and Verify Connext
 
@@ -87,9 +95,14 @@ where rtiddsgen
 rtiddsgen -version
 ```
 
-Both checks must print `OK`, `where` must find `rtiddsgen`, and the version
-must be 7.7.0. If any check fails, stop. Correct `CONNEXTDDS_DIR` or install
-the missing Connext host or target package before continuing.
+Both checks must print `OK`, `where` must find `rtiddsgen.bat` beneath the
+configured Connext directory, and `rtiddsgen -version` must finish with
+`Done`. RTI versions this generator separately from the Connext product, so
+Connext DDS 7.7.0 normally reports `rtiddsgen version 4.7.0`. The configure
+output in Step 5 performs the product-version check and must report a suitable
+RTI Connext DDS version of 7.7.0. If any check fails, stop. Correct
+`CONNEXTDDS_DIR` or install the missing Connext host or target package before
+continuing.
 
 These environment variables apply only to this Command Prompt. Keep it open
 until the build, tests, smoke test, and demo are finished.
@@ -104,12 +117,23 @@ cmake --build --preset windows-relwithdebinfo
 ctest --preset windows-relwithdebinfo
 ```
 
+The configure command only creates Visual Studio project files; it does not
+compile `radar_app.exe` or `target_gen.exe`. You must run the build command
+before the smoke test. The supported smoke-test and demo launchers also detect
+missing executables and run the configure/build steps automatically, so an
+accidentally omitted build cannot leave the clean-machine workflow stuck.
+
 The first configure can take several minutes while it downloads pinned GLFW,
 Dear ImGui, and ImPlot sources. Success requires all of the following:
 
 - Configure ends with `Configuring done` and `Generating done`.
 - Build completes without an error.
 - CTest reports `100% tests passed`.
+
+During Windows configure, the `CMAKE_HAVE_LIBC_PTHREAD` probe is expected to
+say `Failed`, and the `pthread`/`pthreads` library probes are expected to say
+`not found`. They are Unix capability checks, not configure errors; continue
+when CMake subsequently reports `Found Threads: TRUE`.
 
 Do not continue if any of these checks fails. Because this is a clean clone,
 do not copy in or reuse a `build` directory from another computer, operating
@@ -210,11 +234,12 @@ the authorized Connext runtime or place its `x64Win64VS2017` DLL directory on
   `PATH` option enabled. Close Command Prompt, open a new one, and repeat the
   verification in Step 2.
 - **Clone says the destination already exists:** do not clone over it and do
-  not delete it. Enter
-  `cd /d "%USERPROFILE%\connext-dds-based-radar-sim"`, run
+  not delete it. If it is the intended clone, enter that repository's full
+  path with `cd /d "C:\full\path\to\connext-dds-based-radar-sim"`, run
   `dir /b CMakePresets.json`, and continue only if that file is printed.
-- **Command Prompt was closed:** open a new Command Prompt, enter
-  `cd /d "%USERPROFILE%\connext-dds-based-radar-sim"`, repeat every command
+- **Command Prompt was closed:** open a new Command Prompt and return to the
+  location selected in Step 3 with
+  `cd /d "C:\full\path\to\connext-dds-based-radar-sim"`. Repeat every command
   in Step 4, and then resume at the step that was interrupted.
 - **CMake cannot find Visual Studio 2022 or MSVC:** open Visual Studio
   Installer, choose **Modify**, and install the workload and all three
@@ -229,6 +254,10 @@ the authorized Connext runtime or place its `x64Win64VS2017` DLL directory on
 - **CMake fails while downloading GLFW, ImGui, or ImPlot:** confirm that the
   machine can reach GitHub and that its proxy permits Git and CMake downloads,
   then rerun the first command in Step 5.
+- **A launcher says the Windows executables are missing:** update the clone to
+  the latest revision. The current launchers configure and build missing
+  executables automatically. To build explicitly, run
+  `cmake --build --preset windows-relwithdebinfo` from the repository root.
 - **An executable reports a DLL load failure:** the current Command Prompt
   does not have the Connext runtime directory on `PATH`. Repeat all of Step 4
   in that same Command Prompt and retry.

@@ -264,6 +264,7 @@ if(RADAR_BUILD_APPLICATIONS)
 
     if(WIN32)
         install(PROGRAMS
+            scripts/windows/ensure-build.ps1
             scripts/windows/run-demo.cmd
             scripts/windows/run-demo.ps1
             scripts/windows/smoke-test.cmd

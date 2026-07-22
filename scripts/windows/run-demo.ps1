@@ -17,29 +17,6 @@ param(
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $buildDirWasSpecified = [bool]$BuildDir
-if (-not $BuildDir) {
-    $BuildDir = Join-Path $repoRoot "build\windows-x64"
-}
-$BuildDir = [System.IO.Path]::GetFullPath($BuildDir)
-$configDir = Join-Path $BuildDir $Configuration
-$radarExe = Join-Path $configDir "radar_app.exe"
-$targetExe = Join-Path $configDir "target_gen.exe"
-if (-not (Test-Path -LiteralPath $radarExe) -and
-    (Test-Path -LiteralPath (Join-Path $BuildDir "radar_app.exe"))) {
-    $configDir = $BuildDir
-}
-if (-not $buildDirWasSpecified -and
-    -not (Test-Path -LiteralPath (Join-Path $configDir "radar_app.exe")) -and
-    (Test-Path -LiteralPath (Join-Path $repoRoot "bin\radar_app.exe"))) {
-    $BuildDir = $repoRoot
-    $configDir = Join-Path $repoRoot "bin"
-}
-$radarExe = Join-Path $configDir "radar_app.exe"
-$targetExe = Join-Path $configDir "target_gen.exe"
-if (-not (Test-Path -LiteralPath $radarExe) -or
-    -not (Test-Path -LiteralPath $targetExe)) {
-    throw "Windows executables not found in '$configDir'."
-}
 
 if (-not $ConnextDir) {
     $ConnextDir = if ($env:CONNEXTDDS_DIR) { $env:CONNEXTDDS_DIR } else { $env:NDDSHOME }
@@ -51,6 +28,17 @@ $rtiLibDir = Join-Path $ConnextDir "lib\x64Win64VS2017"
 if (-not (Test-Path -LiteralPath $rtiLibDir)) {
     throw "Connext target libraries not found at '$rtiLibDir'."
 }
+$env:CONNEXTDDS_DIR = $ConnextDir
+
+. (Join-Path $PSScriptRoot "ensure-build.ps1")
+$resolvedBuild = Resolve-RadarWindowsBuild -RepoRoot $repoRoot `
+    -BuildDir $BuildDir -Configuration $Configuration `
+    -BuildDirWasSpecified $buildDirWasSpecified
+$BuildDir = $resolvedBuild.BuildDir
+$configDir = $resolvedBuild.ConfigDir
+$radarExe = $resolvedBuild.RadarExe
+$targetExe = $resolvedBuild.TargetExe
+
 $qosFile = @(
     (Join-Path $repoRoot "qos\radar_qos.xml"),
     (Join-Path $configDir "qos\radar_qos.xml")
