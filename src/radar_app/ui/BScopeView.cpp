@@ -439,10 +439,13 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
                           3.0f);
         dl->AddRect(inset_min, inset_max, IM_COL32(120, 105, 65, 210),
                     3.0f);
+        const char* inset_heading =
+            "3D BEAM SHAPE - 5 SECOND ROTATION - ANGULAR ZOOM: -10 TO +10 deg";
+        if (ImGui::CalcTextSize(inset_heading).x > inset_w - 14.0f)
+            inset_heading = "3D BEAM - 5 s ROTATION - ANGULAR ZOOM +/-10 deg";
         dl->AddText(
             ImVec2(inset_min.x + 7.0f, inset_min.y + 5.0f),
-            IM_COL32(255, 215, 105, 255),
-            "3D BEAM SHAPE - 5 SECOND ROTATION - ANGULAR ZOOM: -10 TO +10 deg");
+            IM_COL32(255, 215, 105, 255), inset_heading);
 
         const float legend_y =
             inset_min.y + 8.0f + ImGui::GetFontSize();
@@ -752,39 +755,56 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
         }
     }
 
-    // dashed sector boundary lines
-    if (sector_mode) {
-        for (double edge : {sector_center - sector_width / 2, sector_center + sector_width / 2}) {
-            double a = std::fmod(edge + 360.0, 360.0);
-            const float x = x_of_az(a);
-            for (float y = wp.y; y < wp.y + h; y += 8.0f)
-                dl->AddLine(ImVec2(x, y), ImVec2(x, std::min(y + 4.0f, wp.y + h)),
-                            IM_COL32(255, 220, 80, 160), 1.0f);
+    // BEAM FORMATION replaces the B-scope presentation.  Do not draw the
+    // standard sector lines, target IDs, or axes after its inset: doing so
+    // placed live B-scope annotations on top of the 3D beam on macOS.
+    if (!show_beam_formation) {
+        // dashed sector boundary lines
+        if (sector_mode) {
+            for (double edge : {sector_center - sector_width / 2,
+                                sector_center + sector_width / 2}) {
+                double a = std::fmod(edge + 360.0, 360.0);
+                const float x = x_of_az(a);
+                for (float y = wp.y; y < wp.y + h; y += 8.0f)
+                    dl->AddLine(
+                        ImVec2(x, y),
+                        ImVec2(x, std::min(y + 4.0f, wp.y + h)),
+                        IM_COL32(255, 220, 80, 160), 1.0f);
+            }
         }
-    }
 
-    // track markers with IDs
-    for (const auto& t : tracks) {
-        const double range = std::hypot(t.x_m, t.y_m);
-        if (range > kRangeMaxM) continue;
-        const double az_world = std::atan2(t.x_m, t.y_m) * 180.0 / 3.14159265358979323846;
-        double az_ship = std::fmod(az_world - ship.heading_deg + 360.0, 360.0);
-        const ImVec2 p(x_of_az(az_ship), y_of_range(range));
-        dl->AddRect(ImVec2(p.x - 4, p.y - 4), ImVec2(p.x + 4, p.y + 4),
-                    theme::col_track(), 0.0f, 0, 1.5f);
-        char lbl[16];
-        std::snprintf(lbl, sizeof lbl, "%lld", (long long)t.track_id);
-        dl->AddText(ImVec2(p.x + 6, p.y - 6), theme::col_text(), lbl);
-    }
+        // track markers with IDs
+        for (const auto& t : tracks) {
+            const double range = std::hypot(t.x_m, t.y_m);
+            if (range > kRangeMaxM) continue;
+            const double az_world =
+                std::atan2(t.x_m, t.y_m)
+                * 180.0 / 3.14159265358979323846;
+            double az_ship =
+                std::fmod(az_world - ship.heading_deg + 360.0, 360.0);
+            const ImVec2 p(x_of_az(az_ship), y_of_range(range));
+            dl->AddRect(
+                ImVec2(p.x - 4, p.y - 4), ImVec2(p.x + 4, p.y + 4),
+                theme::col_track(), 0.0f, 0, 1.5f);
+            char lbl[16];
+            std::snprintf(lbl, sizeof lbl, "%lld",
+                          (long long)t.track_id);
+            dl->AddText(
+                ImVec2(p.x + 6, p.y - 6), theme::col_text(), lbl);
+        }
 
-    // axis labels
-    char lbl[32];
-    for (int deg = 0; deg < 360; deg += 60) {
-        std::snprintf(lbl, sizeof lbl, "%03d", deg);
-        dl->AddText(ImVec2(x_of_az(deg) - 8, wp.y + h - 14), theme::col_text_dim(), lbl);
+        // axis labels
+        char lbl[32];
+        for (int deg = 0; deg < 360; deg += 60) {
+            std::snprintf(lbl, sizeof lbl, "%03d", deg);
+            dl->AddText(
+                ImVec2(x_of_az(deg) - 8, wp.y + h - 14),
+                theme::col_text_dim(), lbl);
+        }
+        std::snprintf(lbl, sizeof lbl, "%.0fkm", kRangeMaxM / 1000.0);
+        dl->AddText(
+            ImVec2(wp.x + 4, wp.y + 4), theme::col_text_dim(), lbl);
     }
-    std::snprintf(lbl, sizeof lbl, "%.0fkm", kRangeMaxM / 1000.0);
-    dl->AddText(ImVec2(wp.x + 4, wp.y + 4), theme::col_text_dim(), lbl);
 
     ImGui::Dummy(ImVec2(w, h));
     ImGui::End();

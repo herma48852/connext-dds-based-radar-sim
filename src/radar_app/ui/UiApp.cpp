@@ -104,8 +104,20 @@ void UiApp::update_content_scale() {
     if (std::fabs(sx - content_scale_) < 0.01f)
         return;
     content_scale_ = sx;
-    ImGui::GetIO().FontGlobalScale = sx;
+    ImGuiIO& io = ImGui::GetIO();
+#if defined(__APPLE__)
+    // GLFW/Metal already maps logical coordinates to the Retina framebuffer.
+    // Keep the UI at the same logical size as Windows and put the backing
+    // scale into the font rasterizer so glyphs stay sharp at 2x.
+    theme::configure_default_font(sx);
+    io.FontGlobalScale = 1.0f;
+    theme::apply_style(1.0f);
+    if (!metal_.rebuild_font_texture())
+        std::cerr << "Failed to rebuild Retina font texture\n";
+#else
+    io.FontGlobalScale = sx;
     theme::apply_style(sx);
+#endif
 }
 
 void UiApp::shutdown() {
@@ -175,11 +187,8 @@ int UiApp::run() {
 
         const ImGuiViewport* vp = ImGui::GetMainViewport();
         const float W = vp->Size.x, H = vp->Size.y;
-        // Bottom strip sized to its content at the active UI scale; the
-        // scopes are guaranteed the majority of the window. (The old
-        // formula multiplied by an ALREADY-scaled WindowPadding AND by
-        // FontGlobalScale, so on Retina it produced 1110pt of panels on
-        // an 1100pt window — the scopes were crushed to ~100px.)
+        // Bottom strip sized to its content at the active logical UI scale;
+        // Retina pixel density is handled by the font atlas, not this layout.
         const float ui_scale = ImGui::GetIO().FontGlobalScale;
         const float panel_h = std::clamp(240.0f * ui_scale,
                                          H * 0.27f, H * 0.5f);
@@ -191,13 +200,22 @@ int UiApp::run() {
                     ImVec2(0, 0), ImVec2(ppi_w, scope_h),
                     tracks, ship, bus_.current_beam_az_deg.load(), now_ms, dt);
 
+        // The comparison view needs enough vertical room for its status,
+        // legend, and rotating plots.  On a Retina Mac the 2x UI scale made
+        // the former 55% B-scope only a few text rows tall after chrome.
+        // Temporarily favor the B-scope while BEAM FORMATION is selected;
+        // the normal radar layout is unchanged when it is not.
+        const float ascope_share = show_beam_formation_ ? 0.32f : 0.45f;
+        const float ascope_h = scope_h * ascope_share;
+        const float bscope_h = scope_h - ascope_h;
+
         ascope_.render("A-SCOPE - AMPLITUDE / RANGE",
-                       ImVec2(ppi_w, 0), ImVec2(right_w, scope_h * 0.45f),
+                       ImVec2(ppi_w, 0), ImVec2(right_w, ascope_h),
                        trace, dt);
 
         bscope_.render("B-SCOPE - RANGE / AZIMUTH",
-                       ImVec2(ppi_w, scope_h * 0.45f),
-                       ImVec2(right_w, scope_h * 0.55f),
+                       ImVec2(ppi_w, ascope_h),
+                       ImVec2(right_w, bscope_h),
                        tracks, ship,
                        bus_.radar_mode.load() == 1,
                        bus_.sector_center_deg.load(),

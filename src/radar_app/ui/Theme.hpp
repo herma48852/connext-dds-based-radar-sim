@@ -46,6 +46,24 @@ inline void bscope_gradient(float t, unsigned char& r, unsigned char& g, unsigne
     b = (unsigned char)(fb * 255.f);
 }
 
+// Rebuild the embedded monospace font at the display's pixel density while
+// keeping Windows-compatible 13-point logical metrics.  On Retina, scaling
+// FontGlobalScale to 2 enlarged a 1x atlas and doubled every column/header;
+// RasterizerDensity instead supplies one atlas texel per framebuffer pixel.
+inline ImFont* configure_default_font(float raster_density) {
+    ImGuiIO& io = ImGui::GetIO();
+    io.Fonts->Clear();
+
+    ImFontConfig config;
+    config.SizePixels = 13.0f;
+    config.OversampleH = 1;
+    config.OversampleV = 1;
+    config.PixelSnapH = true;
+    config.RasterizerDensity = raster_density;
+    io.FontDefault = io.Fonts->AddFontDefault(&config);
+    return io.FontDefault;
+}
+
 // Apply the flat dark style to the current ImGui context.
 inline void apply_style(float content_scale) {
     ImGui::StyleColorsDark();

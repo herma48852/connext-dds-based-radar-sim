@@ -107,6 +107,8 @@ public:
         io.IniFilename = nullptr;
         io.DisplaySize = ImVec2(1200.0f, 1000.0f);
         io.DeltaTime = 1.0f / 60.0f;
+        radar::ui::theme::configure_default_font(2.0f);
+        io.FontGlobalScale = 1.0f;
         radar::ui::theme::apply_style(1.0f);
 
         // NewFrame requires a built atlas even though this test never uploads
@@ -214,6 +216,17 @@ int main() {
     // Warm up hover/window state and capture every production control rect.
     for (int i = 0; i < 4; ++i)
         ui.frame();
+
+    // Retina uses a denser atlas without doubling logical text metrics.
+    const ImGuiIO& io = ImGui::GetIO();
+    check(std::fabs(io.FontGlobalScale - 1.0f) < 1.0e-6f,
+          "Retina font keeps Windows-compatible logical scale");
+    check(io.Fonts->ConfigData.Size == 1 &&
+              std::fabs(io.Fonts->ConfigData[0].RasterizerDensity - 2.0f)
+                  < 1.0e-6f,
+          "Retina font atlas is rasterized at 2x density");
+    check(ImGui::CalcTextSize("T0000").x < 50.0f,
+          "Retina track-table text remains compact");
 
     // A changing visible heading must not accumulate/focus new ImGui windows.
     const int stable_window_count = GImGui->Windows.Size;

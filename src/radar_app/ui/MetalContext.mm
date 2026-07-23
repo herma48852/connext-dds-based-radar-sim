@@ -95,6 +95,13 @@ void MetalContext::render() {
     impl_->drawable = nil;
 }
 
+bool MetalContext::rebuild_font_texture() {
+    if (!impl_)
+        return true;
+    ImGui_ImplMetal_DestroyFontsTexture();
+    return ImGui_ImplMetal_CreateFontsTexture(impl_->device);
+}
+
 void* MetalContext::create_texture(int width, int height) {
     MTLTextureDescriptor* d =
         [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm

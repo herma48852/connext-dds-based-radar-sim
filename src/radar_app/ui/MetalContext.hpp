@@ -32,6 +32,10 @@ public:
     void new_frame();               // ImGui_ImplMetal_NewFrame(pass descriptor)
     void render();                  // encode draw data, present drawable, commit
 
+    // Re-upload ImGui's font atlas after a Retina-density change. A call
+    // before init() is a harmless no-op; the first NewFrame builds it.
+    bool rebuild_font_texture();
+
     // RGBA8 texture helpers (B-scope heat map). create_texture returns an
     // ImTextureID-compatible handle (bridged MTLTexture, owned by the
     // caller until destroy_texture).
