@@ -154,8 +154,8 @@ For a before/after comparison:
 
 1. Select **BEAM FORMATION** in the **SCENARIOS** pane while all RMAs are
    online.
-2. The centered 3D polar plot slowly rotates around the beam axis, showing the
-   nominal beam and its sidelobes.
+2. The centered 3D polar plot rotates around the beam axis every five seconds,
+   showing the nominal beam and its sidelobes.
 3. Click one or more blocks in **ARRAY FACE**.
 4. The nominal plot animates to the far left and the degraded live plot
    appears at center. Both continue rotating in phase so their shape

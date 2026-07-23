@@ -159,7 +159,7 @@ Both apps accept `--domain N` (default 0). The radar UI also has a
 **SCENARIOS** panel (bottom-right). Search/sector mode, degrade/restore array,
 self test, and track reset issue `Radar/SystemCommand`s. **BEAM FORMATION**
 is a local display toggle: it replaces the compact moving outage curtain with
-an animated, slowly rotating 3D comparison: nominal moves to the far left when
+an animated, rotating 3D comparison: nominal moves to the far left when
 an outage occurs, the degraded pattern appears at center, both rotate together
 for direct shape comparison, and nominal recenters on recovery.
 The **ARRAY FACE** panel issues `CMD_RMA_OFFLINE`/`CMD_RMA_ONLINE`:

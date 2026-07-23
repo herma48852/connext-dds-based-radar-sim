@@ -442,13 +442,13 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
         dl->AddText(
             ImVec2(inset_min.x + 7.0f, inset_min.y + 5.0f),
             IM_COL32(255, 215, 105, 255),
-            "3D BEAM SHAPE - SLOW ROTATION - ANGULAR ZOOM: -10 TO +10 deg");
+            "3D BEAM SHAPE - 5 SECOND ROTATION - ANGULAR ZOOM: -10 TO +10 deg");
 
         const float legend_y =
             inset_min.y + 8.0f + ImGui::GetFontSize();
         constexpr double kPi = 3.14159265358979323846;
         constexpr double kTwoPi = 2.0 * kPi;
-        constexpr double kSpinRateRadPerSec = kTwoPi / 36.0;
+        constexpr double kSpinRateRadPerSec = kTwoPi / 5.0;
         constexpr double kDisplayLimitDeg = 10.0;
         constexpr double kDisplayAngleScale = 45.0 / kDisplayLimitDeg;
         beam_spin_phase_rad_ = static_cast<float>(std::fmod(

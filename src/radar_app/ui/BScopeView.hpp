@@ -78,8 +78,8 @@ private:
     // is fully visible at center. The last degraded sample is retained while an
     // RMA-online transition animates back to nominal.
     float beam_comparison_mix_ = 0.0f;
-    // Slow roll around the beam axis. Both comparison plots share the phase
-    // so their shape differences remain directly comparable.
+    // Continuous five-second roll around the beam axis. Both comparison plots
+    // share the phase so their shape differences remain directly comparable.
     float beam_spin_phase_rad_ = 0.35f;
     app::BeamPatternView last_degraded_pattern_;
     bool have_last_degraded_pattern_ = false;
