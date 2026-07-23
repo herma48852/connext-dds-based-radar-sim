@@ -419,7 +419,7 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
             ImVec2(text_pos.x, text_pos.y + top_size.y + text_gap),
             IM_COL32(220, 195, 125, 255), status_detail);
 
-        // Stateful top-down comparison. Nominal starts centered. An outage
+        // Stateful 3D comparison. Nominal starts centered. An outage
         // moves it to the far left while the degraded live pattern fades in
         // at center. Restoring the RMA reverses the same transition while
         // the cached degraded sample remains available for visual continuity.
@@ -442,13 +442,20 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
         dl->AddText(
             ImVec2(inset_min.x + 7.0f, inset_min.y + 5.0f),
             IM_COL32(255, 215, 105, 255),
-            "TOP-DOWN BEAM SHAPE - ANGULAR ZOOM: -10 TO +10 deg");
+            "3D BEAM SHAPE - SLOW ROTATION - ANGULAR ZOOM: -10 TO +10 deg");
 
         const float legend_y =
             inset_min.y + 8.0f + ImGui::GetFontSize();
         constexpr double kPi = 3.14159265358979323846;
+        constexpr double kTwoPi = 2.0 * kPi;
+        constexpr double kSpinRateRadPerSec = kTwoPi / 36.0;
         constexpr double kDisplayLimitDeg = 10.0;
         constexpr double kDisplayAngleScale = 45.0 / kDisplayLimitDeg;
+        beam_spin_phase_rad_ = static_cast<float>(std::fmod(
+            beam_spin_phase_rad_
+                + std::clamp(dt, 0.0f, 0.1f) * kSpinRateRadPerSec,
+            kTwoPi));
+        const double spin_phase = beam_spin_phase_rad_;
         const float plot_top =
             legend_y + ImGui::GetFontSize() + 12.0f;
         const float origin_y = inset_max.y - 27.0f;
@@ -485,51 +492,71 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
                 std::clamp(alpha, 0.0f, 1.0f) * base_alpha);
             return (color & 0x00FFFFFFu) | (faded_alpha << 24);
         };
-        auto edge_at = [&](ImVec2 origin, double offset_deg, float radius) {
-            const double angle = offset_deg * kPi / 180.0;
+        auto project_beam_point = [](ImVec2 origin, double lateral,
+                                     double forward, double roll_rad) {
+            // Rotate the azimuth cut around its boresight. The orthographic
+            // depth contribution is compressed vertically for a readable
+            // console-scale 3D effect.
+            constexpr double kDepthProjection = 0.34;
             return ImVec2(
-                origin.x + std::sin(angle) * radius,
-                origin.y - std::cos(angle) * radius);
+                origin.x + static_cast<float>(
+                    lateral * std::cos(roll_rad)),
+                origin.y - static_cast<float>(
+                    forward - lateral * std::sin(roll_rad)
+                                  * kDepthProjection));
+        };
+        auto edge_at = [&](ImVec2 origin, double offset_deg, float radius,
+                           double roll_rad) {
+            const double angle = offset_deg * kPi / 180.0;
+            return project_beam_point(
+                origin, std::sin(angle) * radius,
+                std::cos(angle) * radius, roll_rad);
         };
         auto point_at = [&](ImVec2 origin, float outer_radius,
                             double offset_deg, double db,
-                            double angular_spread) {
+                            double angular_spread, double roll_rad) {
             const double clipped = std::clamp(db, -30.0, 0.0);
             const float radius = static_cast<float>(
                 (clipped + 30.0) / 30.0) * outer_radius;
             const double display_angle =
                 offset_deg * angular_spread * kDisplayAngleScale;
             const double angle = display_angle * kPi / 180.0;
-            return ImVec2(
-                origin.x + std::sin(angle) * radius,
-                origin.y - std::cos(angle) * radius);
+            return project_beam_point(
+                origin, std::sin(angle) * radius,
+                std::cos(angle) * radius, roll_rad);
         };
 
         auto draw_grid = [&](ImVec2 origin, float outer_radius,
-                             float alpha) {
+                             float alpha, double roll_rad,
+                             bool show_labels) {
             for (double db : {-20.0, -10.0, 0.0}) {
                 const float radius =
                     static_cast<float>((db + 30.0) / 30.0) * outer_radius;
-                ImVec2 previous = edge_at(origin, -45.0, radius);
+                ImVec2 previous =
+                    edge_at(origin, -45.0, radius, roll_rad);
                 for (int step = 1; step <= 30; ++step) {
                     const double angle = -45.0 + step * 3.0;
-                    const ImVec2 point = edge_at(origin, angle, radius);
+                    const ImVec2 point =
+                        edge_at(origin, angle, radius, roll_rad);
                     dl->AddLine(
                         previous, point,
                         fade_color(IM_COL32(85, 85, 100, 105), alpha));
                     previous = point;
                 }
-                if (alpha > 0.35f) {
+                if (show_labels && alpha > 0.35f) {
                     char db_label[12];
                     std::snprintf(db_label, sizeof db_label, "%.0f", db);
+                    const ImVec2 label_edge =
+                        edge_at(origin, 0.0, radius, roll_rad);
                     dl->AddText(
-                        ImVec2(origin.x + 3.0f,
-                               origin.y - radius - ImGui::GetFontSize()),
+                        ImVec2(label_edge.x + 3.0f,
+                               label_edge.y - ImGui::GetFontSize()),
                         fade_color(theme::col_text_dim(), alpha), db_label);
                 }
             }
             for (double angle : {-45.0, 0.0, 45.0}) {
-                const ImVec2 edge = edge_at(origin, angle, outer_radius);
+                const ImVec2 edge =
+                    edge_at(origin, angle, outer_radius, roll_rad);
                 dl->AddLine(
                     origin, edge,
                     fade_color(
@@ -539,14 +566,14 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
                         alpha),
                     angle == 0.0 ? 1.2f : 1.0f);
             }
-            if (alpha > 0.35f) {
+            if (show_labels && alpha > 0.35f) {
                 const char* left_label = "-10";
                 const char* center_label = "0 deg";
                 const char* right_label = "+10";
                 const ImVec2 left_edge =
-                    edge_at(origin, -45.0, outer_radius);
+                    edge_at(origin, -45.0, outer_radius, roll_rad);
                 const ImVec2 right_edge =
-                    edge_at(origin, 45.0, outer_radius);
+                    edge_at(origin, 45.0, outer_radius, roll_rad);
                 const ImVec2 left_size = ImGui::CalcTextSize(left_label);
                 const ImVec2 center_size = ImGui::CalcTextSize(center_label);
                 dl->AddText(
@@ -571,7 +598,8 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
                                 int sample_count, double start_deg,
                                 double step_deg, auto db_at,
                                 double gain_loss_db, bool degraded,
-                                double angular_spread, float alpha) {
+                                double angular_spread, float alpha,
+                                double roll_rad) {
             bool have_previous = false;
             ImVec2 previous;
             double previous_db = -30.0;
@@ -589,7 +617,7 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
                 }
                 const ImVec2 point =
                     point_at(origin, outer_radius, offset,
-                             db + gain_loss_db, angular_spread);
+                             db + gain_loss_db, angular_spread, roll_rad);
                 if (have_previous) {
                     const bool main_lobe =
                         std::max(previous_db, db) >= -3.0;
@@ -615,7 +643,12 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
             }
         };
 
-        draw_grid(nominal_origin, nominal_radius, 1.0f);
+        // The faint orthogonal slice gives the azimuth cut visible depth.
+        // The brighter slice and both grids rotate together around boresight.
+        draw_grid(nominal_origin, nominal_radius, 0.22f,
+                  spin_phase + kPi * 0.5, false);
+        draw_grid(nominal_origin, nominal_radius, 0.92f,
+                  spin_phase, true);
         draw_pattern(
             nominal_origin, nominal_radius,
             app::kBeamPatternSampleCount,
@@ -624,7 +657,16 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
                 return static_cast<double>(
                     nominal_pattern.azimuth_pattern_db[i]);
             },
-            0.0, false, 1.0, 1.0f);
+            0.0, false, 1.0, 0.28f, spin_phase + kPi * 0.5);
+        draw_pattern(
+            nominal_origin, nominal_radius,
+            app::kBeamPatternSampleCount,
+            app::kBeamPatternStartDeg, app::kBeamPatternStepDeg,
+            [&](int i) {
+                return static_cast<double>(
+                    nominal_pattern.azimuth_pattern_db[i]);
+            },
+            0.0, false, 1.0, 1.0f, spin_phase);
 
         const char* nominal_label =
             comparison_mix > 0.05f
@@ -642,7 +684,12 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
             // physical; the label makes the visual-only multiplier explicit.
             const double display_spread = std::min(
                 2.75, 1.0 + 0.35 * compared_offline_count);
-            draw_grid(degraded_origin, split_radius, comparison_mix);
+            draw_grid(degraded_origin, split_radius,
+                      comparison_mix * 0.22f,
+                      spin_phase + kPi * 0.5, false);
+            draw_grid(degraded_origin, split_radius,
+                      comparison_mix * 0.92f,
+                      spin_phase, true);
             draw_pattern(
                 degraded_origin, split_radius,
                 static_cast<int>(
@@ -655,7 +702,21 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
                             static_cast<std::size_t>(i)]);
                 },
                 degraded_pattern->gain_loss_db, true,
-                display_spread, comparison_mix);
+                display_spread, comparison_mix * 0.28f,
+                spin_phase + kPi * 0.5);
+            draw_pattern(
+                degraded_origin, split_radius,
+                static_cast<int>(
+                    degraded_pattern->azimuth_pattern_db.size()),
+                degraded_pattern->pattern_start_offset_deg,
+                degraded_pattern->pattern_step_deg,
+                [&](int i) {
+                    return static_cast<double>(
+                        degraded_pattern->azimuth_pattern_db[
+                            static_cast<std::size_t>(i)]);
+                },
+                degraded_pattern->gain_loss_db, true,
+                display_spread, comparison_mix, spin_phase);
 
             char degraded_label[96];
             std::snprintf(degraded_label, sizeof degraded_label,

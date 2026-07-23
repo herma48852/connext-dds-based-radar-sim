@@ -6,7 +6,7 @@
 //  - uploaded to a GPU texture once per frame, drawn as an ImGui::Image
 //  - overlaid: track markers with IDs, dashed sector boundary lines
 //  - Default RMA outage overlay: moving response curtain and feature markers
-//  - BEAM FORMATION mode: animated nominal-vs-live top-down comparison
+//  - BEAM FORMATION mode: animated nominal-vs-live rotating 3D comparison
 
 #include <vector>
 
@@ -78,6 +78,9 @@ private:
     // is fully visible at center. The last degraded sample is retained while an
     // RMA-online transition animates back to nominal.
     float beam_comparison_mix_ = 0.0f;
+    // Slow roll around the beam axis. Both comparison plots share the phase
+    // so their shape differences remain directly comparable.
+    float beam_spin_phase_rad_ = 0.35f;
     app::BeamPatternView last_degraded_pattern_;
     bool have_last_degraded_pattern_ = false;
 };

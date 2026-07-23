@@ -154,10 +154,12 @@ For a before/after comparison:
 
 1. Select **BEAM FORMATION** in the **SCENARIOS** pane while all RMAs are
    online.
-2. The centered top-down polar plot shows the nominal beam and its sidelobes.
+2. The centered 3D polar plot slowly rotates around the beam axis, showing the
+   nominal beam and its sidelobes.
 3. Click one or more blocks in **ARRAY FACE**.
 4. The nominal plot animates to the far left and the degraded live plot
-   appears at center, leaving both visible for comparison.
+   appears at center. Both continue rotating in phase so their shape
+   differences remain directly comparable.
 5. Click the same RMA again. The degraded plot retires while nominal moves
    back to center and replaces it.
 
@@ -189,8 +191,8 @@ calibration in the fallback beamformer after an asymmetric outage.
 
 While **BEAM FORMATION** is selected, the current scan azimuth remains in the
 numeric status readout, but the B-scope draws no marching curtain or moving
-beam-feature markers. The polar plots stay fixed because their angles are
-relative to the scheduled beam.
+beam-feature markers. The 3D plots rotate slowly around boresight while their
+angular coordinates remain relative to the scheduled beam.
 
 Strong targets entering a dominant degraded sidelobe can produce an
 occasional displaced detection or “ghost.” The model deliberately limits
