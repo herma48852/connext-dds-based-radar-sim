@@ -88,10 +88,20 @@ external publisher.
 - a `Txxxx` tracker-generated ID;
 - range in whole kilometers and speed in m/s beside the symbol;
 - a cyan trail of up to ten recent reported positions;
-- a line showing a simple 60-second constant-velocity projection.
+- a thin cyan line extending from the diamond in the estimated direction of
+  travel. Its endpoint shows where the contact would be after 60 seconds if
+  it maintained the same speed and course.
 
 The track ID is assigned by the radar tracker. It is not the target
 generator's truth ID and is not an IFF identity.
+
+The thin line is a **velocity vector**, not the radar beam or a line from the
+ship to the target. Its direction represents estimated travel direction, and
+its length represents 60 seconds of estimated travel at the current PPI
+scale. A new track may not yet have a usable velocity estimate, so its vector
+can be zero-length, very short, or temporarily unstable. The fading,
+multi-segment cyan line behind a moving track is different: that is the
+contact's recent position history or track trail.
 
 ### Why a PPI item can behave unexpectedly
 
@@ -332,6 +342,13 @@ spatially consistent detections before publishing a track.
 
 **Why is there a track but no fresh dot?**  
 Tracks coast between beam revisits, while individual detections fade.
+
+**What is the thin blue/cyan line extending from a PPI track?**
+
+It is the track's velocity vector: a 60-second constant-speed,
+constant-course projection. A new track may not show a noticeable line until
+the tracker develops a velocity estimate. The fading line behind the contact
+is its recent track history, not the projection.
 
 **Why do tracks disappear in Sector Scan?**  
 Only contacts in the selected relative sector receive regular illumination.
