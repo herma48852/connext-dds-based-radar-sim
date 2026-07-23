@@ -10,6 +10,11 @@ separate workspace.
 > **[Windows 11 Clean-Machine Runbook](docs/RUN_WINDOWS.md)**. It gives one
 > complete, numbered path from installing prerequisites and cloning the
 > repository through building, testing, and launching the demo.
+>
+> **Display presenters:** Use the
+> **[Radar Display Operator Guide](docs/OPERATOR_DISPLAY_GUIDE.md)** for panel
+> meanings, coordinate frames, colors, controls, and common audience
+> questions.
 
 Two applications, one CMake monorepo, one DDS domain (default: domain 0):
 
