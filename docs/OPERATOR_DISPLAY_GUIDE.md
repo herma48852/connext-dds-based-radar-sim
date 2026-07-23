@@ -157,9 +157,10 @@ For a before/after comparison:
 2. The centered 3D polar plot rotates around the beam axis every five seconds,
    showing the nominal beam and its sidelobes.
 3. Click one or more blocks in **ARRAY FACE**.
-4. The nominal plot animates to the far left and the degraded live plot
-   appears at center. Both continue rotating in phase so their shape
-   differences remain directly comparable.
+4. The nominal plot first animates into the left half. The full-size degraded
+   live plot then appears in the right half, separated by a center divider.
+   Both continue rotating in phase so their shape differences remain directly
+   comparable.
 5. Click the same RMA again. The degraded plot retires while nominal moves
    back to center and replaces it.
 

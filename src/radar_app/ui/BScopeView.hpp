@@ -74,8 +74,8 @@ private:
     int upload_frame_ = 0;
 
     // BEAM FORMATION transition state. At 0 the nominal polar plot is
-    // centered. At 1 it has moved to the far left and the live degraded plot
-    // is fully visible at center. The last degraded sample is retained while an
+    // centered. At 1 it occupies the left half and the live degraded plot
+    // occupies the right half. The last degraded sample is retained while an
     // RMA-online transition animates back to nominal.
     float beam_comparison_mix_ = 0.0f;
     // Continuous five-second roll around the beam axis. Both comparison plots

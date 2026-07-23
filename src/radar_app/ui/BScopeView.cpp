@@ -308,7 +308,7 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
         }
         const float comparison_target = offline_count > 0 ? 1.0f : 0.0f;
         const float comparison_step =
-            std::clamp(dt, 0.0f, 0.1f) / 0.65f;
+            std::clamp(dt, 0.0f, 0.1f) / 0.90f;
         if (beam_comparison_mix_ < comparison_target) {
             beam_comparison_mix_ = std::min(
                 comparison_target, beam_comparison_mix_ + comparison_step);
@@ -419,10 +419,10 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
             ImVec2(text_pos.x, text_pos.y + top_size.y + text_gap),
             IM_COL32(220, 195, 125, 255), status_detail);
 
-        // Stateful 3D comparison. Nominal starts centered. An outage
-        // moves it to the far left while the degraded live pattern fades in
-        // at center. Restoring the RMA reverses the same transition while
-        // the cached degraded sample remains available for visual continuity.
+        // Stateful 3D comparison. Nominal starts centered. An outage first
+        // moves it into the left half, then fades the degraded live pattern
+        // into the right half. Restoring the RMA reverses the same transition
+        // while the cached degraded sample remains available for continuity.
         // Give beam formation the B-scope instead of treating it as a small
         // diagnostic inset.  Using almost the full available scope makes
         // each split comparison plot a little over twice its former radius
@@ -464,17 +464,27 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
             std::min(origin_y - plot_top, inset_w * 0.43f));
         const float split_radius = std::max(
             25.0f,
-            std::min(origin_y - plot_top, inset_w * 0.22f));
+            std::min(origin_y - plot_top, inset_w * 0.32f));
         const float comparison_mix =
             std::clamp(beam_comparison_mix_, 0.0f, 1.0f);
+        auto smoothstep01 = [](float value) {
+            const float t = std::clamp(value, 0.0f, 1.0f);
+            return t * t * (3.0f - 2.0f * t);
+        };
+        // Stage the animation: nominal claims the left pane before the live
+        // degraded beam appears in the right pane. Recovery runs in reverse.
+        const float layout_mix =
+            smoothstep01(comparison_mix / 0.60f);
+        const float degraded_mix =
+            smoothstep01((comparison_mix - 0.60f) / 0.40f);
         const float nominal_radius =
             single_radius
-            + (split_radius - single_radius) * comparison_mix;
+            + (split_radius - single_radius) * layout_mix;
         const float nominal_center_x =
             inset_min.x + inset_w
-                * (0.50f + (0.17f - 0.50f) * comparison_mix);
+                * (0.50f + (0.25f - 0.50f) * layout_mix);
         const ImVec2 nominal_origin(nominal_center_x, origin_y);
-        const ImVec2 degraded_origin(inset_min.x + inset_w * 0.50f,
+        const ImVec2 degraded_origin(inset_min.x + inset_w * 0.75f,
                                      origin_y);
 
         const app::BeamPatternView* degraded_pattern = nullptr;
@@ -492,6 +502,14 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
                 std::clamp(alpha, 0.0f, 1.0f) * base_alpha);
             return (color & 0x00FFFFFFu) | (faded_alpha << 24);
         };
+        if (layout_mix > 0.0f) {
+            const float divider_x = inset_min.x + inset_w * 0.50f;
+            dl->AddLine(
+                ImVec2(divider_x, plot_top - 4.0f),
+                ImVec2(divider_x, inset_max.y - 7.0f),
+                fade_color(IM_COL32(120, 105, 65, 150), layout_mix),
+                1.0f);
+        }
         auto project_beam_point = [](ImVec2 origin, double lateral,
                                      double forward, double roll_rad) {
             // Rotate the azimuth cut around its boresight. The orthographic
@@ -669,14 +687,14 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
             0.0, false, 1.0, 1.0f, spin_phase);
 
         const char* nominal_label =
-            comparison_mix > 0.05f
+            layout_mix > 0.05f
                 ? "NOMINAL REFERENCE" : "NOMINAL - ALL RMAs ONLINE";
         const ImVec2 nominal_label_size = ImGui::CalcTextSize(nominal_label);
         dl->AddText(
             ImVec2(nominal_origin.x - nominal_label_size.x * 0.5f, legend_y),
             IM_COL32(90, 175, 255, 255), nominal_label);
 
-        if (degraded_pattern && comparison_mix > 0.0f) {
+        if (degraded_pattern && degraded_mix > 0.0f) {
             // A single 64-element RMA is only 6.25% of the aperture, so its
             // true beamwidth change is difficult to see at console scale.
             // Accentuate only the degraded plot's angular spread for the
@@ -685,10 +703,10 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
             const double display_spread = std::min(
                 2.75, 1.0 + 0.35 * compared_offline_count);
             draw_grid(degraded_origin, split_radius,
-                      comparison_mix * 0.22f,
+                      degraded_mix * 0.22f,
                       spin_phase + kPi * 0.5, false);
             draw_grid(degraded_origin, split_radius,
-                      comparison_mix * 0.92f,
+                      degraded_mix * 0.92f,
                       spin_phase, true);
             draw_pattern(
                 degraded_origin, split_radius,
@@ -702,7 +720,7 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
                             static_cast<std::size_t>(i)]);
                 },
                 degraded_pattern->gain_loss_db, true,
-                display_spread, comparison_mix * 0.28f,
+                display_spread, degraded_mix * 0.28f,
                 spin_phase + kPi * 0.5);
             draw_pattern(
                 degraded_origin, split_radius,
@@ -716,7 +734,7 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
                             static_cast<std::size_t>(i)]);
                 },
                 degraded_pattern->gain_loss_db, true,
-                display_spread, comparison_mix, spin_phase);
+                display_spread, degraded_mix, spin_phase);
 
             char degraded_label[96];
             std::snprintf(degraded_label, sizeof degraded_label,
@@ -729,7 +747,7 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
                     degraded_origin.x - degraded_label_size.x * 0.5f,
                     legend_y),
                 fade_color(IM_COL32(255, 195, 55, 255),
-                           comparison_mix),
+                           degraded_mix),
                 degraded_label);
         }
     }

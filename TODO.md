@@ -623,9 +623,9 @@ Report back: ASan report (or "ASan silent + zombie/scribble output").
   views. The compact automatic outage view retains the moving response
   curtain and feature markers. The operator-selected **BEAM FORMATION**
   scenario control works while nominal and animates from a centered nominal
-  pattern to a side-by-side nominal-versus-live comparison, then recenters
-  nominal on recovery. Both plots share a five-second 3D rotation around
-  boresight.
+  pattern into a full-size left-half nominal reference before revealing the
+  full-size degraded pattern in the right half, then recenters nominal on
+  recovery. Both plots share a five-second 3D rotation around boresight.
   Its labeled display-spread accent makes a one-RMA change legible while the
   numeric metrics remain physical.
   During an outage, receiver synthesis applies the
