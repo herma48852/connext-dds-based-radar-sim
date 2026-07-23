@@ -77,6 +77,8 @@ void HmiUi::start() {
         participant_, dds_names::TOPIC_SHIP_POSITION);
     auto cal_topic = radds::make_topic<types::CalibrationStatus>(
         participant_, dds_names::TOPIC_CALIBRATION_STATUS);
+    auto pattern_topic = radds::make_topic<types::BeamPatternStatus>(
+        participant_, dds_names::TOPIC_BEAM_PATTERN_STATUS);
 
     track_reader_ = radds::make_reader<types::TargetTrack>(
         subscriber_, track_topic, dds_names::PROFILE_TARGET_TRACK);
@@ -86,6 +88,8 @@ void HmiUi::start() {
         subscriber_, ship_topic, dds_names::PROFILE_SHIP_POSITION);
     cal_reader_ = radds::make_reader<types::CalibrationStatus>(
         subscriber_, cal_topic, dds_names::PROFILE_CALIBRATION_STATUS);
+    pattern_reader_ = radds::make_reader<types::BeamPatternStatus>(
+        subscriber_, pattern_topic, dds_names::PROFILE_BEAM_PATTERN_STATUS);
 
     track_reader_.set_listener(std::make_shared<TrackListener>(this),
                                dds::core::status::StatusMask::data_available());
@@ -101,6 +105,10 @@ void HmiUi::start() {
         std::make_shared<ForwardingListener<types::CalibrationStatus, HmiUi,
                                             &HmiUi::on_calibration>>(this),
         dds::core::status::StatusMask::data_available());
+    pattern_reader_.set_listener(
+        std::make_shared<ForwardingListener<types::BeamPatternStatus, HmiUi,
+                                            &HmiUi::on_beam_pattern>>(this),
+        dds::core::status::StatusMask::data_available());
 
     spawn([this] { housekeeping_loop(); });
 }
@@ -111,6 +119,7 @@ void HmiUi::stop() {
     detach_listener(det_reader_);
     detach_listener(ship_reader_);
     detach_listener(cal_reader_);
+    detach_listener(pattern_reader_);
     join_all();
 }
 
@@ -173,6 +182,33 @@ void HmiUi::on_calibration(const types::CalibrationStatus& c) {
         std::vector<float>(c.element_drift_db.begin(), c.element_drift_db.end()),
         static_cast<uint32_t>(c.rma_offline_mask),
         c.timestamp.sim_millis);
+}
+
+void HmiUi::on_beam_pattern(const types::BeamPatternStatus& p) {
+    const uint32_t mask = static_cast<uint32_t>(p.rma_offline_mask);
+    if (last_pattern_mask_.exchange(mask) != mask) {
+        RADAR_LOG << "[HmiUi] beam overlay mask=" << mask
+                  << " loss_db=" << p.gain_loss_db
+                  << " bw_deg=" << p.beamwidth_3db_deg
+                  << " psl_db=" << p.peak_sidelobe_level_db
+                  << " error_deg=" << p.boresight_error_deg
+                  << "\n";
+    }
+    bus_.update_beam_pattern(BeamPatternView{
+        p.beam_id,
+        mask,
+        p.commanded_azimuth_deg,
+        p.boresight_error_deg,
+        p.gain_loss_db,
+        p.beamwidth_3db_deg,
+        p.peak_sidelobe_level_db,
+        p.left_sidelobe_offset_deg,
+        p.right_sidelobe_offset_deg,
+        p.pattern_start_offset_deg,
+        p.pattern_step_deg,
+        std::vector<float>(p.azimuth_pattern_db.begin(),
+                           p.azimuth_pattern_db.end()),
+        p.timestamp.sim_millis});
 }
 
 // --- view publisher / age-out backstop -------------------------------------

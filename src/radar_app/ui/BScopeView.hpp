@@ -5,6 +5,8 @@
 //  - black -> blue -> green -> yellow -> red gradient via LUT
 //  - uploaded to a GPU texture once per frame, drawn as an ImGui::Image
 //  - overlaid: track markers with IDs, dashed sector boundary lines
+//  - Default RMA outage overlay: moving response curtain and feature markers
+//  - BEAM FORMATION mode: animated nominal-vs-live top-down comparison
 
 #include <vector>
 
@@ -42,6 +44,9 @@ public:
                 const std::vector<app::TrackView>& tracks,
                 const app::ShipView& ship,
                 bool sector_mode, double sector_center, double sector_width,
+                double live_beam_az_deg,
+                bool show_beam_formation,
+                const app::BeamPatternView& beam_pattern,
                 float dt);
 
 private:
@@ -67,6 +72,14 @@ private:
     // Upload decimation: 1 = upload every frame (default); 4 = 15 Hz.
     int upload_decimation_ = 1;
     int upload_frame_ = 0;
+
+    // BEAM FORMATION transition state. At 0 the nominal polar plot is
+    // centered. At 1 it has moved to the far left and the live degraded plot
+    // is fully visible at center. The last degraded sample is retained while an
+    // RMA-online transition animates back to nominal.
+    float beam_comparison_mix_ = 0.0f;
+    app::BeamPatternView last_degraded_pattern_;
+    bool have_last_degraded_pattern_ = false;
 };
 
 } // namespace radar::ui

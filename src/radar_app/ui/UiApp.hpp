@@ -68,6 +68,7 @@ private:
     BScopeView bscope_;
 
     std::deque<app::BeamView> beam_history_;   // last ~5 s of dwells
+    bool show_beam_formation_ = false;         // operator-selected overlay
     bool undecorated_ = false;                 // --no-titlebar experiment
     float content_scale_ = 0.0f;
     std::function<bool()> stop_requested_;

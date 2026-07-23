@@ -7,6 +7,7 @@
 //               Radar/DetectionEvent    (PPI blips)
 //               Ship/ShipPosition       (ship panel; key 0 = own-ship INS)
 //               Radar/CalibrationStatus (health panel)
+//               Radar/BeamPatternStatus (B-scope degradation overlay)
 //
 // Threading rules are unchanged: listener callbacks run on DDS receive
 // threads and only convert samples into trivially-copyable view structs
@@ -19,6 +20,8 @@
 // timeline mirrors it in-process).
 
 #include <map>
+#include <atomic>
+#include <cstdint>
 #include <mutex>
 
 #include "ComponentBase.hpp"
@@ -42,6 +45,7 @@ public:
     void on_detection(const types::DetectionEvent& d);
     void on_ship(const types::ShipPosition& s);
     void on_calibration(const types::CalibrationStatus& c);
+    void on_beam_pattern(const types::BeamPatternStatus& p);
 
 private:
     void housekeeping_loop(); // publishes track views to the bus, ages out stale
@@ -53,6 +57,8 @@ private:
     dds::sub::DataReader<types::DetectionEvent>    det_reader_{dds::core::null};
     dds::sub::DataReader<types::ShipPosition>      ship_reader_{dds::core::null};
     dds::sub::DataReader<types::CalibrationStatus> cal_reader_{dds::core::null};
+    dds::sub::DataReader<types::BeamPatternStatus> pattern_reader_{dds::core::null};
+    std::atomic<uint32_t> last_pattern_mask_{0xFFFFFFFFu};
 
     mutable std::mutex tracks_mutex_;
     std::map<int64_t, TrackView> tracks_; // keyed by track_id

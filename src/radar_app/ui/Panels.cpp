@@ -257,6 +257,7 @@ void render_array_panel(const char* title, ImVec2 pos, ImVec2 size,
 void render_scenario_bar(const char* title, ImVec2 pos, ImVec2 size,
                          app::CommandSink& commands,
                          int32_t radar_mode, bool degraded,
+                         bool& beam_formation_overlay,
                          UiControlObserver* observer) {
     begin_panel(title, pos, size);
     // Persistent scenario states highlighted so the operator can see what
@@ -267,6 +268,14 @@ void render_scenario_bar(const char* title, ImVec2 pos, ImVec2 size,
     if (scenario_button("SECTOR SCAN", radar_mode == 1,
                         UiControl::SectorScan, observer))
         commands.send(1, 90.0, 60.0);                 // CMD_SET_SECTOR
+    ImGui::Separator();
+    if (scenario_button("BEAM FORMATION", beam_formation_overlay,
+                        UiControl::BeamFormation, observer))
+        beam_formation_overlay = !beam_formation_overlay;
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip(
+            "Toggle the nominal-versus-live beam-pattern overlay.\n"
+            "Enable it before taking an RMA offline to see the change.");
     ImGui::Separator();
     if (scenario_button("DEGRADE ARRAY", degraded,
                         UiControl::DegradeArray, observer))

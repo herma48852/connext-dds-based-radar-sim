@@ -67,7 +67,7 @@ The QoS file is copied next to the binaries automatically
 
 ## Regression tests
 
-The default build registers three fast, headless CTest regressions:
+The default build registers four fast, headless CTest regressions:
 
 ```bash
 cmake --build build -j
@@ -75,8 +75,9 @@ ctest --test-dir build --output-on-failure
 ```
 
 - `ui_controls_smoke` renders the production ImGui A-scope and panels in
-  memory, performs real mouse press/hold/release frames, and verifies all six
-  scenario buttons, manual RMA offline/online, and **ALL ONLINE**. The A-scope
+  memory, performs real mouse press/hold/release frames, and verifies all
+  scenario controls (including the local **BEAM FORMATION** toggle), manual
+  RMA offline/online, and **ALL ONLINE**. The A-scope
   azimuth/elevation changes throughout to cover the focus-loss regression.
 - `target_scenario_regression` accelerates 30 minutes of the production
   16-target webinar scenario and checks stable IDs/profile mix, bounded motion,
@@ -87,6 +88,9 @@ ctest --test-dir build --output-on-failure
   pool bounds. Running `./build/tracker_replay [seconds]` directly retains its
   original periodic diagnostic output; assertions are enabled only by CTest's
   `--self-test` flag.
+- `beam_pattern_regression` verifies nominal beamwidth, outage gain loss,
+  symmetric-error cancellation, mask-position sensitivity, and safe
+  all-offline behavior without DDS or a display.
 
 These tests create no DDS participants, graphics window, or renderer, so they
 do not alter or compete with a live webinar run.
@@ -152,13 +156,18 @@ source $CONNEXTDDS_DIR/resource/scripts/rtisetenv_arm64Darwin23clang16.0.bash
 > directory) is required before launching.
 
 Both apps accept `--domain N` (default 0). The radar UI also has a
-**SCENARIOS** panel (bottom-right) issuing `Radar/SystemCommand`s:
-search/sector mode, degrade/restore array, self test, track reset.
+**SCENARIOS** panel (bottom-right). Search/sector mode, degrade/restore array,
+self test, and track reset issue `Radar/SystemCommand`s. **BEAM FORMATION**
+is a local display toggle: it replaces the compact moving outage curtain with
+an animated top-down comparison: nominal moves to the far left when an outage
+occurs, the degraded pattern appears at center, and nominal recenters on
+recovery.
 The **ARRAY FACE** panel issues `CMD_RMA_OFFLINE`/`CMD_RMA_ONLINE`:
 click an RMA block (16 blocks of 64 T/R elements) to toggle it, or
 **ALL ONLINE** to restore. Offline RMAs darken the block, set the bit
-in `CalibrationStatus.rma_offline_mask`, and reduce implant gain and
-beamwidth accordingly.
+in `CalibrationStatus.rma_offline_mask`, reduce implant gain, reshape the beam
+according to outage geometry, and activate the compact outage overlay on the
+B-scope.
 
 > **macOS note (shared memory):** the shipped profiles use **UDPv4 only**.
 > macOS defaults allow very few System V shared-memory segments, and the
@@ -180,7 +189,7 @@ all setup, build, test, and launch commands in that directory.
 
 - Connext target: `x64Win64VS2017` (binary-compatible with VS2022).
 - The UI embeds Per-Monitor V2 DPI awareness and uses GLFW/OpenGL 3.3.
-- `windows-portable` builds all three regressions without Connext.
+- `windows-portable` builds all four regressions without Connext.
 - FetchContent supplies pinned GLFW, ImGui, and ImPlot sources.
 - Put the Connext target DLL directory on `PATH` before running.
 
@@ -195,7 +204,8 @@ Every internal radar component is a named DomainParticipant wired to the
 others purely through topics on the shared bus — there are no direct
 in-process calls between components. The **HMI-UI** participant is the
 display endpoint: it subscribes to `Radar/TargetTrack`,
-`Radar/DetectionEvent`, `Ship/ShipPosition` and `Radar/CalibrationStatus`,
+`Radar/DetectionEvent`, `Ship/ShipPosition`, `Radar/CalibrationStatus`, and
+`Radar/BeamPatternStatus` (the B-scope degradation overlay),
 so every panel renders data that arrived over the bus — no dangling
 publishers anywhere in the system. Its listener callbacks only convert
 samples into view structs in a `DataBus` (lock-free SPSC queues +
@@ -214,6 +224,7 @@ on-demand diagnostic endpoints `target_gen` creates with
 | `Radar/RawReturn` | RawReturn | 1 kHz | RawReturnProfile | BEST_EFFORT, 500us latency budget. The "receiver wire", looped back inside DetectionProcessor |
 | `Radar/DetectionEvent` | DetectionEvent | ~100 Hz | DetectionEventProfile | BEST_EFFORT CFAR blips; consumed by TrackManager and HMI-UI (PPI) |
 | `Radar/BeamCommand` | BeamCommand | 100 Hz | BeamCommandProfile | RELIABLE dwell schedule |
+| `Radar/BeamPatternStatus` | BeamPatternStatus | 20 Hz | BeamPatternStatusProfile | RELIABLE + TRANSIENT_LOCAL outage metrics and 181-sample azimuth cut; consumed by HMI-UI (B-scope overlay) |
 | `Radar/TargetTrack` | TargetTrack | 10 Hz | TargetTrackProfile | RELIABLE + TRANSIENT_LOCAL + 100 ms deadline; consumed by HMI-UI (track list) |
 | `Radar/CalibrationStatus` | CalibrationStatus | 1 Hz | CalibrationStatusProfile | array health: 1024-element drift + `rma_offline_mask`; consumed by HMI-UI (health + ARRAY FACE panels) |
 | `Radar/SystemCommand` | SystemCommand | bursty | SystemCommandProfile | RELIABLE, WaitSet-handled |
@@ -255,15 +266,15 @@ numbers.
 ### WaitSet vs. listener split
 
 - **Listeners** (DDS receive threads): `RawReturn`, `BeamCommand`,
-  `TargetTruth`, `DetectionEvent` — high rate, lightweight callbacks that
-  only cache or enqueue.
+  `TargetTruth`, `DetectionEvent`, `BeamPatternStatus` — high rate,
+  lightweight callbacks that only cache or enqueue.
 - **WaitSet** (dedicated thread): `SystemCommand` — lower rate, handled
   atomically and in order by `CommandHandler`.
 - **Render thread**: never blocks on DDS; drains lock-free SPSC queues
   and mutex-protected stores from the `DataBus` at display rate. The
   `DataBus` is fed by the HMI-UI participant's listeners (tracks, blips,
-  ship, health) and by component worker threads (A-scope trace, beam
-  timeline). DDS threads never touch ImGui/OpenGL.
+  ship, health, beam pattern) and by component worker threads (A-scope trace,
+  beam timeline). DDS threads never touch ImGui/OpenGL.
 
 ### Type system
 

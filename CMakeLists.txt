@@ -47,6 +47,13 @@ add_executable(tracker_replay
 target_include_directories(tracker_replay PRIVATE src/radar_app/components)
 target_link_libraries(tracker_replay PRIVATE radar_project_options)
 
+# Portable outage-aware azimuth array-factor model.
+add_library(beam_pattern_core STATIC
+    src/radar_app/components/BeamPatternModel.cpp)
+target_include_directories(beam_pattern_core PUBLIC
+    src/radar_app/components)
+target_link_libraries(beam_pattern_core PRIVATE radar_project_options)
+
 # --- Optional graphics dependencies ----------------------------------------
 set(RADAR_NEEDS_IMGUI OFF)
 if(RADAR_BUILD_APPLICATIONS OR (BUILD_TESTING AND RADAR_BUILD_UI_TESTS))
@@ -224,7 +231,7 @@ if(RADAR_BUILD_APPLICATIONS)
 
     target_include_directories(radar_app PRIVATE src/radar_app)
     target_link_libraries(radar_app PRIVATE
-        radar_common imgui_core imgui_backends implot)
+        radar_common beam_pattern_core imgui_core imgui_backends implot)
     if(APPLE)
         target_link_libraries(radar_app PRIVATE
             "-framework Metal" "-framework QuartzCore" "-framework Cocoa")
@@ -304,10 +311,17 @@ if(BUILD_TESTING)
     target_link_libraries(target_scenario_regression PRIVATE
         target_scenario_core radar_project_options)
 
+    add_executable(beam_pattern_regression
+        tests/beam_pattern_regression.cpp)
+    target_link_libraries(beam_pattern_regression PRIVATE
+        beam_pattern_core radar_project_options)
+
     add_test(NAME target_scenario_regression COMMAND target_scenario_regression)
+    add_test(NAME beam_pattern_regression COMMAND beam_pattern_regression)
     add_test(NAME tracker_replay_regression
         COMMAND tracker_replay 300 --self-test --quiet)
     set_tests_properties(
-        target_scenario_regression tracker_replay_regression
+        target_scenario_regression beam_pattern_regression
+        tracker_replay_regression
         PROPERTIES TIMEOUT 30 LABELS "smoke;regression;portable")
 endif()

@@ -275,8 +275,8 @@ GLFW bump) is RETIRED — keep the runtime flags as diagnostics.
   2.25° az cells (~2 km at 50 km); seeded speed ≈ 0; alt is
   bar-quantized (ship shows ~R·sin 3°). Physical, honest.
 - The two missiles (11–12 km alt, −10 dBsm) stay invisible: SNR range
-  (~9 km) < cone-entry range. Want them? More/higher el bars (ties into
-  RMA Tier 2/3 work).
+  (~9 km) < cone-entry range. Want them? More/higher elevation bars require
+  a separate elevation-coverage change.
 - Track rows step every ~4.8 s (bar revisit); no dead-reckoning between
   bursts (3-line patch available: publish x + vx·age in
   TrackManager::update_loop).
@@ -369,11 +369,7 @@ transport swap (DDS is the demo's purpose).
    (expected detection ranges: ship/bomber immediate, decoy ~49 km,
    fighter ~28 km, missile ~9 km, drone ~5 km). Stage 2 scenario sweep.
    Stage 3 15–30 min soak.
-2. **RMA-offline feature**: **Tier 1 DONE (2026-07-20, K5)** — commands,
-   element mask, gain/beamwidth, ARRAY FACE pane (see §2). Tier 2 next:
-   +squint/sidelobe ghosts/beam spoiling; Tier 3: +array factor + live
-   pattern panel (design in the Phase B section of the K5 plan file).
-3. Optional polish: dead-reckoning publish (above); track-table AZ
+2. Optional polish: dead-reckoning publish (above); track-table AZ
    column is RELATIVE bearing — label it or convert to true.
 
 ### Operational notes
@@ -608,6 +604,24 @@ Report back: ASan report (or "ASan silent + zombie/scribble output").
 
 ## 2. Recently completed (don't redo)
 
+- **RMA-offline, Tiers 2/3** (2026-07-23): `BeamPatternModel` calculates a
+  deterministic 181-sample azimuth array-factor cut from the physical 4×4
+  RMA mask, plus gain loss, 3 dB width, dominant sidelobes, and a bounded
+  fallback-calibration boresight error. DetectionProcessor publishes the
+  metrics/cut at 20 Hz on reliable transient-local
+  `Radar/BeamPatternStatus`; HMI-UI consumes the DDS topic for two B-scope
+  views. The compact automatic outage view retains the moving response
+  curtain and feature markers. The operator-selected **BEAM FORMATION**
+  scenario control works while nominal and animates from a centered nominal
+  pattern to a side-by-side nominal-versus-live comparison, then recenters
+  nominal on recovery. Its labeled display-spread accent makes a one-RMA
+  change legible while the numeric metrics remain physical.
+  During an outage, receiver synthesis applies the
+  location-sensitive main-lobe response and permits only the two dominant,
+  additionally attenuated sidelobes to create bounded strong-target ghosts.
+  `beam_pattern_regression` covers nominal width, mask-position sensitivity,
+  symmetric-error cancellation, monotonically cumulative gain loss, and
+  all-offline safety.
 - **RMA-offline, Tier 1** (2026-07-20, K5): 16 RMAs × 64 elements on a
   4×4 grid over the 32×32 face. `CMD_RMA_OFFLINE/ONLINE` (SystemCommand
   parameters "0".."15"/"all") drive `DataBus::rma_offline_mask`;

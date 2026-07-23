@@ -33,9 +33,9 @@
   <line x1="375" y1="182" x2="375" y2="420" stroke="#46d17c" stroke-width="2.2"/>
   <polygon points="375,424 370,414 380,414" fill="#46d17c"/>
   <text x="385" y="246" font-size="11" fill="#c9d8ce">Radar/BeamCommand</text>
-  <text x="385" y="261" font-size="9.5" fill="#8fa398">50 Hz</text>
+  <text x="385" y="261" font-size="9.5" fill="#8fa398">100 Hz</text>
 
-  <!-- Radar.DetectionProcessor (widened, 5 endpoints spread) -->
+  <!-- Radar.DetectionProcessor (widened, 6 endpoints spread) -->
   <rect x="540" y="110" width="520" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
   <text x="800" y="134" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.Detection</text>
   <text x="800" y="151" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Processor</text>
@@ -67,6 +67,12 @@
   <line x1="960" y1="424" x2="960" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
   <polygon points="960,184 955,194 965,194" fill="#4fc3f7"/>
   <text x="960" y="368" text-anchor="middle" font-size="11" fill="#c9d8ce">TargetGen/TargetTruth</text>
+
+  <!-- pub BeamPatternStatus -->
+  <line x1="1040" y1="182" x2="1040" y2="420" stroke="#46d17c" stroke-width="2.2"/>
+  <polygon points="1040,424 1035,414 1045,414" fill="#46d17c"/>
+  <text x="1030" y="398" text-anchor="end" font-size="11" fill="#c9d8ce">Radar/BeamPatternStatus</text>
+  <text x="1030" y="413" text-anchor="end" font-size="9.5" fill="#8fa398">20 Hz</text>
 
   <!-- Radar.TrackManager (widened, arrows spread) -->
   <rect x="1180" y="110" width="260" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
@@ -145,6 +151,11 @@
   <line x1="1060" y1="505" x2="1060" y2="690" stroke="#4fc3f7" stroke-width="2.2"/>
   <polygon points="1060,694 1055,684 1065,684" fill="#4fc3f7"/>
   <text x="1060" y="675" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/CalibrationStatus</text>
+
+  <!-- sub BeamPatternStatus -->
+  <line x1="1090" y1="505" x2="1090" y2="690" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="1090,694 1085,684 1095,684" fill="#4fc3f7"/>
+  <text x="1090" y="590" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/BeamPatternStatus</text>
 
   <!-- TargetGen.Generator (flush with bus right edge) -->
   <rect x="1160" y="700" width="280" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>

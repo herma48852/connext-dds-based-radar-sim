@@ -42,6 +42,22 @@ struct BeamView {
     int64_t sim_millis;
 };
 
+struct BeamPatternView {
+    int64_t beam_id = 0;
+    uint32_t rma_mask = 0;
+    double commanded_azimuth_deg = 0.0;
+    double boresight_error_deg = 0.0;
+    double gain_loss_db = 0.0;
+    double beamwidth_3db_deg = 2.0;
+    double peak_sidelobe_level_db = -80.0;
+    double left_sidelobe_offset_deg = 0.0;
+    double right_sidelobe_offset_deg = 0.0;
+    double pattern_start_offset_deg = -45.0;
+    double pattern_step_deg = 0.5;
+    std::vector<float> azimuth_pattern_db;
+    int64_t sim_millis = 0;
+};
+
 struct TrackView {
     int64_t track_id;
     double  x_m, y_m, z_m;        // ship-relative ENU
@@ -150,6 +166,15 @@ public:
         return array_grid_;
     }
 
+    void update_beam_pattern(const BeamPatternView& pattern) {
+        std::lock_guard lk(beam_pattern_mutex_);
+        beam_pattern_ = pattern;
+    }
+    BeamPatternView beam_pattern() const {
+        std::lock_guard lk(beam_pattern_mutex_);
+        return beam_pattern_;
+    }
+
     void update_trace(const TraceBuffer& t) {
         std::lock_guard lk(trace_mutex_);
         if (trace_back_.magnitude.size() != t.magnitude.size())
@@ -195,6 +220,8 @@ private:
     HealthView health_{};
     mutable std::mutex array_grid_mutex_;
     ArrayGridView array_grid_;
+    mutable std::mutex beam_pattern_mutex_;
+    BeamPatternView beam_pattern_;
     mutable std::mutex trace_mutex_;
     TraceBuffer trace_front_, trace_back_;
 };

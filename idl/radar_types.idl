@@ -26,6 +26,7 @@ module types {
     // ---- Bounds ------------------------------------------------------------
     const long MAX_RANGE_BINS      = 2048;  // range samples per beam dwell
     const long MAX_ARRAY_ELEMENTS  = 1024;  // T/R modules in the array face
+    const long MAX_BEAM_PATTERN_SAMPLES = 181; // -45..+45 deg azimuth cut
     const long COVARIANCE_SIZE     = 9;     // 3x3 position covariance, row-major
     const long MAX_PARAMS_LEN      = 128;   // free-form command parameter string
 
@@ -130,6 +131,28 @@ module types {
         long        dwell_time_us;  // dwell duration [microseconds]
         BeamMode    mode;           // dwell purpose
         long        priority;       // 1 = highest
+    };
+
+    // Current outage-aware azimuth response of the array. Published at 20 Hz
+    // by DetectionProcessor and consumed by HMI-UI for the B-scope overlay.
+    // The bounded sequence is a normalized dB cut relative to the active
+    // aperture's peak; scalar fields make Studio time charts inexpensive.
+    @appendable
+    struct BeamPatternStatus {
+        @key long   array_id;       // always 0: forward array face
+        TimeStamp   timestamp;
+        long        beam_id;
+        long        rma_offline_mask;
+        double      commanded_azimuth_deg; // ship-relative
+        double      boresight_error_deg;   // effective - commanded
+        double      gain_loss_db;          // relative to all 1024 elements
+        double      beamwidth_3db_deg;
+        double      peak_sidelobe_level_db; // relative to active peak
+        double      left_sidelobe_offset_deg;
+        double      right_sidelobe_offset_deg;
+        double      pattern_start_offset_deg;
+        double      pattern_step_deg;
+        sequence<float, MAX_BEAM_PATTERN_SAMPLES> azimuth_pattern_db;
     };
 
     // Simulated raw receiver output for one beam dwell.

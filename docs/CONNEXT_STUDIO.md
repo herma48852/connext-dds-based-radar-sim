@@ -33,13 +33,13 @@ Every component is a named participant:
 | Participant name | Role |
 |---|---|
 | `Radar.BeamScheduler` | publishes `Radar/BeamCommand` (100 Hz) |
-| `Radar.DetectionProcessor` | pub `Radar/RawReturn` + `Radar/DetectionEvent`; sub `Radar/BeamCommand`, `Radar/RawReturn`, `TargetGen/TargetTruth` |
+| `Radar.DetectionProcessor` | pub `Radar/RawReturn`, `Radar/DetectionEvent`, and `Radar/BeamPatternStatus`; sub `Radar/BeamCommand`, `Radar/RawReturn`, `TargetGen/TargetTruth` |
 | `Radar.TrackManager` | publishes `Radar/TargetTrack` (10 Hz) |
 | `Radar.CalibrationMonitor` | publishes `Radar/CalibrationStatus` (1 Hz) |
 | `Radar.CommandHandler` | subscribes `Radar/SystemCommand` (WaitSet) |
 | `Radar.ShipINS` | publishes `Ship/ShipPosition` (key 0) |
 | `Radar.CommandConsole` | publishes `Radar/SystemCommand` (UI buttons) |
-| `Radar.HMI-UI` | subscribes `Radar/TargetTrack`, `Radar/DetectionEvent`, `Ship/ShipPosition` (key 0), `Radar/CalibrationStatus` — the display endpoint |
+| `Radar.HMI-UI` | subscribes `Radar/TargetTrack`, `Radar/DetectionEvent`, `Ship/ShipPosition` (key 0), `Radar/CalibrationStatus`, `Radar/BeamPatternStatus` — the display endpoint |
 | `TargetGen.Generator` | publishes `TargetGen/TargetTruth` + `Ship/ShipPosition` (key 1) |
 
 Note the **loopback edge** inside `Radar.DetectionProcessor`
@@ -60,6 +60,9 @@ Hierarchical names render as a tree: `Radar/...`, `Ship/...`,
 - `Radar/CalibrationStatus` — TRANSIENT_LOCAL: a freshly joined Studio
   immediately sees the last sample (durability demo). Includes the
   per-element drift sequence and `rma_offline_mask` (bit per RMA).
+- `Radar/BeamPatternStatus` — 20 Hz RELIABLE + TRANSIENT_LOCAL beam
+  telemetry. Chart gain loss, 3 dB width, boresight error, and peak
+  sidelobe level; reshape the 181-value azimuth cut into a line plot.
 - `TargetGen/TargetTruth` — one instance per `target_id`.
 
 ### 2.3 QoS inspection
@@ -112,10 +115,13 @@ duplicate target/truth publisher.
    ```
    Watch `Radar/CalibrationStatus`: `rma_offline_mask` gains the bit,
    `failed_element_count` jumps by 64 per offline RMA, and the drift
-   sequence shows that 8×8 block dark. Then the physical effect: implanted
-   return amplitude falls with the active-aperture fraction and the azimuth
-   beam widens. Chart the `Radar/DetectionEvent` SNR distribution as RMAs go
-   offline and weaker targets drop out. Restore with **ALL ONLINE**.
+   sequence shows that 8×8 block dark. Then open
+   `Radar/BeamPatternStatus`: gain falls, the main lobe broadens, and the
+   array-factor cut and sidelobe metrics change according to RMA position.
+   The B-scope renders the same DDS sample as an automatic overlay. Chart the
+   `Radar/DetectionEvent` SNR distribution as RMAs go offline; a strong
+   target can occasionally appear through a dominant sidelobe at a displaced
+   dwell azimuth. Restore with **ALL ONLINE**.
 
 5. **Sector scan** — press **SECTOR SCAN** in the UI and watch
    `Radar/BeamCommand`: azimuth values bounce between 60 and 120 deg

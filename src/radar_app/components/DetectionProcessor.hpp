@@ -21,6 +21,7 @@
 #include <unordered_map>
 
 #include "ComponentBase.hpp"
+#include "BeamPatternModel.hpp"
 #include "../DataBus.hpp"
 
 namespace radar::app {
@@ -64,6 +65,7 @@ private:
 
     dds::pub::DataWriter<types::RawReturn>      raw_writer_{dds::core::null};
     dds::pub::DataWriter<types::DetectionEvent> det_writer_{dds::core::null};
+    dds::pub::DataWriter<types::BeamPatternStatus> pattern_writer_{dds::core::null};
     dds::sub::DataReader<types::BeamCommand>    beam_reader_{dds::core::null};
     dds::sub::DataReader<types::RawReturn>      raw_reader_{dds::core::null};
     dds::sub::DataReader<types::TargetTruth>    truth_reader_{dds::core::null};

@@ -12,8 +12,9 @@
      self-explanatory.
    - Deliberate QoS variety: DetectionEvent / RawReturn / TargetTruth are
      BEST_EFFORT (high-rate sensor paths), while TargetTrack / BeamCommand /
-     SystemCommand / ShipPosition / CalibrationStatus are RELIABLE. In
-     Studio's match-analysis view this variety is visible and explainable.
+     BeamPatternStatus / SystemCommand / ShipPosition / CalibrationStatus are
+     RELIABLE. In Studio's match-analysis view this variety is visible and
+     explainable.
    - The target generator can deliberately inject a MISMATCHED endpoint
      (its "inject-qos-mismatch" flag) so Studio's diagnostics can be
      demonstrated live.
@@ -124,6 +125,24 @@
         <durability><kind>VOLATILE_DURABILITY_QOS</kind></durability>
         <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>1</depth></history>
         <latency_budget><duration><sec>0</sec><nanosec>5000000</nanosec></duration></latency_budget>
+      </datareader_qos>
+    </qos_profile>
+
+    <!-- BeamPatternStatus: 20 Hz outage-aware array response. Reliable and
+         transient-local so a late-joining HMI or Studio session immediately
+         receives the current mask, scalar beam metrics, and azimuth cut. -->
+    <qos_profile name="BeamPatternStatusProfile">
+      <datawriter_qos>
+        <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>TRANSIENT_LOCAL_DURABILITY_QOS</kind></durability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>1</depth></history>
+        <deadline><period><sec>0</sec><nanosec>100000000</nanosec></period></deadline>
+      </datawriter_qos>
+      <datareader_qos>
+        <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>TRANSIENT_LOCAL_DURABILITY_QOS</kind></durability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>1</depth></history>
+        <deadline><period><sec>0</sec><nanosec>100000000</nanosec></period></deadline>
       </datareader_qos>
     </qos_profile>
 

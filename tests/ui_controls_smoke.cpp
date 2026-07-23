@@ -144,7 +144,7 @@ public:
             sink.rma_mask, sink, &probe);
         radar::ui::render_scenario_bar(
             "SCENARIOS", ImVec2(720, 400), ImVec2(460, 580), sink,
-            sink.radar_mode, sink.degraded, &probe);
+            sink.radar_mode, sink.degraded, beam_formation_overlay, &probe);
 
         ImGui::Render();
         ++frame_number_;
@@ -170,6 +170,7 @@ public:
 
     Probe probe;
     RecordingSink sink;
+    bool beam_formation_overlay = false;
 
 private:
     radar::ui::AScopeView ascope_;
@@ -226,6 +227,18 @@ int main() {
 
     expect_command(ui, radar::ui::UiControl::SectorScan, 1, "", 90.0, 60.0);
     check(ui.sink.radar_mode == 1, "SECTOR SCAN activates sector mode");
+
+    const size_t before_overlay = ui.sink.commands.size();
+    check(ui.click(radar::ui::UiControl::BeamFormation) == 0,
+          "BEAM FORMATION is a local display control");
+    check(ui.beam_formation_overlay,
+          "BEAM FORMATION enables the comparison overlay");
+    check(ui.sink.commands.size() == before_overlay,
+          "BEAM FORMATION emits no DDS command");
+    check(ui.click(radar::ui::UiControl::BeamFormation) == 0,
+          "BEAM FORMATION toggles locally a second time");
+    check(!ui.beam_formation_overlay,
+          "BEAM FORMATION disables the comparison overlay");
 
     expect_command(ui, radar::ui::UiControl::DegradeArray, 4);
     check(ui.sink.degraded, "DEGRADE ARRAY sets degraded state");

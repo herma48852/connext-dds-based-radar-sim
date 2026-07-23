@@ -158,6 +158,7 @@ int UiApp::run() {
         const auto ship   = bus_.ship_display(); // via HMI-UI's DDS reader
         const auto health = bus_.health();
         const auto trace  = bus_.trace();
+        const auto beam_pattern = bus_.beam_pattern();
 
         // ---- render ----
 #if defined(__APPLE__)
@@ -200,7 +201,9 @@ int UiApp::run() {
                        tracks, ship,
                        bus_.radar_mode.load() == 1,
                        bus_.sector_center_deg.load(),
-                       bus_.sector_width_deg.load(), dt);
+                       bus_.sector_width_deg.load(),
+                       bus_.current_beam_az_deg.load(),
+                       show_beam_formation_, beam_pattern, dt);
 
         // bottom strip: 6 panes. Widths tuned so text fits at 2x UI scale
         // (health/ship need ~15%, scenario buttons ~14%, array grid ~16%).
@@ -221,7 +224,8 @@ int UiApp::run() {
                            bus_.rma_offline_mask.load(), console_);
         render_scenario_bar("SCENARIOS", ImVec2(w1 + w2 + w3 + w4 + w5, y0),
                             ImVec2(w6, panel_h), console_,
-                            bus_.radar_mode.load(), bus_.degrade_array.load());
+                            bus_.radar_mode.load(), bus_.degrade_array.load(),
+                            show_beam_formation_);
 
         ImGui::Render();
 #if defined(__APPLE__)

@@ -6,6 +6,7 @@
 #include <cmath>
 #include <memory>
 
+#include "Log.hpp"
 #include "SimClock.hpp"
 
 namespace radar::app {
@@ -43,10 +44,14 @@ void DetectionProcessor::start() {
     auto beam_topic  = radds::make_topic<types::BeamCommand>(participant_, dds_names::TOPIC_BEAM_COMMAND);
     auto raw_topic   = radds::make_topic<types::RawReturn>(participant_, dds_names::TOPIC_RAW_RETURN);
     auto det_topic   = radds::make_topic<types::DetectionEvent>(participant_, dds_names::TOPIC_DETECTION_EVENT);
+    auto pattern_topic = radds::make_topic<types::BeamPatternStatus>(
+        participant_, dds_names::TOPIC_BEAM_PATTERN_STATUS);
     auto truth_topic = radds::make_topic<types::TargetTruth>(participant_, dds_names::TOPIC_TARGET_TRUTH);
 
     raw_writer_   = radds::make_writer<types::RawReturn>(publisher_, raw_topic, dds_names::PROFILE_RAW_RETURN);
     det_writer_   = radds::make_writer<types::DetectionEvent>(publisher_, det_topic, dds_names::PROFILE_DETECTION_EVENT);
+    pattern_writer_ = radds::make_writer<types::BeamPatternStatus>(
+        publisher_, pattern_topic, dds_names::PROFILE_BEAM_PATTERN_STATUS);
     beam_reader_  = radds::make_reader<types::BeamCommand>(subscriber_, beam_topic, dds_names::PROFILE_BEAM_COMMAND);
     raw_reader_   = radds::make_reader<types::RawReturn>(subscriber_, raw_topic, dds_names::PROFILE_RAW_RETURN);
     truth_reader_ = radds::make_reader<types::TargetTruth>(subscriber_, truth_topic, dds_names::PROFILE_TARGET_TRUTH);
@@ -101,6 +106,13 @@ void DetectionProcessor::return_synthesis_loop() {
     sample.range_bin_count = kRangeBins;
     sample.iq_samples.resize(2 * kRangeBins);
 
+    types::BeamPatternStatus pattern_status;
+    pattern_status.array_id = 0;
+    pattern_status.azimuth_pattern_db.resize(kBeamPatternSampleCount);
+    uint32_t cached_rma_mask = 0xFFFFFFFFu;
+    BeamPattern pattern;
+    auto next_pattern_publish = steady_clock::now();
+
     while (!stop_.load()) {
         next += milliseconds(1); // 1 kHz simulated PRF
 
@@ -117,10 +129,51 @@ void DetectionProcessor::return_synthesis_loop() {
         // 1%, NOT 10%: at 10% the 35 dBsm ship still clears CFAR at 50 km
         // (amp 0.45 > 0.26) — "array offline" must actually go dark.
         // Elevation gate untouched — the 3-bar raster tiling depends on it.
-        const uint32_t rma_mask = bus_.rma_offline_mask.load();
-        const double active = std::max(
-            0.01, 1.0 - 64.0 * std::popcount(rma_mask & 0xFFFFu) / 1024.0);
+        const uint32_t rma_mask = bus_.rma_offline_mask.load() & 0xFFFFu;
+        if (rma_mask != cached_rma_mask) {
+            pattern = BeamPatternModel::calculate(rma_mask);
+            cached_rma_mask = rma_mask;
+            RADAR_LOG << "[DetectionProcessor] beam pattern mask="
+                      << pattern.rma_offline_mask
+                      << " active=" << pattern.active_elements
+                      << " loss_db=" << pattern.gain_loss_db
+                      << " bw_deg=" << pattern.beamwidth_3db_deg
+                      << " psl_db=" << pattern.peak_sidelobe_level_db
+                      << " error_deg=" << pattern.boresight_error_deg
+                      << "\n";
+        }
+        const double active = std::max(0.01, pattern.active_fraction);
         const double az_half_beam = kBeamwidthDeg * 0.5 / std::sqrt(active);
+
+        // Publish scalar metrics plus the normalized azimuth cut at 20 Hz.
+        // The transient-local profile lets Studio or HMI-UI join late and
+        // immediately receive the latest degradation state.
+        const auto pattern_now = steady_clock::now();
+        if (pattern_now >= next_pattern_publish) {
+            next_pattern_publish = pattern_now + milliseconds(50);
+            pattern_status.timestamp = SimClock::stamp();
+            pattern_status.beam_id = static_cast<int32_t>(beam_id);
+            pattern_status.rma_offline_mask =
+                static_cast<int32_t>(pattern.rma_offline_mask);
+            pattern_status.commanded_azimuth_deg = az_deg;
+            pattern_status.boresight_error_deg =
+                pattern.boresight_error_deg;
+            pattern_status.gain_loss_db = pattern.gain_loss_db;
+            pattern_status.beamwidth_3db_deg = pattern.beamwidth_3db_deg;
+            pattern_status.peak_sidelobe_level_db =
+                pattern.peak_sidelobe_level_db;
+            pattern_status.left_sidelobe_offset_deg =
+                pattern.left_sidelobe_offset_deg;
+            pattern_status.right_sidelobe_offset_deg =
+                pattern.right_sidelobe_offset_deg;
+            pattern_status.pattern_start_offset_deg =
+                kBeamPatternStartDeg;
+            pattern_status.pattern_step_deg = kBeamPatternStepDeg;
+            for (int i = 0; i < kBeamPatternSampleCount; ++i)
+                pattern_status.azimuth_pattern_db[i] =
+                    pattern.azimuth_pattern_db[i];
+            pattern_writer_.write(pattern_status);
+        }
 
         // Noise floor
         for (int i = 0; i < 2 * kRangeBins; ++i)
@@ -138,8 +191,48 @@ void DetectionProcessor::return_synthesis_loop() {
                 // world ENU azimuth -> ship-relative azimuth
                 const double az_world = std::atan2(t.x, t.y) / kDeg2Rad;
                 const double az_ship  = wrap180(az_world - heading);
-                if (std::fabs(wrap180(az_ship - az_deg)) > az_half_beam)
-                    continue; // outside this dwell's beam
+                const double beam_offset = wrap180(az_ship - az_deg);
+
+                double pattern_response = 1.0;
+                if (rma_mask == 0) {
+                    // Preserve the established nominal regression exactly.
+                    if (std::fabs(beam_offset) > az_half_beam)
+                        continue;
+                } else {
+                    const double main_offset =
+                        wrap180(beam_offset - pattern.boresight_error_deg);
+                    const double main_half_width = std::max(
+                        az_half_beam, pattern.beamwidth_3db_deg * 0.5);
+                    if (std::fabs(main_offset) <= main_half_width) {
+                        pattern_response =
+                            pattern.relative_amplitude(beam_offset);
+                    } else {
+                        // Bound sidelobe theatre to the two dominant lobes.
+                        // The extra -9 dB scale keeps ordinary air targets
+                        // quiet while allowing a strong ship-sized return to
+                        // make an occasional, explainable displaced ghost.
+                        constexpr double kSidelobeDwellGateDeg = 1.2;
+                        constexpr double kSidelobeTheatreScale = 0.35;
+                        const bool pattern_has_sidelobe =
+                            pattern.active_elements > 0 &&
+                            pattern.peak_sidelobe_level_db > -30.0;
+                        const bool near_left = pattern_has_sidelobe &&
+                            std::fabs(wrap180(
+                                beam_offset
+                                - pattern.left_sidelobe_offset_deg))
+                                <= kSidelobeDwellGateDeg;
+                        const bool near_right = pattern_has_sidelobe &&
+                            std::fabs(wrap180(
+                                beam_offset
+                                - pattern.right_sidelobe_offset_deg))
+                                <= kSidelobeDwellGateDeg;
+                        if (!near_left && !near_right)
+                            continue;
+                        pattern_response =
+                            pattern.relative_amplitude(beam_offset)
+                            * kSidelobeTheatreScale;
+                    }
+                }
 
                 const double el_t = std::atan2(t.z, range_xy) / kDeg2Rad;
                 // Elevation gate: +/-5.5 deg so the scheduler's 3/14 deg
@@ -150,7 +243,9 @@ void DetectionProcessor::return_synthesis_loop() {
                     continue; // outside elevation beam
 
                 const double rcs_lin = std::pow(10.0, t.rcs_dbsm / 10.0);
-                const double amp = kSignalScale * active * std::sqrt(rcs_lin) / (range * range);
+                const double amp =
+                    kSignalScale * active * pattern_response
+                    * std::sqrt(rcs_lin) / (range * range);
 
                 const double bin_f = range / kRangeMaxM * kRangeBins;
                 const int b0 = static_cast<int>(bin_f);

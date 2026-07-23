@@ -3,14 +3,16 @@
 //
 // Internal components communicate exclusively over DDS topics (same domain):
 //   Radar.BeamScheduler        -> Radar/BeamCommand         (100 Hz)
-//   Radar.DetectionProcessor   -> Radar/RawReturn (1 kHz), Radar/DetectionEvent
+//   Radar.DetectionProcessor   -> Radar/RawReturn (1 kHz), Radar/DetectionEvent,
+//                                 Radar/BeamPatternStatus    (20 Hz)
 //   Radar.TrackManager         -> Radar/TargetTrack          (10 Hz)
 //   Radar.CalibrationMonitor   -> Radar/CalibrationStatus    (1 Hz)
 //   Radar.CommandHandler       <- Radar/SystemCommand        (WaitSet)
 //   Radar.ShipINS              -> Ship/ShipPosition          (10 Hz)
 //   Radar.CommandConsole       -> Radar/SystemCommand        (UI scenarios)
 //   Radar.HMI-UI               <- TargetTrack, DetectionEvent,
-//                                 ShipPosition, CalibrationStatus (display)
+//                                 ShipPosition, CalibrationStatus,
+//                                 BeamPatternStatus (display)
 //
 // Usage: radar_app [--domain N]     (default domain 0)
 // ============================================================================

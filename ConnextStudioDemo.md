@@ -271,6 +271,10 @@ Reuse the `Radar/CalibrationStatus` dashboard. Add:
 - A calculated `popcount(rma_offline_mask & 0xFFFF)` if transformations are
   available.
 - The 32×32 drift heatmap with 4×4 RMA boundaries.
+- `Radar/BeamPatternStatus` scalar charts for `gain_loss_db`,
+  `beamwidth_3db_deg`, `peak_sidelobe_level_db`, and
+  `boresight_error_deg`.
+- A line view of its 181-sample `azimuth_pattern_db` sequence.
 - Optionally, a chart of `Radar/DetectionEvent.snr_db` or `amplitude` to
   illustrate the downstream signal effect as more RMAs are removed.
 
@@ -280,6 +284,10 @@ Suggested AI prompt:
 > row-major grid. Overlay those boundaries on the 32 by 32 element drift
 > heatmap. Add time charts for offline RMA count and failed element count,
 > synchronized with Radar/SystemCommand events.
+
+> Correlate SystemCommand and CalibrationStatus mask transitions with
+> BeamPatternStatus gain loss, 3 dB beamwidth, boresight error, and peak
+> sidelobe level. Plot the azimuth pattern before and after each outage.
 
 ### Activate
 
@@ -295,11 +303,23 @@ Return to Studio and show:
    to `0x0008`.
 3. `failed_element_count` increases by 64.
 4. The corresponding 8×8 region of `element_drift_db` becomes -60 dB.
-5. Detection amplitude/SNR can decline as active aperture is removed; the
-   effect becomes more obvious after taking several RMAs offline.
+5. `Radar/BeamPatternStatus.rma_offline_mask` changes in the 20 Hz stream;
+   `gain_loss_db`, `beamwidth_3db_deg`, `peak_sidelobe_level_db`, and
+   `boresight_error_deg` describe the response.
+6. The B-scope automatically shows commanded/effective beam centers, the
+   widened main lobe, dominant sidelobes, and the compact degraded readout.
+7. Detection amplitude/SNR can decline as active aperture is removed. A
+   strong contact can occasionally appear through a dominant sidelobe at a
+   displaced dwell azimuth.
 
 The mask is the compact 16-RMA state. The 1,024-value drift sequence is the
-per-element face that supports a heatmap.
+per-element face that supports a heatmap. The 181-value pattern sequence is a
+normalized -45 to +45 degree azimuth cut around the commanded beam.
+
+For a more theatrical second step, also click RMA 7. RMAs 3 and 7 form an
+adjacent pair on the right edge of the logical face, making the gain,
+boresight, and sidelobe changes easier to see while preserving most of the
+aperture.
 
 ### Adapt the view with AI
 
@@ -313,11 +333,15 @@ Follow-up prompts:
 
 > Focus the heatmap on RMA 3 and display the 64 raw drift values next to it.
 
+> Compare two BeamPatternStatus samples with the same offline-RMA count but
+> different masks. Quantify how RMA position changes the azimuth pattern.
+
 ### Restore
 
 Press **ALL ONLINE**. Studio should show `CMD_RMA_ONLINE` with parameters
 `"all"`, followed by mask `0x0000`, the failed count dropping by 64 per RMA
-that was offline, and the dark blocks returning to nominal drift.
+that was offline, the pattern metrics returning to nominal, the B-scope
+overlay disappearing, and the dark blocks returning to nominal drift.
 
 ## 7. Scenario 4 — reset and reacquire tracks
 
@@ -433,7 +457,7 @@ beam priority, and live `TargetTrack` instance count.
 | SECTOR SCAN | `CMD_SET_SECTOR` | `Radar/BeamCommand` | azimuth 60–120°, priority 2 | SEARCH MODE |
 | DEGRADE ARRAY | `CMD_DEGRADE_ARRAY` | `Radar/CalibrationStatus` | status, failed count, drift sequence | RESTORE ARRAY |
 | RESTORE ARRAY | `CMD_RESTORE_ARRAY` | `Radar/CalibrationStatus` | return to nominal sparse-element state | — |
-| RMA block click | `CMD_RMA_OFFLINE/ONLINE` | `Radar/CalibrationStatus`, `Radar/DetectionEvent` | mask, failed count, 8×8 drift block, SNR | click again or ALL ONLINE |
+| RMA block click | `CMD_RMA_OFFLINE/ONLINE` | `Radar/CalibrationStatus`, `Radar/BeamPatternStatus`, `Radar/DetectionEvent` | mask, drift block, gain loss, beamwidth, sidelobes, SNR | click again or ALL ONLINE |
 | ALL ONLINE | `CMD_RMA_ONLINE`, `"all"` | `Radar/CalibrationStatus` | mask returns to zero | — |
 | RESET TRACKS | `CMD_RESET` | `Radar/TargetTrack`, `Radar/BeamCommand` | disposals, live count, reacquisition, search scan | automatic reacquisition |
 | SELF TEST | `CMD_SELF_TEST` | command only today | `Radar/SystemCommand` event | not applicable |

@@ -1,6 +1,7 @@
 #pragma once
 // Bottom-strip panels: track list, beam schedule timeline, system health,
-// ship position/status, and the scenario (SystemCommand) button bar.
+// ship position/status, and the scenario/action button bar. Most actions
+// publish SystemCommand; BEAM FORMATION is a local display toggle.
 
 #include <deque>
 #include <vector>
@@ -17,6 +18,7 @@ namespace radar::ui {
 enum class UiControl {
     SearchMode,
     SectorScan,
+    BeamFormation,
     DegradeArray,
     RestoreArray,
     SelfTest,
@@ -57,6 +59,7 @@ void render_array_panel(const char* title, ImVec2 pos, ImVec2 size,
 void render_scenario_bar(const char* title, ImVec2 pos, ImVec2 size,
                          app::CommandSink& commands,
                          int32_t radar_mode, bool degraded,
+                         bool& beam_formation_overlay,
                          UiControlObserver* observer = nullptr);
 
 } // namespace radar::ui

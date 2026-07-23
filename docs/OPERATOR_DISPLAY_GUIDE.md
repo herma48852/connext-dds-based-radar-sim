@@ -137,6 +137,68 @@ In the standard sector, the dashed lines are at 60 and 120 degrees because
 the B-scope is bow-relative. The corresponding PPI sweep is rotated by the
 ship's true heading.
 
+### Beam-formation displays
+
+When one or more RMAs are offline and **BEAM FORMATION** is not selected, the
+B-scope retains its compact automatic outage indication:
+
+| Overlay | Meaning |
+|---|---|
+| Faint amber/red curtain | Live response around the current scheduled beam; it moves left to right with the search scan |
+| Dashed green line | Commanded beam center |
+| Solid amber line | Effective boresight after modeled fallback calibration |
+| Dotted red lines | Dominant left and right sidelobes |
+| `BEAM DEGRADED` readout | Offline RMA count, gain loss, beamwidth, peak sidelobe level, and boresight error |
+
+For a before/after comparison:
+
+1. Select **BEAM FORMATION** in the **SCENARIOS** pane while all RMAs are
+   online.
+2. The centered top-down polar plot shows the nominal beam and its sidelobes.
+3. Click one or more blocks in **ARRAY FACE**.
+4. The nominal plot animates to the far left and the degraded live plot
+   appears at center, leaving both visible for comparison.
+5. Click the same RMA again. The degraded plot retires while nominal moves
+   back to center and replaces it.
+
+The polar plot magnifies the physical -10 to +10 degree region around the
+current beam. Radial distance is response in dB: the outer arc is 0 dB and
+the center is -30 dB or lower. Blue is the fixed nominal reference. During
+an outage, amber shows the degraded main lobe and red shows its sidelobes.
+The degraded radial scale includes peak gain loss relative to the all-online
+aperture.
+
+Because one RMA is only 6.25% of the aperture, the degraded plot applies the
+explicitly labeled `DISPLAY SPREAD` accent so a one-RMA shape change is
+visible at console scale. The multiplier grows with the offline-RMA count.
+It affects only the drawing's angular spread; the `WIDTH`, gain, pointing,
+and sidelobe readouts remain the calculated physical values.
+
+The abbreviations in the readout are:
+
+- `LOSS`: peak array-gain loss relative to all 1,024 elements;
+- `BW`: full 3 dB azimuth beamwidth;
+- `PSL`: peak sidelobe level relative to the active main-lobe peak;
+- `ERR`: effective boresight minus commanded azimuth.
+
+The pattern comes from the physical positions of the offline RMA blocks, not
+only their count. Two masks with the same number of failed RMAs can therefore
+produce different patterns. Pure amplitude loss does not inherently steer
+the coherent peak; the small displayed `ERR` explicitly models residual phase
+calibration in the fallback beamformer after an asymmetric outage.
+
+While **BEAM FORMATION** is selected, the current scan azimuth remains in the
+numeric status readout, but the B-scope draws no marching curtain or moving
+beam-feature markers. The polar plots stay fixed because their angles are
+relative to the scheduled beam.
+
+Strong targets entering a dominant degraded sidelobe can produce an
+occasional displaced detection or “ghost.” The model deliberately limits
+this behavior to the two dominant sidelobes so the demonstration remains
+bounded and explainable. Pressing `ALL ONLINE` removes the automatic curtain
+and restores the live pattern to nominal. **BEAM FORMATION** remains selected
+until the operator toggles it off.
+
 ## A-Scope - Amplitude / Range
 
 The A-scope answers: **What did the receiver see along the beam currently
@@ -285,10 +347,13 @@ Clicking an RMA toggles the entire block offline or online. Its outline reacts
 immediately; the 64 heatmap cells update on the next one-second calibration
 sample. `ALL ONLINE` clears every RMA-offline bit.
 
-Taking RMAs offline reduces simulated target return gain and widens the
-azimuth beam. One of sixteen RMAs is a modest 6.25% aperture loss, so the
-effect is clearer after several RMAs are removed. Receiver noise is retained,
-and the model uses a 1% gain floor even with all RMAs offline.
+Taking RMAs offline reduces simulated target return gain monotonically. It
+also changes the calculated azimuth width, pointing error, and sidelobes
+according to the location of each failed block. Width and pointing therefore
+need not change monotonically for every mask: symmetric failures can cancel
+pointing error, while edge or fragmented failures can broaden the beam more
+than other masks with the same count. Receiver noise is retained, and the
+model uses a 1% gain floor even with all RMAs offline.
 
 ## Ship Position
 
@@ -370,6 +435,21 @@ become detections.
 It deliberately simulates phosphor persistence with a four-second intensity
 half-life.
 
+**What are the green, amber, and red lines moving across the B-scope?**
+
+They are the RMA-outage beam overlay. Green is the commanded beam, amber is
+the effective main lobe and its 3 dB width, and red marks the strongest
+sidelobes. The overlay appears only while at least one RMA is offline and
+**BEAM FORMATION** is not selected. Select **BEAM FORMATION** to replace this
+compact moving indication with the animated side-by-side nominal-versus-live
+polar comparison.
+
+**Why can an RMA outage create a displaced detection?**
+
+A strong target can cross a degraded sidelobe even though it is outside the
+main beam. The receiver assigns that return to the commanded dwell azimuth,
+so it can appear at the wrong bearing as a short-lived sidelobe ghost.
+
 **Why did one array element briefly turn yellow-orange?**  
 The one-second calibration sample placed its simulated gain drift below
 -0.45 dB. Normal random drift can cross that boundary for one sample.
@@ -400,6 +480,7 @@ result state or display in this version.
 | PPI | Plan Position Indicator |
 | SNR | Signal-to-noise ratio |
 | CFAR | Constant False-Alarm Rate processing |
+| PSL | Peak sidelobe level relative to the main-lobe peak |
 | dB | Logarithmic ratio; array drift is relative to nominal gain |
 | dBsm | Radar cross section relative to one square meter; influences simulated detectability but is not displayed |
 | HDG | Heading |
