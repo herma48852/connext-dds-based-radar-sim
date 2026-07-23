@@ -19,20 +19,35 @@ void CalibrationMonitor::start() {
         using namespace std::chrono;
         std::normal_distribution<float>  drift(0.0f, 0.15f);      // dB, benign
         std::normal_distribution<double> temp_walk(0.0, 0.05);
-        auto next = steady_clock::now();
+        auto next_heartbeat = steady_clock::now();
+        uint32_t last_rma_mask = 0xFFFFFFFFu;
+        bool last_degraded = !bus_.degrade_array.load();
 
         types::CalibrationStatus msg;
         msg.array_id = 0;
         msg.element_drift_db.resize(types::MAX_ARRAY_ELEMENTS);
 
         while (!stop_.load()) {
-            next += seconds(1); // 1 Hz
-
-            temperature_c_ += temp_walk(rng_);
-            temperature_c_ = std::clamp(temperature_c_, 35.0, 55.0);
-
+            const auto now = steady_clock::now();
             const bool degraded = bus_.degrade_array.load();
-            const uint32_t rma_mask = bus_.rma_offline_mask.load();
+            const uint32_t rma_mask =
+                bus_.rma_offline_mask.load() & 0xFFFFu;
+            const bool state_changed =
+                rma_mask != last_rma_mask || degraded != last_degraded;
+            const bool heartbeat = now >= next_heartbeat;
+            if (!state_changed && !heartbeat) {
+                std::this_thread::sleep_for(milliseconds(20));
+                continue;
+            }
+
+            if (heartbeat) {
+                do {
+                    next_heartbeat += seconds(1);
+                } while (next_heartbeat <= now);
+                temperature_c_ += temp_walk(rng_);
+                temperature_c_ = std::clamp(temperature_c_, 35.0, 55.0);
+            }
+
             const int rma_off = std::popcount(rma_mask & 0xFFFFu);
             int failed = 64 * rma_off; // offline RMAs: 64 dark elements each
 
@@ -70,8 +85,8 @@ void CalibrationMonitor::start() {
             msg.rma_offline_mask     = static_cast<int32_t>(rma_mask);
             writer_.write(msg);
             // The health panel is fed by HmiUi's CalibrationStatus reader.
-
-            std::this_thread::sleep_until(next);
+            last_rma_mask = rma_mask;
+            last_degraded = degraded;
         }
     });
 }

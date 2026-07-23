@@ -1,5 +1,6 @@
 #pragma once
-// CalibrationMonitor: publishes CalibrationStatus at 1 Hz.
+// CalibrationMonitor: publishes CalibrationStatus at a 1 Hz heartbeat and
+// immediately after an array degradation or RMA outage state change.
 //
 // Models per-element (T/R module) gain drift plus a slow temperature random
 // walk. When the CommandHandler sets the DEGRADE flag (demo scenario), a

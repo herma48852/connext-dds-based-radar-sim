@@ -4,8 +4,8 @@
 //
 // The model consumes the 16-bit RMA-offline mask and produces a normalized
 // one-dimensional azimuth cut plus scalar health metrics.  It has no DDS or
-// UI dependencies so the receiver, B-scope overlay, and regression test share
-// one deterministic source of truth.
+// UI dependencies so the beamformer, receiver, B-scope overlay, and regression
+// test share one deterministic source of truth.
 // ============================================================================
 
 #include <array>

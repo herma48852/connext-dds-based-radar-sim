@@ -134,7 +134,7 @@ module types {
     };
 
     // Current outage-aware azimuth response of the array. Published at 20 Hz
-    // by DetectionProcessor and consumed by HMI-UI for the B-scope overlay.
+    // by Beamformer and consumed by DetectionProcessor and HMI-UI.
     // The bounded sequence is a normalized dB cut relative to the active
     // aperture's peak; scalar fields make Studio time charts inexpensive.
     @appendable

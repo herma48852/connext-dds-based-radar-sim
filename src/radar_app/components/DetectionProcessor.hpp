@@ -3,6 +3,7 @@
 //
 //   subscribes: Radar/BeamCommand      (listener: track current dwell)
 //   subscribes: TargetGen/TargetTruth  (listener: maintain truth cache)
+//   subscribes: Radar/BeamPatternStatus (effective array response)
 //   publishes : Radar/RawReturn        (1 kHz synthesized I/Q per dwell)
 //   subscribes: Radar/RawReturn        (listener: CFAR detection, loopback)
 //   publishes : Radar/DetectionEvent   (threshold crossings)
@@ -57,6 +58,7 @@ private:
     static constexpr double kSignalScale    = 2.0e8;     // amplitude = scale*sqrt(rcs)/R^2
 
     void on_beam_command(const types::BeamCommand& cmd);
+    void on_beam_pattern(const types::BeamPatternStatus& status);
     void on_truth(const types::TargetTruth& truth);
     void on_raw_return(const types::RawReturn& ret);
     void return_synthesis_loop();
@@ -65,8 +67,9 @@ private:
 
     dds::pub::DataWriter<types::RawReturn>      raw_writer_{dds::core::null};
     dds::pub::DataWriter<types::DetectionEvent> det_writer_{dds::core::null};
-    dds::pub::DataWriter<types::BeamPatternStatus> pattern_writer_{dds::core::null};
     dds::sub::DataReader<types::BeamCommand>    beam_reader_{dds::core::null};
+    dds::sub::DataReader<types::BeamPatternStatus>
+        pattern_reader_{dds::core::null};
     dds::sub::DataReader<types::RawReturn>      raw_reader_{dds::core::null};
     dds::sub::DataReader<types::TargetTruth>    truth_reader_{dds::core::null};
 
@@ -74,6 +77,11 @@ private:
     std::atomic<int64_t> dwell_beam_id_{-1};
     std::atomic<double>  dwell_az_deg_{0.0};
     std::atomic<double>  dwell_el_deg_{2.0};
+
+    // Effective response (BeamPatternStatus listener -> synth thread).
+    mutable std::mutex pattern_mutex_;
+    BeamPattern pattern_;
+    std::atomic<uint64_t> pattern_revision_{0};
 
     // Truth cache (TargetTruth listener -> synth thread)
     mutable std::mutex truth_mutex_;

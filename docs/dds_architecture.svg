@@ -35,60 +35,85 @@
   <text x="385" y="246" font-size="11" fill="#c9d8ce">Radar/BeamCommand</text>
   <text x="385" y="261" font-size="9.5" fill="#8fa398">100 Hz</text>
 
-  <!-- Radar.DetectionProcessor (widened, 6 endpoints spread) -->
-  <rect x="540" y="110" width="520" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
-  <text x="800" y="134" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.Detection</text>
-  <text x="800" y="151" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Processor</text>
-  <text x="800" y="168" text-anchor="middle" font-size="10" fill="#8fa398">radar_app</text>
+  <!-- Radar.Beamformer: steering + health -> actual beam response -->
+  <rect x="500" y="110" width="190" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
+  <text x="595" y="140" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.Beamformer</text>
+  <text x="595" y="159" text-anchor="middle" font-size="10" fill="#8fa398">radar_app</text>
 
-  <!-- sub BeamCommand (leftmost) -->
-  <line x1="580" y1="424" x2="580" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
-  <polygon points="580,184 575,194 585,194" fill="#4fc3f7"/>
-  <text x="570" y="216" text-anchor="end" font-size="11" fill="#c9d8ce">Radar/BeamCommand</text>
+  <!-- sub BeamCommand -->
+  <line x1="525" y1="424" x2="525" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="525,184 520,194 530,194" fill="#4fc3f7"/>
+  <text x="535" y="216" font-size="11" fill="#c9d8ce">Radar/BeamCommand</text>
 
-  <!-- pub RawReturn -->
-  <line x1="660" y1="182" x2="660" y2="420" stroke="#46d17c" stroke-width="2.2"/>
+  <!-- sub CalibrationStatus -->
+  <line x1="590" y1="424" x2="590" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="590,184 585,194 595,194" fill="#4fc3f7"/>
+  <text x="580" y="300" text-anchor="end" font-size="11" fill="#c9d8ce">Radar/CalibrationStatus</text>
+
+  <!-- pub BeamPatternStatus -->
+  <line x1="660" y1="182" x2="660" y2="420" stroke="#46d17c" stroke-width="3"/>
   <polygon points="660,424 655,414 665,414" fill="#46d17c"/>
-  <text x="660" y="254" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/RawReturn</text>
-  <text x="660" y="269" text-anchor="middle" font-size="9.5" fill="#8fa398">1 kHz</text>
+  <rect x="638" y="190" width="44" height="18" rx="9" fill="#163b24" stroke="#46d17c"/>
+  <text x="660" y="203" text-anchor="middle" font-size="9" font-weight="bold" fill="#7bf0a6">PUB</text>
+  <text x="650" y="382" text-anchor="end" font-size="11" font-weight="bold" fill="#dff5e7">Radar/BeamPatternStatus</text>
+  <text x="650" y="397" text-anchor="end" font-size="9.5" fill="#8fa398">writer &#183; 20 Hz</text>
 
-  <!-- sub RawReturn (loopback) -->
+  <!-- Radar.DetectionProcessor -->
+  <rect x="730" y="110" width="430" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
+  <text x="945" y="134" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.Detection</text>
+  <text x="945" y="151" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Processor</text>
+  <text x="945" y="168" text-anchor="middle" font-size="10" fill="#8fa398">radar_app</text>
+
+  <!-- sub BeamCommand -->
   <line x1="760" y1="424" x2="760" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
   <polygon points="760,184 755,194 765,194" fill="#4fc3f7"/>
-  <text x="760" y="292" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/RawReturn</text>
-  <text x="760" y="307" text-anchor="middle" font-size="9.5" fill="#8fa398">loopback</text>
+  <text x="770" y="216" font-size="11" fill="#c9d8ce">Radar/BeamCommand</text>
+
+  <!-- pub RawReturn -->
+  <line x1="830" y1="182" x2="830" y2="420" stroke="#46d17c" stroke-width="2.2"/>
+  <polygon points="830,424 825,414 835,414" fill="#46d17c"/>
+  <text x="830" y="254" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/RawReturn</text>
+  <text x="830" y="269" text-anchor="middle" font-size="9.5" fill="#8fa398">1 kHz</text>
+
+  <!-- sub RawReturn (loopback) -->
+  <line x1="900" y1="424" x2="900" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="900,184 895,194 905,194" fill="#4fc3f7"/>
+  <text x="900" y="292" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/RawReturn</text>
+  <text x="900" y="307" text-anchor="middle" font-size="9.5" fill="#8fa398">loopback</text>
 
   <!-- pub DetectionEvent -->
-  <line x1="860" y1="182" x2="860" y2="420" stroke="#46d17c" stroke-width="2.2"/>
-  <polygon points="860,424 855,414 865,414" fill="#46d17c"/>
-  <text x="860" y="330" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/DetectionEvent</text>
+  <line x1="970" y1="182" x2="970" y2="420" stroke="#46d17c" stroke-width="2.2"/>
+  <polygon points="970,424 965,414 975,414" fill="#46d17c"/>
+  <text x="970" y="330" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/DetectionEvent</text>
+
+  <!-- sub BeamPatternStatus -->
+  <line x1="1040" y1="424" x2="1040" y2="188" stroke="#4fc3f7" stroke-width="3"/>
+  <polygon points="1040,184 1035,194 1045,194" fill="#4fc3f7"/>
+  <rect x="1018" y="190" width="44" height="18" rx="9" fill="#123247" stroke="#4fc3f7"/>
+  <text x="1040" y="203" text-anchor="middle" font-size="9" font-weight="bold" fill="#86d9ff">SUB</text>
+  <text x="1052" y="382" font-size="11" font-weight="bold" fill="#dff5ff">Radar/BeamPatternStatus</text>
+  <text x="1052" y="397" font-size="9.5" fill="#8fa398">reader &#183; receiver physics</text>
 
   <!-- sub TargetTruth -->
-  <line x1="960" y1="424" x2="960" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
-  <polygon points="960,184 955,194 965,194" fill="#4fc3f7"/>
-  <text x="960" y="368" text-anchor="middle" font-size="11" fill="#c9d8ce">TargetGen/TargetTruth</text>
+  <line x1="1125" y1="424" x2="1125" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="1125,184 1120,194 1130,194" fill="#4fc3f7"/>
+  <text x="1135" y="350" font-size="11" fill="#c9d8ce">TargetGen/TargetTruth</text>
 
-  <!-- pub BeamPatternStatus: highlighted end-to-end lane to Radar.HMI-UI -->
-  <line x1="1040" y1="182" x2="1040" y2="420" stroke="#46d17c" stroke-width="3"/>
-  <polygon points="1040,424 1035,414 1045,414" fill="#46d17c"/>
-  <text x="1030" y="398" text-anchor="end" font-size="11" font-weight="bold" fill="#dff5e7">Radar/BeamPatternStatus</text>
-  <text x="1030" y="413" text-anchor="end" font-size="9.5" fill="#8fa398">publishes &#183; 20 Hz</text>
+  <!-- Radar.TrackManager -->
+  <rect x="1190" y="110" width="250" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
+  <text x="1315" y="140" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.TrackManager</text>
+  <text x="1315" y="159" text-anchor="middle" font-size="10" fill="#8fa398">radar_app</text>
 
-  <!-- Radar.TrackManager (widened, arrows spread) -->
-  <rect x="1180" y="110" width="260" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
-  <text x="1310" y="140" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.TrackManager</text>
-  <text x="1310" y="159" text-anchor="middle" font-size="10" fill="#8fa398">radar_app</text>
+  <!-- sub DetectionEvent -->
+  <line x1="1220" y1="424" x2="1220" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="1220,184 1215,194 1225,194" fill="#4fc3f7"/>
+  <text x="1210" y="250" text-anchor="end" font-size="11" fill="#c9d8ce">Radar/DetectionEvent</text>
 
-  <!-- sub DetectionEvent (left edge) -->
-  <line x1="1210" y1="424" x2="1210" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
-  <polygon points="1210,184 1205,194 1215,194" fill="#4fc3f7"/>
-  <text x="1200" y="250" text-anchor="end" font-size="11" fill="#c9d8ce">Radar/DetectionEvent</text>
-
-  <!-- pub TargetTrack (center) -->
-  <line x1="1310" y1="182" x2="1310" y2="420" stroke="#46d17c" stroke-width="2.2"/>
-  <polygon points="1310,424 1305,414 1315,414" fill="#46d17c"/>
-  <text x="1320" y="330" text-anchor="start" font-size="11" fill="#c9d8ce">Radar/TargetTrack</text>
-  <text x="1320" y="345" text-anchor="start" font-size="9.5" fill="#8fa398">10 Hz</text>
+  <!-- pub TargetTrack -->
+  <line x1="1320" y1="182" x2="1320" y2="420" stroke="#46d17c" stroke-width="2.2"/>
+  <polygon points="1320,424 1315,414 1325,414" fill="#46d17c"/>
+  <text x="1330" y="330" font-size="11" fill="#c9d8ce">Radar/TargetTrack</text>
+  <text x="1330" y="345" font-size="9.5" fill="#8fa398">10 Hz</text>
 
   <!-- ============================ THE BUS ============================ -->
   <rect x="40" y="430" width="1400" height="65" rx="9" fill="#12291b" stroke="#2e7d4f" stroke-width="2"/>
@@ -105,7 +130,7 @@
   <line x1="135" y1="700" x2="135" y2="505" stroke="#46d17c" stroke-width="2.2"/>
   <polygon points="135,501 130,511 140,511" fill="#46d17c"/>
   <text x="145" y="548" font-size="11" fill="#c9d8ce">Radar/CalibrationStatus</text>
-  <text x="145" y="563" font-size="9.5" fill="#8fa398">1 Hz</text>
+  <text x="145" y="563" font-size="9.5" fill="#8fa398">1 Hz + state changes</text>
 
   <!-- Radar.CommandHandler -->
   <rect x="280" y="700" width="190" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
@@ -148,15 +173,17 @@
   <text x="990" y="643" text-anchor="middle" font-size="9.5" fill="#8fa398">key 0 (INS)</text>
 
   <!-- sub CalibrationStatus -->
-  <line x1="1060" y1="505" x2="1060" y2="690" stroke="#4fc3f7" stroke-width="2.2"/>
-  <polygon points="1060,694 1055,684 1065,684" fill="#4fc3f7"/>
-  <text x="1060" y="675" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/CalibrationStatus</text>
+  <line x1="1090" y1="505" x2="1090" y2="690" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="1090,694 1085,684 1095,684" fill="#4fc3f7"/>
+  <text x="1090" y="675" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/CalibrationStatus</text>
 
-  <!-- sub BeamPatternStatus: x=1040 continues the DetectionProcessor lane -->
+  <!-- sub BeamPatternStatus -->
   <line x1="1040" y1="505" x2="1040" y2="690" stroke="#4fc3f7" stroke-width="3"/>
   <polygon points="1040,694 1035,684 1045,684" fill="#4fc3f7"/>
-  <text x="1040" y="520" text-anchor="middle" font-size="11" font-weight="bold" fill="#dff5ff">Radar/BeamPatternStatus</text>
-  <text x="1040" y="535" text-anchor="middle" font-size="9.5" fill="#8fa398">from Radar.DetectionProcessor</text>
+  <rect x="1018" y="505" width="44" height="18" rx="9" fill="#123247" stroke="#4fc3f7"/>
+  <text x="1040" y="518" text-anchor="middle" font-size="9" font-weight="bold" fill="#86d9ff">SUB</text>
+  <text x="1052" y="520" font-size="11" font-weight="bold" fill="#dff5ff">Radar/BeamPatternStatus</text>
+  <text x="1052" y="535" font-size="9.5" fill="#8fa398">reader &#183; Radar.HMI-UI</text>
 
   <!-- TargetGen.Generator (flush with bus right edge) -->
   <rect x="1160" y="700" width="280" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>

@@ -33,9 +33,10 @@ Every component is a named participant:
 | Participant name | Role |
 |---|---|
 | `Radar.BeamScheduler` | publishes `Radar/BeamCommand` (100 Hz) |
-| `Radar.DetectionProcessor` | pub `Radar/RawReturn`, `Radar/DetectionEvent`, and `Radar/BeamPatternStatus`; sub `Radar/BeamCommand`, `Radar/RawReturn`, `TargetGen/TargetTruth` |
+| `Radar.Beamformer` | publishes `Radar/BeamPatternStatus` (20 Hz); subscribes `Radar/BeamCommand`, `Radar/CalibrationStatus` |
+| `Radar.DetectionProcessor` | pub `Radar/RawReturn` and `Radar/DetectionEvent`; sub `Radar/BeamCommand`, `Radar/BeamPatternStatus`, `Radar/RawReturn`, `TargetGen/TargetTruth` |
 | `Radar.TrackManager` | publishes `Radar/TargetTrack` (10 Hz) |
-| `Radar.CalibrationMonitor` | publishes `Radar/CalibrationStatus` (1 Hz) |
+| `Radar.CalibrationMonitor` | publishes `Radar/CalibrationStatus` (1 Hz heartbeat + state changes) |
 | `Radar.CommandHandler` | subscribes `Radar/SystemCommand` (WaitSet) |
 | `Radar.ShipINS` | publishes `Ship/ShipPosition` (key 0) |
 | `Radar.CommandConsole` | publishes `Radar/SystemCommand` (UI buttons) |
@@ -46,6 +47,9 @@ Note the **loopback edge** inside `Radar.DetectionProcessor`
 (RawReturn out and back in) — the 1 kHz receiver wire on the bus.
 Every topic has at least one in-system subscriber (the display topics
 terminate at `Radar.HMI-UI`), so there are no dangling publishers.
+The beam path is also explicit: scheduler intent and array health converge at
+`Radar.Beamformer`; its effective response fans out to the receiver model and
+display.
 
 ### 2.2 Topic tree and live data
 
@@ -61,8 +65,9 @@ Hierarchical names render as a tree: `Radar/...`, `Ship/...`,
   immediately sees the last sample (durability demo). Includes the
   per-element drift sequence and `rma_offline_mask` (bit per RMA).
 - `Radar/BeamPatternStatus` — 20 Hz RELIABLE + TRANSIENT_LOCAL beam
-  telemetry. Chart gain loss, 3 dB width, boresight error, and peak
-  sidelobe level; reshape the 181-value azimuth cut into a line plot.
+  telemetry published by `Radar.Beamformer`. Chart gain loss, 3 dB width,
+  boresight error, and peak sidelobe level; reshape the 181-value azimuth cut
+  into a line plot.
 - `TargetGen/TargetTruth` — one instance per `target_id`.
 
 ### 2.3 QoS inspection

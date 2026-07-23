@@ -3,10 +3,12 @@
 //
 // Internal components communicate exclusively over DDS topics (same domain):
 //   Radar.BeamScheduler        -> Radar/BeamCommand         (100 Hz)
-//   Radar.DetectionProcessor   -> Radar/RawReturn (1 kHz), Radar/DetectionEvent,
-//                                 Radar/BeamPatternStatus    (20 Hz)
+//   Radar.Beamformer           <- BeamCommand, CalibrationStatus
+//                              -> Radar/BeamPatternStatus    (20 Hz)
+//   Radar.DetectionProcessor   <- BeamCommand, BeamPatternStatus
+//                              -> Radar/RawReturn (1 kHz), Radar/DetectionEvent
 //   Radar.TrackManager         -> Radar/TargetTrack          (10 Hz)
-//   Radar.CalibrationMonitor   -> Radar/CalibrationStatus    (1 Hz)
+//   Radar.CalibrationMonitor   -> Radar/CalibrationStatus    (1 Hz + changes)
 //   Radar.CommandHandler       <- Radar/SystemCommand        (WaitSet)
 //   Radar.ShipINS              -> Ship/ShipPosition          (10 Hz)
 //   Radar.CommandConsole       -> Radar/SystemCommand        (UI scenarios)
@@ -186,6 +188,7 @@ void install_crash_handler() {}
 #include "Log.hpp"
 #include "ShipSimulator.hpp"
 #include "SimClock.hpp"
+#include "components/Beamformer.hpp"
 #include "components/BeamScheduler.hpp"
 #include "components/CalibrationMonitor.hpp"
 #include "components/CommandHandler.hpp"
@@ -275,6 +278,7 @@ int main(int argc, char** argv) {
 
     radar::app::ShipSimulator      ship(domain, bus);
     radar::app::BeamScheduler      scheduler(domain, bus);
+    radar::app::Beamformer         beamformer(domain);
     radar::app::DetectionProcessor processor(domain, bus);
     radar::app::TrackManager       tracker(domain, bus);
     radar::app::CalibrationMonitor calibration(domain, bus);
@@ -284,10 +288,11 @@ int main(int argc, char** argv) {
 
     // Order matters only for startup cosmetics; DDS discovery handles wiring.
     ship.start();
+    calibration.start();
+    beamformer.start();
     scheduler.start();
     processor.start();
     tracker.start();
-    calibration.start();
     commands.start();
     console.start();
     hmi.start();
@@ -332,10 +337,11 @@ int main(int argc, char** argv) {
     hmi.stop();
     console.stop();
     commands.stop();
-    calibration.stop();
     tracker.stop();
     processor.stop();
     scheduler.stop();
+    beamformer.stop();
+    calibration.stop();
     ship.stop();
     RADAR_LOG << "[radar_app] components stopped\n";
     return rc;

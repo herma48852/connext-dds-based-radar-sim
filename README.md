@@ -20,7 +20,7 @@ Two applications, one CMake monorepo, one DDS domain (default: domain 0):
 
 | App          | Purpose |
 |--------------|---------|
-| `radar_app`  | Simulated radar on a moving ship. Internal components (BeamScheduler, DetectionProcessor, TrackManager, CalibrationMonitor, CommandHandler, CommandConsole, HMI-UI) communicate **exclusively via DDS topics**. ImGui UI (native Metal on macOS, OpenGL 3.3 elsewhere) with PPI, A-scope, B-scope, track list, beam timeline, health, ship and ARRAY FACE panels (click an RMA block to take it offline). |
+| `radar_app`  | Simulated radar on a moving ship. Internal components (BeamScheduler, Beamformer, DetectionProcessor, TrackManager, CalibrationMonitor, CommandHandler, CommandConsole, HMI-UI) communicate **exclusively via DDS topics**. ImGui UI (native Metal on macOS, OpenGL 3.3 elsewhere) with PPI, A-scope, B-scope, track list, beam timeline, health, ship and ARRAY FACE panels (click an RMA block to take it offline). |
 | `target_gen` | Synthetic target generator (configurable trajectories, RCS, kinematics) publishing `TargetGen/TargetTruth` + ship-motion ground truth. Can inject QoS/type mismatches and the degraded-array scenario on demand. |
 
 ```
@@ -165,13 +165,15 @@ recovery.
 The **ARRAY FACE** panel issues `CMD_RMA_OFFLINE`/`CMD_RMA_ONLINE`:
 click an RMA block (16 blocks of 64 T/R elements) to toggle it, or
 **ALL ONLINE** to restore. Offline RMAs darken the block, set the bit
-in `CalibrationStatus.rma_offline_mask`, reduce implant gain, reshape the beam
-according to outage geometry, and activate the compact outage overlay on the
+in `CalibrationStatus.rma_offline_mask`. `Radar.Beamformer` combines that
+health state with `BeamCommand`, publishes the effective response as
+`BeamPatternStatus`, and thereby reduces implant gain, reshapes the beam
+according to outage geometry, and activates the compact outage overlay on the
 B-scope.
 
 > **macOS note (shared memory):** the shipped profiles use **UDPv4 only**.
 > macOS defaults allow very few System V shared-memory segments, and the
-> radar app's eight participants exhaust them (RTI KB
+> radar app's nine participants exhaust them (RTI KB
 > [osx510](http://community.rti.com/kb/osx510)), which otherwise ends in
 > "No index available for participant" errors. If you raise the sysv
 > limits per that KB, you can switch the transport masks back to
@@ -202,7 +204,11 @@ all setup, build, test, and launch commands in that directory.
 
 Every internal radar component is a named DomainParticipant wired to the
 others purely through topics on the shared bus — there are no direct
-in-process calls between components. The **HMI-UI** participant is the
+in-process calls between components. `Radar.BeamScheduler` publishes desired
+pointing, while `Radar.Beamformer` combines it with
+`Radar/CalibrationStatus` and owns the actual outage-aware beam response.
+Both `Radar.DetectionProcessor` and the **HMI-UI** consume that response from
+`Radar/BeamPatternStatus`. The **HMI-UI** participant is the
 display endpoint: it subscribes to `Radar/TargetTrack`,
 `Radar/DetectionEvent`, `Ship/ShipPosition`, `Radar/CalibrationStatus`, and
 `Radar/BeamPatternStatus` (the B-scope degradation overlay),
@@ -223,10 +229,10 @@ on-demand diagnostic endpoints `target_gen` creates with
 |---|---|---|---|---|
 | `Radar/RawReturn` | RawReturn | 1 kHz | RawReturnProfile | BEST_EFFORT, 500us latency budget. The "receiver wire", looped back inside DetectionProcessor |
 | `Radar/DetectionEvent` | DetectionEvent | ~100 Hz | DetectionEventProfile | BEST_EFFORT CFAR blips; consumed by TrackManager and HMI-UI (PPI) |
-| `Radar/BeamCommand` | BeamCommand | 100 Hz | BeamCommandProfile | RELIABLE dwell schedule |
-| `Radar/BeamPatternStatus` | BeamPatternStatus | 20 Hz | BeamPatternStatusProfile | RELIABLE + TRANSIENT_LOCAL outage metrics and 181-sample azimuth cut; consumed by HMI-UI (B-scope overlay) |
+| `Radar/BeamCommand` | BeamCommand | 100 Hz | BeamCommandProfile | RELIABLE dwell schedule; consumed by Beamformer and DetectionProcessor |
+| `Radar/BeamPatternStatus` | BeamPatternStatus | 20 Hz | BeamPatternStatusProfile | Beamformer-owned RELIABLE + TRANSIENT_LOCAL outage metrics and 181-sample azimuth cut; consumed by DetectionProcessor (return synthesis) and HMI-UI (B-scope overlay) |
 | `Radar/TargetTrack` | TargetTrack | 10 Hz | TargetTrackProfile | RELIABLE + TRANSIENT_LOCAL + 100 ms deadline; consumed by HMI-UI (track list) |
-| `Radar/CalibrationStatus` | CalibrationStatus | 1 Hz | CalibrationStatusProfile | array health: 1024-element drift + `rma_offline_mask`; consumed by HMI-UI (health + ARRAY FACE panels) |
+| `Radar/CalibrationStatus` | CalibrationStatus | 1 Hz + changes | CalibrationStatusProfile | array health: 1024-element drift + `rma_offline_mask`; consumed by Beamformer and HMI-UI (health + ARRAY FACE panels) |
 | `Radar/SystemCommand` | SystemCommand | bursty | SystemCommandProfile | RELIABLE, WaitSet-handled |
 | `Ship/ShipPosition` | ShipPosition | 10 Hz | ShipPositionProfile | keyed: 0 = INS, 1 = truth; key 0 consumed by HMI-UI (ship panel) |
 | `TargetGen/TargetTruth` | TargetTruth | 50 Hz/target | TargetTruthProfile | keyed per target |
@@ -252,9 +258,11 @@ detection processing.
 The realism is baked in via the `TargetGen/TargetTruth` subscription:
 DetectionProcessor reads the ground-truth target positions, then synthesizes
 range-bin I/Q samples with RCS-based amplitude, 1/r^4 range attenuation and a
-Rayleigh noise floor, spread over ~3 bins as a matched-filter response, so the
-1 kHz `RawReturn` stream behaves like genuine radar data rather than random
-numbers.
+Rayleigh noise floor. It applies the effective gain, width, pointing error,
+and sidelobes received from `Radar.Beamformer` over
+`Radar/BeamPatternStatus`, then spreads each return over ~3 bins as a
+matched-filter response. The 1 kHz `RawReturn` stream therefore behaves like
+genuine radar data rather than random numbers.
 
 > **Production note:** a real system would not put raw I/Q on DDS at 1 kHz × 512 bins
 > (~4 MB/s). The loopback exists here to stress-test the middleware and to make the
@@ -266,7 +274,8 @@ numbers.
 ### WaitSet vs. listener split
 
 - **Listeners** (DDS receive threads): `RawReturn`, `BeamCommand`,
-  `TargetTruth`, `DetectionEvent`, `BeamPatternStatus` — high rate,
+  `CalibrationStatus`, `TargetTruth`, `DetectionEvent`,
+  `BeamPatternStatus` — high rate,
   lightweight callbacks that only cache or enqueue.
 - **WaitSet** (dedicated thread): `SystemCommand` — lower rate, handled
   atomically and in order by `CommandHandler`.

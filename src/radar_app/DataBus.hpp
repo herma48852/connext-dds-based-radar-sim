@@ -195,7 +195,7 @@ public:
     std::atomic<bool>    degrade_array{false};     // demo: CalibrationStatus faults
     // RMA-offline state (bit i = RMA i offline, 16 RMAs x 64 elements).
     // Written only by CommandHandler (CMD_RMA_OFFLINE/ONLINE); read by
-    // CalibrationMonitor (drift/status) and DetectionProcessor (gain/beam).
+    // CalibrationMonitor, which publishes it for Beamformer over DDS.
     std::atomic<uint32_t> rma_offline_mask{0};
     std::atomic<bool>    reset_requested{false};   // consumed by TrackManager
     std::atomic<bool>    self_test_requested{false};
@@ -205,7 +205,7 @@ public:
     // experiment that isolates the dispose path as a crash suspect.
     std::atomic<bool>    dispose_enabled{true};
 
-    // Latest beam pointing (DetectionProcessor -> UI sweep display)
+    // Latest beam pointing (BeamScheduler -> UI sweep display)
     std::atomic<double>  current_beam_az_deg{0.0};
     std::atomic<double>  current_beam_el_deg{2.0};
 

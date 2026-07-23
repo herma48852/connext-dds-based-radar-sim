@@ -50,9 +50,9 @@ void DetectionProcessor::start() {
 
     raw_writer_   = radds::make_writer<types::RawReturn>(publisher_, raw_topic, dds_names::PROFILE_RAW_RETURN);
     det_writer_   = radds::make_writer<types::DetectionEvent>(publisher_, det_topic, dds_names::PROFILE_DETECTION_EVENT);
-    pattern_writer_ = radds::make_writer<types::BeamPatternStatus>(
-        publisher_, pattern_topic, dds_names::PROFILE_BEAM_PATTERN_STATUS);
     beam_reader_  = radds::make_reader<types::BeamCommand>(subscriber_, beam_topic, dds_names::PROFILE_BEAM_COMMAND);
+    pattern_reader_ = radds::make_reader<types::BeamPatternStatus>(
+        subscriber_, pattern_topic, dds_names::PROFILE_BEAM_PATTERN_STATUS);
     raw_reader_   = radds::make_reader<types::RawReturn>(subscriber_, raw_topic, dds_names::PROFILE_RAW_RETURN);
     truth_reader_ = radds::make_reader<types::TargetTruth>(subscriber_, truth_topic, dds_names::PROFILE_TARGET_TRUTH);
 
@@ -60,6 +60,11 @@ void DetectionProcessor::start() {
     beam_reader_.set_listener(
         std::make_shared<ForwardingListener<types::BeamCommand, DetectionProcessor,
                                             &DetectionProcessor::on_beam_command>>(this),
+        dds::core::status::StatusMask::data_available());
+    pattern_reader_.set_listener(
+        std::make_shared<
+            ForwardingListener<types::BeamPatternStatus, DetectionProcessor,
+                               &DetectionProcessor::on_beam_pattern>>(this),
         dds::core::status::StatusMask::data_available());
     raw_reader_.set_listener(
         std::make_shared<ForwardingListener<types::RawReturn, DetectionProcessor,
@@ -76,6 +81,7 @@ void DetectionProcessor::start() {
 void DetectionProcessor::stop() {
     stop_.store(true);
     detach_listener(beam_reader_);
+    detach_listener(pattern_reader_);
     detach_listener(raw_reader_);
     detach_listener(truth_reader_);
     join_all();
@@ -85,6 +91,35 @@ void DetectionProcessor::on_beam_command(const types::BeamCommand& cmd) {
     dwell_beam_id_.store(cmd.beam_id);
     dwell_az_deg_.store(cmd.azimuth_deg);
     dwell_el_deg_.store(cmd.elevation_deg);
+}
+
+void DetectionProcessor::on_beam_pattern(
+        const types::BeamPatternStatus& status) {
+    BeamPattern pattern;
+    pattern.rma_offline_mask =
+        static_cast<uint32_t>(status.rma_offline_mask) & 0xFFFFu;
+    pattern.active_elements =
+        1024 - 64 * std::popcount(pattern.rma_offline_mask);
+    pattern.active_fraction =
+        static_cast<double>(pattern.active_elements) / 1024.0;
+    pattern.gain_loss_db = status.gain_loss_db;
+    pattern.boresight_error_deg = status.boresight_error_deg;
+    pattern.beamwidth_3db_deg = status.beamwidth_3db_deg;
+    pattern.peak_sidelobe_level_db = status.peak_sidelobe_level_db;
+    pattern.left_sidelobe_offset_deg = status.left_sidelobe_offset_deg;
+    pattern.right_sidelobe_offset_deg = status.right_sidelobe_offset_deg;
+    pattern.azimuth_pattern_db.fill(-80.0f);
+    const int sample_count = std::min<int>(
+        kBeamPatternSampleCount,
+        static_cast<int>(status.azimuth_pattern_db.size()));
+    for (int i = 0; i < sample_count; ++i)
+        pattern.azimuth_pattern_db[i] = status.azimuth_pattern_db[i];
+
+    {
+        std::lock_guard lk(pattern_mutex_);
+        pattern_ = pattern;
+    }
+    pattern_revision_.fetch_add(1, std::memory_order_release);
 }
 
 void DetectionProcessor::on_truth(const types::TargetTruth& t) {
@@ -106,12 +141,9 @@ void DetectionProcessor::return_synthesis_loop() {
     sample.range_bin_count = kRangeBins;
     sample.iq_samples.resize(2 * kRangeBins);
 
-    types::BeamPatternStatus pattern_status;
-    pattern_status.array_id = 0;
-    pattern_status.azimuth_pattern_db.resize(kBeamPatternSampleCount);
-    uint32_t cached_rma_mask = 0xFFFFFFFFu;
     BeamPattern pattern;
-    auto next_pattern_publish = steady_clock::now();
+    uint64_t observed_pattern_revision = 0;
+    uint32_t logged_rma_mask = 0xFFFFFFFFu;
 
     while (!stop_.load()) {
         next += milliseconds(1); // 1 kHz simulated PRF
@@ -124,16 +156,26 @@ void DetectionProcessor::return_synthesis_loop() {
         const double az_deg = dwell_az_deg_.load();
         const double el_deg = dwell_el_deg_.load();
 
+        const uint64_t pattern_revision =
+            pattern_revision_.load(std::memory_order_acquire);
+        if (pattern_revision != observed_pattern_revision) {
+            {
+                std::lock_guard lk(pattern_mutex_);
+                pattern = pattern_;
+            }
+            observed_pattern_revision = pattern_revision;
+        }
+
         // RMA-offline effect (Tier-1 physics): array gain ~ N_active,
         // azimuth beamwidth ~ 1/sqrt(N_active) (aperture shrink). Floor is
         // 1%, NOT 10%: at 10% the 35 dBsm ship still clears CFAR at 50 km
         // (amp 0.45 > 0.26) — "array offline" must actually go dark.
         // Elevation gate untouched — the 3-bar raster tiling depends on it.
-        const uint32_t rma_mask = bus_.rma_offline_mask.load() & 0xFFFFu;
-        if (rma_mask != cached_rma_mask) {
-            pattern = BeamPatternModel::calculate(rma_mask);
-            cached_rma_mask = rma_mask;
-            RADAR_LOG << "[DetectionProcessor] beam pattern mask="
+        const uint32_t rma_mask = pattern.rma_offline_mask;
+        if (observed_pattern_revision != 0 &&
+            rma_mask != logged_rma_mask) {
+            logged_rma_mask = rma_mask;
+            RADAR_LOG << "[DetectionProcessor] applied beam pattern mask="
                       << pattern.rma_offline_mask
                       << " active=" << pattern.active_elements
                       << " loss_db=" << pattern.gain_loss_db
@@ -144,36 +186,6 @@ void DetectionProcessor::return_synthesis_loop() {
         }
         const double active = std::max(0.01, pattern.active_fraction);
         const double az_half_beam = kBeamwidthDeg * 0.5 / std::sqrt(active);
-
-        // Publish scalar metrics plus the normalized azimuth cut at 20 Hz.
-        // The transient-local profile lets Studio or HMI-UI join late and
-        // immediately receive the latest degradation state.
-        const auto pattern_now = steady_clock::now();
-        if (pattern_now >= next_pattern_publish) {
-            next_pattern_publish = pattern_now + milliseconds(50);
-            pattern_status.timestamp = SimClock::stamp();
-            pattern_status.beam_id = static_cast<int32_t>(beam_id);
-            pattern_status.rma_offline_mask =
-                static_cast<int32_t>(pattern.rma_offline_mask);
-            pattern_status.commanded_azimuth_deg = az_deg;
-            pattern_status.boresight_error_deg =
-                pattern.boresight_error_deg;
-            pattern_status.gain_loss_db = pattern.gain_loss_db;
-            pattern_status.beamwidth_3db_deg = pattern.beamwidth_3db_deg;
-            pattern_status.peak_sidelobe_level_db =
-                pattern.peak_sidelobe_level_db;
-            pattern_status.left_sidelobe_offset_deg =
-                pattern.left_sidelobe_offset_deg;
-            pattern_status.right_sidelobe_offset_deg =
-                pattern.right_sidelobe_offset_deg;
-            pattern_status.pattern_start_offset_deg =
-                kBeamPatternStartDeg;
-            pattern_status.pattern_step_deg = kBeamPatternStepDeg;
-            for (int i = 0; i < kBeamPatternSampleCount; ++i)
-                pattern_status.azimuth_pattern_db[i] =
-                    pattern.azimuth_pattern_db[i];
-            pattern_writer_.write(pattern_status);
-        }
 
         // Noise floor
         for (int i = 0; i < 2 * kRangeBins; ++i)

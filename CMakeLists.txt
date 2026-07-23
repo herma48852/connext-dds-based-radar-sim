@@ -200,6 +200,7 @@ if(RADAR_BUILD_APPLICATIONS)
         src/radar_app/DataBus.hpp
         src/radar_app/components/ComponentBase.hpp
         src/radar_app/components/BeamScheduler.cpp
+        src/radar_app/components/Beamformer.cpp
         src/radar_app/components/DetectionProcessor.cpp
         src/radar_app/components/TrackManager.cpp
         src/radar_app/components/TrackerCore.cpp

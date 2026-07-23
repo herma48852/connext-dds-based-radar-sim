@@ -604,11 +604,21 @@ Report back: ASan report (or "ASan silent + zombie/scribble output").
 
 ## 2. Recently completed (don't redo)
 
+- **Dedicated Beamformer DP** (2026-07-23): `Radar.Beamformer` now owns
+  the actual array response. It subscribes scheduler intent on
+  `Radar/BeamCommand` plus outage state on `Radar/CalibrationStatus`, then
+  publishes `Radar/BeamPatternStatus` at 20 Hz. DetectionProcessor consumes
+  that DDS topic for gain, width, pointing-error, and sidelobe effects instead
+  of reading the in-process RMA mask or publishing beam status itself.
+  CalibrationStatus retains its 1 Hz heartbeat and now also publishes within
+  about 20 ms of degradation/RMA state changes. This produces the intended
+  Studio topology: one BeamPatternStatus writer at Beamformer and readers at
+  DetectionProcessor and HMI-UI.
 - **RMA-offline, Tiers 2/3** (2026-07-23): `BeamPatternModel` calculates a
   deterministic 181-sample azimuth array-factor cut from the physical 4×4
   RMA mask, plus gain loss, 3 dB width, dominant sidelobes, and a bounded
-  fallback-calibration boresight error. DetectionProcessor publishes the
-  metrics/cut at 20 Hz on reliable transient-local
+  fallback-calibration boresight error. Beamformer publishes the metrics/cut
+  at 20 Hz on reliable transient-local
   `Radar/BeamPatternStatus`; HMI-UI consumes the DDS topic for two B-scope
   views. The compact automatic outage view retains the moving response
   curtain and feature markers. The operator-selected **BEAM FORMATION**
@@ -627,9 +637,10 @@ Report back: ASan report (or "ASan silent + zombie/scribble output").
   parameters "0".."15"/"all") drive `DataBus::rma_offline_mask`;
   CalibrationMonitor darkens the block (−60 dB), counts 64 failures per
   offline RMA and publishes the mask in CalibrationStatus
-  (`rma_offline_mask`, @appendable); DetectionProcessor scales implant
-  gain × N_active/1024 and widens the azimuth gate ÷√N_active (el gate
-  untouched — bar tiling). New ARRAY FACE pane: 32×32 drift heatmap +
+  (`rma_offline_mask`, @appendable); Beamformer turns that state into
+  BeamPatternStatus and DetectionProcessor applies it to implant gain and
+  azimuth response (el gate untouched — bar tiling). New ARRAY FACE pane:
+  32×32 drift heatmap +
   RMA blocks, click a block to toggle it, ALL ONLINE button; health
   panel shows RMA OFF n/16. `target_gen --rma-offline N|all` scripts it
   (verified: command=6 params="3" → mask=8, DEGRADED, failed=64).
@@ -749,8 +760,9 @@ Report back: ASan report (or "ASan silent + zombie/scribble output").
 - **HMI-UI is now a real DomainParticipant** (`Radar.HMI-UI`,
   `src/radar_app/components/HmiUi.{hpp,cpp}`): subscribes TargetTrack,
   DetectionEvent, ShipPosition (key 0), CalibrationStatus. Every panel is
-  DDS-fed; **no dangling publishers**. radar_app now has **8
-  participants**. Producers no longer feed the UI in-process
+  DDS-fed; **no dangling publishers**. radar_app had **8 participants** at
+  this point and now has 9 with `Radar.Beamformer`. Producers no longer feed
+  the UI in-process
   (TrackManager/DetectionProcessor/CalibrationMonitor cleaned).
   Ship-for-components, A-scope trace, beam timeline stay in-process
   deliberately (documented in README).
@@ -788,7 +800,7 @@ Report back: ASan report (or "ASan silent + zombie/scribble output").
   aborts). Precedence: `$RADAR_QOS_FILE` → `./qos/radar_qos.xml` →
   `../qos/radar_qos.xml`. QoS is runtime-loaded — no rebuild after edits.
 - **UDPv4-only** transport masks (macOS sysv shmem limits, RTI KB
-  osx510; 8 participants exhaust 32 segments). Deferred: persistent
+  osx510; 9 participants exhaust 32 segments). Deferred: persistent
   sysctl/LaunchDaemon config to re-enable SHMEM — user said UDPv4-only
   is fine for now.
 - **CFAR calibration:** `kCfarThreshold = 0.26`, `kSignalScale = 2.0e8`
@@ -807,7 +819,7 @@ Report back: ASan report (or "ASan silent + zombie/scribble output").
 ## 4. Webinar prep (after the crash is fixed)
 
 - [ ] Rehearse `docs/CONNEXT_STUDIO.md` runbook end-to-end (topology
-      map with 8+1 participants, TypeLookup decode, QoS match analysis,
+      map with 9+1 participants, TypeLookup decode, QoS match analysis,
       the three injection scenarios).
 - [ ] Show dispose in action: track reset → instances vanish live in
       Studio (HMI-UI dispose path).

@@ -456,7 +456,8 @@ The one-second calibration sample placed its simulated gain drift below
 
 **Why did an offline RMA outline change before its cells went dark?**  
 The command mask gives immediate outline feedback. The DDS-fed element
-calibration values update at 1 Hz.
+calibration values normally follow within about 20 ms; a 1 Hz heartbeat keeps
+the state fresh even when it does not change.
 
 **Why did RESTORE ARRAY leave a dark block?**  
 Restore clears the sparse degradation scenario. Use `ALL ONLINE` for

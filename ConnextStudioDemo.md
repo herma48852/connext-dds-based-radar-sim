@@ -29,9 +29,9 @@ Keep these views open side by side or in two macOS desktop spaces:
 The Studio View should already be subscribed to the relevant topic before a
 scenario button is pressed. `Radar/SystemCommand` and `Radar/BeamCommand` use
 volatile durability, so a view opened after the event may miss the command or
-the beginning of the transition. `Radar/CalibrationStatus` and
-`Radar/TargetTrack` are transient-local and retain their latest keyed state for
-late joiners.
+the beginning of the transition. `Radar/CalibrationStatus`,
+`Radar/BeamPatternStatus`, and `Radar/TargetTrack` are transient-local and
+retain their latest keyed state for late joiners.
 
 ## 2. Preflight
 
@@ -84,9 +84,11 @@ In the Studio View workspace:
    - `Radar.CommandConsole`
    - `Radar.CommandHandler`
    - `Radar.BeamScheduler`
+   - `Radar.Beamformer`
    - `Radar.DetectionProcessor`
    - `Radar.TrackManager`
    - `Radar.CalibrationMonitor`
+   - `Radar.ShipINS`
    - `Radar.HMI-UI`
    - `TargetGen.Generator`
 
@@ -135,7 +137,8 @@ Typical response times are:
 |---|---|
 | UI → `Radar/SystemCommand` | immediate burst |
 | Sector command → `Radar/BeamCommand` | next 10 ms scheduler cycle |
-| Array command → `Radar/CalibrationStatus` | next 1 Hz update, within about 1 s |
+| Array command → `Radar/CalibrationStatus` | state-change publish, normally within 20 ms |
+| `CalibrationStatus` → `Radar/BeamPatternStatus` | next 20 Hz beamformer update, within 50 ms |
 | Reset command → track disposal | next 100 ms tracker cycle |
 | Track reacquisition after reset | several beam revisits |
 
@@ -197,8 +200,9 @@ Press **SEARCH MODE**. Studio should show `CMD_SET_MODE` with parameters
 ### Prepare the Studio View
 
 Subscribe to the single keyed instance `array_id = 0` on
-`Radar/CalibrationStatus`. This topic publishes at 1 Hz and contains both the
-scalar health summary and the full face data:
+`Radar/CalibrationStatus`. This topic publishes on each state change plus a
+1 Hz heartbeat and contains both the scalar health summary and the full face
+data:
 
 - `overall_status`
 - `failed_element_count`
@@ -226,7 +230,7 @@ Switch to the Radar Display workspace and press **DEGRADE ARRAY**.
 Return to Studio and show the two-stage data flow:
 
 1. `Radar/SystemCommand.command_type = CMD_DEGRADE_ARRAY`.
-2. On the next calibration update, `overall_status` changes from
+2. On the prompt calibration update, `overall_status` changes from
    `ARRAY_NOMINAL` to `ARRAY_DEGRADED`.
 3. `failed_element_count` jumps from 0 to 128 in the current deterministic
    pattern.
@@ -299,7 +303,7 @@ row-major from 0—to take it offline.
 Return to Studio and show:
 
 1. `Radar/SystemCommand.command_type = CMD_RMA_OFFLINE` with parameters `"3"`.
-2. On the next calibration sample, `rma_offline_mask` changes from `0x0000`
+2. On the prompt calibration sample, `rma_offline_mask` changes from `0x0000`
    to `0x0008`.
 3. `failed_element_count` increases by 64.
 4. The corresponding 8×8 region of `element_drift_db` becomes -60 dB.
@@ -470,8 +474,9 @@ beam priority, and live `TargetTrack` instance count.
   `radar_app` or `target_gen` processes.
 - **Command missing from Studio:** subscribe to volatile
   `Radar/SystemCommand` before pressing the button, then repeat the command.
-- **Array appears unchanged:** wait for the next 1 Hz
-  `Radar/CalibrationStatus` sample.
+- **Array appears unchanged:** verify that `Radar.CalibrationMonitor` has a
+  matched `CalibrationStatus` reader at both `Radar.Beamformer` and
+  `Radar.HMI-UI`; state changes should publish within about 20 ms.
 - **DEGRADE does not change the RMA mask:** expected. It changes sparse
   element drift and failed count, not whole-RMA state.
 - **RESTORE leaves a dark RMA:** expected. Use ALL ONLINE to clear the RMA

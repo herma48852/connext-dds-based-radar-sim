@@ -34,7 +34,7 @@
 
     <!-- Radar simulation app DomainParticipants.
          UDPv4 only, by default, because macOS ships with very small
-         System V shared-memory limits (32 segments); this app creates 7
+         System V shared-memory limits (32 segments); this app creates 9
          participants, which exhausts them (RTI KB osx510). Loopback UDP
          handles the intra-host rates in this demo comfortably.
          To re-enable shared memory: raise the sysv limits per
@@ -146,8 +146,9 @@
       </datareader_qos>
     </qos_profile>
 
-    <!-- CalibrationStatus: 1 Hz slow health data. Transient-local so a
-         late-joining Studio session immediately sees array state. -->
+    <!-- CalibrationStatus: 1 Hz health heartbeat plus immediate state-change
+         updates. Transient-local so a late-joining Beamformer, HMI, or Studio
+         session immediately sees array state. -->
     <qos_profile name="CalibrationStatusProfile">
       <datawriter_qos>
         <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
