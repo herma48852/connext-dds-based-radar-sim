@@ -53,9 +53,9 @@ private:
     // CFAR: for Rayleigh noise, Pfa = exp(-T^2 / (2*sigma^2)).
     // T = 0.26 -> Pfa ~ 1.4e-6 per bin (a few false alarms per second,
     // not tens of thousands). Amplitudes: fighter (0 dBsm) at 20 km
-    // gives ~0.5 -> ~20 dB SNR, detection range ~28 km.
+    // gives ~0.75 -> ~23.5 dB SNR, detection range ~34 km.
     static constexpr double kCfarThreshold  = 0.26;
-    static constexpr double kSignalScale    = 2.0e8;     // amplitude = scale*sqrt(rcs)/R^2
+    static constexpr double kSignalScale    = 3.0e8;     // amplitude = scale*sqrt(rcs)/R^2
 
     void on_beam_command(const types::BeamCommand& cmd);
     void on_beam_pattern(const types::BeamPatternStatus& status);

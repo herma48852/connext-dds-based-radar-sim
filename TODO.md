@@ -29,19 +29,19 @@ of one ImGui window record per distinct heading. The temporary
 `scenario_button()` active-state highlight and `radar_mode`/`degraded` inputs
 remain.
 
-**Verified:** full build green; `tracker_replay 300` unchanged (1761
-detections, 198 births, 211 deaths). Rebuilt bundle on isolated domain 92:
-`SECTOR SCAN` produced `[CommandHandler] command=1`, and `ALL ONLINE`
-produced `[CommandHandler] command=7 params="all"`.
+**Verified:** full build green; `tracker_replay 300` produces 1703
+detections, 29 births, and 35 deaths. A 45-second, 32-target sensitivity
+smoke on isolated domain 142 produced 67 detections and 7 final published
+tracks (versus 47 and 5 over the matching `2.0e8` interval).
 
 **Regression coverage added (2026-07-21):** CTest now runs six headless,
 assertion-based tests in under 10 seconds. `ui_controls_smoke` drives production
 ImGui widgets with real press/hold/release frames and covers all six SCENARIOS
 buttons, RMA offline/online, ALL ONLINE, the dynamic A-scope focus regression,
 and stable ImGui window count. `target_scenario_regression` accelerates a
-30-minute run of the production 16-target webinar scenario, including the
+30-minute run of the deterministic 16-target test scenario, including the
 repeated eight-profile mix and periodic 120 km respawns. The existing
-`tracker_replay` is registered as a golden regression (1761/198/211 plus
+`tracker_replay` is registered as a golden regression (1703/29/35 plus
 bounded track IDs) while its normal manual diagnostic mode is unchanged.
 `beam_pattern_regression` covers the array model, and
 `detection_processor_regression` guards all-offline CFAR suppression.
@@ -811,7 +811,7 @@ Report back: ASan report (or "ASan silent + zombie/scribble output").
   osx510; 9 participants exhaust 32 segments). Deferred: persistent
   sysctl/LaunchDaemon config to re-enable SHMEM — user said UDPv4-only
   is fine for now.
-- **CFAR calibration:** `kCfarThreshold = 0.26`, `kSignalScale = 2.0e8`
+- **CFAR calibration:** `kCfarThreshold = 0.26`, `kSignalScale = 3.0e8`
   in DetectionProcessor.hpp; AScopeView threshold mirrors at 0.26.
   (Old values 0.09/2e7 caused ~30k false detections/s.)
 - **WaitSet:** standard `dds::core::cond::WaitSet` from

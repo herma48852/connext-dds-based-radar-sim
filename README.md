@@ -108,10 +108,10 @@ legacy build automatically, configures the Connext runtime and QoS paths,
 writes separate logs, and stops both processes together:
 
 ```bash
-./scripts/run-demo.sh --domain 92 --targets 16
+./scripts/run-demo.sh --domain 92 --targets 32
 
 # Unattended DDS-only run:
-./scripts/run-demo.sh --domain 92 --targets 16 --headless --run-seconds 20
+./scripts/run-demo.sh --domain 92 --targets 32 --headless --run-seconds 20
 ```
 
 It uses `CONNEXTDDS_DIR` or `NDDSHOME`, and on macOS also detects the default
@@ -142,11 +142,11 @@ source $CONNEXTDDS_DIR/resource/scripts/rtisetenv_arm64Darwin23clang16.0.bash
 ./build/radar_app.app/Contents/MacOS/radar_app
 
 # Terminal 2 — the target generator
-# Live webinars use exactly 16 targets (two repeats of the eight-profile mix).
+# Live webinars use 32 targets (four repeats of the eight-profile mix).
 # Targets fly inbound and are recycled past 120 km so the picture stays busy;
 # tune with --respawn-range KM, 0 disables.
 source $CONNEXTDDS_DIR/resource/scripts/rtisetenv_arm64Darwin23clang16.0.bash
-./build/target_gen --targets 16
+./build/target_gen --targets 32
 
 # Diagnostic scenarios (combinable):
 ./build/target_gen --inject-qos-mismatch     # RELIABLE reader vs BEST_EFFORT writer

@@ -37,7 +37,7 @@ Options:
 
 Examples:
   ./scripts/run-demo.sh
-  ./scripts/run-demo.sh --domain 92 --targets 16
+  ./scripts/run-demo.sh --domain 92 --targets 32
   ./scripts/run-demo.sh --headless --run-seconds 20
 EOF
 }

@@ -28,7 +28,7 @@ constexpr int    kRangeBins     = 512;
 constexpr double kRangeMaxM     = 100000.0;
 constexpr double kNoiseSigma    = 0.05;
 constexpr double kCfarThreshold = 0.26;
-constexpr double kSignalScale   = 2.0e8;
+constexpr double kSignalScale   = 3.0e8;
 constexpr double kBeamwidthDeg  = 2.0;
 constexpr double kAzStepDeg     = 2.25;
 constexpr double kDwellSec      = 0.01;
@@ -238,9 +238,9 @@ int main(int argc, char** argv) {
         };
         check(std::fabs(sim_s - 300.0) < 1e-9,
               "tracker golden regression requires a 300 second replay");
-        check(det_count == 1562, "expected 1562 deterministic detections");
-        check(births == 27, "expected 27 deterministic track births");
-        check(deaths == 34, "expected 34 deterministic track deaths");
+        check(det_count == 1703, "expected 1703 deterministic detections");
+        check(births == 29, "expected 29 deterministic track births");
+        check(deaths == 35, "expected 35 deterministic track deaths");
         check(max_tracks <= static_cast<size_t>(TrackerCore::kMaxTracks),
               "track count exceeded the bounded instance pool");
         check(id_pool_valid, "a track ID escaped the bounded 1000..1255 pool");

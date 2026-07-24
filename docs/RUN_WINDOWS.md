@@ -168,7 +168,7 @@ the smoke test passes.
 Enter:
 
 ```bat
-scripts\windows\run-demo.cmd -Domain 92 -Targets 16
+scripts\windows\run-demo.cmd -Domain 92 -Targets 32
 ```
 
 The radar window should open and Command Prompt should report that the AESA
@@ -200,7 +200,7 @@ Perform this manual check at 100%, 125%, 150%, and 200% display scaling:
 2. Resize, minimize, restore, and move the window between monitors.
 3. Exercise all six scenario buttons, every RMA block, and ALL ONLINE.
 4. Confirm the B-scope texture continues updating without OpenGL errors.
-5. Run windowed with 16 targets for one hour and watch process memory.
+5. Run windowed with 32 targets for one hour and watch process memory.
 
 The executable embeds a Per-Monitor V2 DPI manifest and reapplies UI scaling
 when GLFW reports a monitor-scale change.
