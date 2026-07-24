@@ -34,7 +34,7 @@ detections, 198 births, 211 deaths). Rebuilt bundle on isolated domain 92:
 `SECTOR SCAN` produced `[CommandHandler] command=1`, and `ALL ONLINE`
 produced `[CommandHandler] command=7 params="all"`.
 
-**Regression coverage added (2026-07-21):** CTest now runs five headless,
+**Regression coverage added (2026-07-21):** CTest now runs six headless,
 assertion-based tests in under 10 seconds. `ui_controls_smoke` drives production
 ImGui widgets with real press/hold/release frames and covers all six SCENARIOS
 buttons, RMA offline/online, ALL ONLINE, the dynamic A-scope focus regression,
@@ -45,7 +45,9 @@ repeated eight-profile mix and periodic 120 km respawns. The existing
 bounded track IDs) while its normal manual diagnostic mode is unchanged.
 `beam_pattern_regression` covers the array model, and
 `detection_processor_regression` guards all-offline CFAR suppression.
-Run all with `ctest --test-dir build --output-on-failure`; all 5 pass. No test
+`periodic_deadline_regression` simulates an eight-hour suspend and guards
+against fixed-rate loops replaying missed ticks after wake.
+Run all with `ctest --test-dir build --output-on-failure`; all 6 pass. No test
 opens a display or creates a DDS participant.
 
 **Geometry gotcha retained:** the OS may resize the app window from its

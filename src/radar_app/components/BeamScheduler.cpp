@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cmath>
 
+#include "PeriodicDeadline.hpp"
 #include "SimClock.hpp"
 
 namespace radar::app {
@@ -37,8 +38,10 @@ void BeamScheduler::start() {
         auto next = std::chrono::steady_clock::now();
 
         while (!stop_.load()) {
-            next += std::chrono::milliseconds(
-                static_cast<int>(kDwellPeriodSec * 1000.0)); // 100 Hz
+            next = advance_periodic_deadline(
+                next,
+                std::chrono::milliseconds(
+                    static_cast<int>(kDwellPeriodSec * 1000.0))); // 100 Hz
 
             const int32_t mode = bus_.radar_mode.load();
             types::BeamCommand cmd;

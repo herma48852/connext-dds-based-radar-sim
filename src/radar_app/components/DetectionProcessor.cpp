@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "Log.hpp"
+#include "PeriodicDeadline.hpp"
 #include "SimClock.hpp"
 
 namespace radar::app {
@@ -150,7 +151,8 @@ void DetectionProcessor::return_synthesis_loop() {
     uint32_t logged_rma_mask = 0xFFFFFFFFu;
 
     while (!stop_.load()) {
-        next += milliseconds(1); // 1 kHz simulated PRF
+        next = advance_periodic_deadline(
+            next, milliseconds(1)); // 1 kHz simulated PRF
 
         const int64_t beam_id = dwell_beam_id_.load();
         if (beam_id < 0) { // no dwell scheduled yet

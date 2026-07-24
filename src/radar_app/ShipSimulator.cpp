@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cmath>
 
+#include "PeriodicDeadline.hpp"
 #include "SimClock.hpp"
 
 namespace radar::app {
@@ -22,7 +23,8 @@ void ShipSimulator::start() {
         auto next = steady_clock::now();
 
         while (!stop_.load()) {
-            next += milliseconds(100); // 10 Hz INS
+            next = advance_periodic_deadline(
+                next, milliseconds(100)); // 10 Hz INS
 
             const double t = SimClock::sim_millis() / 1000.0;
             // gentle seaway motion

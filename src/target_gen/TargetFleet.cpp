@@ -4,6 +4,7 @@
 #include <cmath>
 #include <iostream>
 
+#include "PeriodicDeadline.hpp"
 #include "SimClock.hpp"
 
 namespace target_gen {
@@ -65,7 +66,8 @@ void TargetFleet::loop() {
     int cycle = 0;
 
     while (!stop_.load()) {
-        next += milliseconds(20);
+        next = radar::advance_periodic_deadline(
+            next, milliseconds(20));
         const double t = radar::SimClock::sim_millis() / 1000.0;
 
         for (const int32_t id : scenario_.step(kDt, t)) {

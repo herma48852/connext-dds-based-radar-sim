@@ -4,6 +4,7 @@
 #include <memory>
 
 #include "Log.hpp"
+#include "PeriodicDeadline.hpp"
 #include "SimClock.hpp"
 
 namespace radar::app {
@@ -88,7 +89,8 @@ void Beamformer::publish_loop() {
     status.azimuth_pattern_db.resize(kBeamPatternSampleCount);
 
     while (!stop_.load()) {
-        next += milliseconds(50); // 20 Hz
+        next = advance_periodic_deadline(
+            next, milliseconds(50)); // 20 Hz
 
         const int64_t beam_id = beam_id_.load();
         if (beam_id < 0) {

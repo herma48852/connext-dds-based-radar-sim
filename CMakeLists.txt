@@ -324,15 +324,25 @@ if(BUILD_TESTING)
     target_link_libraries(detection_processor_regression PRIVATE
         beam_pattern_core radar_project_options)
 
+    add_executable(periodic_deadline_regression
+        tests/periodic_deadline_regression.cpp)
+    target_include_directories(periodic_deadline_regression PRIVATE
+        src/common)
+    target_link_libraries(periodic_deadline_regression PRIVATE
+        radar_project_options)
+
     add_test(NAME target_scenario_regression COMMAND target_scenario_regression)
     add_test(NAME beam_pattern_regression COMMAND beam_pattern_regression)
     add_test(NAME detection_processor_regression
         COMMAND detection_processor_regression)
+    add_test(NAME periodic_deadline_regression
+        COMMAND periodic_deadline_regression)
     add_test(NAME tracker_replay_regression
         COMMAND tracker_replay 300 --self-test --quiet)
     set_tests_properties(
         target_scenario_regression beam_pattern_regression
         detection_processor_regression
+        periodic_deadline_regression
         tracker_replay_regression
         PROPERTIES TIMEOUT 30 LABELS "smoke;regression;portable")
 endif()

@@ -67,7 +67,7 @@ The QoS file is copied next to the binaries automatically
 
 ## Regression tests
 
-The default build registers five fast, headless CTest regressions:
+The default build registers six fast, headless CTest regressions:
 
 ```bash
 cmake --build build -j
@@ -94,6 +94,9 @@ ctest --test-dir build --output-on-failure
 - `detection_processor_regression` forces an above-threshold noise peak through
   the production CFAR peak picker and verifies that a nominal aperture reports
   it while an all-offline aperture suppresses it.
+- `periodic_deadline_regression` simulates an eight-hour machine sleep and
+  verifies that fixed-rate simulation loops resume at their normal cadence
+  without replaying millions of missed ticks.
 
 These tests create no DDS participants, graphics window, or renderer, so they
 do not alter or compete with a live webinar run.
@@ -197,7 +200,7 @@ all setup, build, test, and launch commands in that directory.
 
 - Connext target: `x64Win64VS2017` (binary-compatible with VS2022).
 - The UI embeds Per-Monitor V2 DPI awareness and uses GLFW/OpenGL 3.3.
-- `windows-portable` builds all five regressions without Connext.
+- `windows-portable` builds all six regressions without Connext.
 - FetchContent supplies pinned GLFW, ImGui, and ImPlot sources.
 - Put the Connext target DLL directory on `PATH` before running.
 

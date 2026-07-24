@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "Log.hpp"
+#include "PeriodicDeadline.hpp"
 #include "SimClock.hpp"
 
 namespace radar::app {
@@ -73,7 +74,8 @@ void TrackManager::update_loop() {
     int hb_cycles = 0;
 
     while (!stop_.load()) {
-        next += milliseconds(100); // 10 Hz track update
+        next = advance_periodic_deadline(
+            next, milliseconds(100)); // 10 Hz track update
 
         if (bus_.reset_requested.exchange(false)) {
             // Dispose every live instance so subscribers (HMI-UI, Studio)

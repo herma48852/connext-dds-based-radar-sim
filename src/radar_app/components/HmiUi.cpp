@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "Log.hpp"
+#include "PeriodicDeadline.hpp"
 #include "SimClock.hpp"
 
 namespace radar::app {
@@ -218,7 +219,8 @@ void HmiUi::housekeeping_loop() {
     auto next = steady_clock::now();
     int hb_cycles = 0; // heartbeat diagnostics: 2 s cadence, see TrackManager
     while (!stop_.load()) {
-        next += milliseconds(200); // 5 Hz view refresh
+        next = advance_periodic_deadline(
+            next, milliseconds(200)); // 5 Hz view refresh
 
         const int64_t now_ms = SimClock::sim_millis();
         std::vector<TrackView> views;
