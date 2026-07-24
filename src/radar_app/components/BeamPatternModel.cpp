@@ -89,7 +89,8 @@ BeamPattern BeamPatternModel::calculate(uint32_t rma_offline_mask) {
 
     result.active_elements = active_elements;
     result.active_fraction = active_elements / 1024.0;
-    // Match the receiver's 1% all-offline gain floor in the telemetry.
+    // Keep all-offline telemetry finite for plots and monitoring. Receiver
+    // synthesis treats zero active elements as exactly zero physical gain.
     result.gain_loss_db =
         20.0 * std::log10(std::max(0.01, result.active_fraction));
 

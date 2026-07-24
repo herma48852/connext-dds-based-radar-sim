@@ -82,6 +82,9 @@ private:
     mutable std::mutex pattern_mutex_;
     BeamPattern pattern_;
     std::atomic<uint64_t> pattern_revision_{0};
+    // Raw receiver noise remains visible when the face is dark, but a zero
+    // aperture cannot produce reportable detections.
+    std::atomic<bool> receive_aperture_online_{true};
 
     // Truth cache (TargetTruth listener -> synth thread)
     mutable std::mutex truth_mutex_;

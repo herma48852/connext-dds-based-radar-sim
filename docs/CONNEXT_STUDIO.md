@@ -126,7 +126,9 @@ duplicate target/truth publisher.
    The B-scope renders the same DDS sample as an automatic overlay. Chart the
    `Radar/DetectionEvent` SNR distribution as RMAs go offline; a strong
    target can occasionally appear through a dominant sidelobe at a displaced
-   dwell azimuth. Restore with **ALL ONLINE**.
+   dwell azimuth. With all 16 RMAs offline, `DetectionEvent` publication
+   stops. Existing confirmed tracks coast for up to 12 seconds before their
+   instances are disposed. Restore with **ALL ONLINE**.
 
 5. **Sector scan** — press **SECTOR SCAN** in the UI and watch
    `Radar/BeamCommand`: azimuth values bounce between 60 and 120 deg

@@ -67,7 +67,7 @@ The QoS file is copied next to the binaries automatically
 
 ## Regression tests
 
-The default build registers four fast, headless CTest regressions:
+The default build registers five fast, headless CTest regressions:
 
 ```bash
 cmake --build build -j
@@ -91,6 +91,9 @@ ctest --test-dir build --output-on-failure
 - `beam_pattern_regression` verifies nominal beamwidth, outage gain loss,
   symmetric-error cancellation, mask-position sensitivity, and safe
   all-offline behavior without DDS or a display.
+- `detection_processor_regression` forces an above-threshold noise peak through
+  the production CFAR peak picker and verifies that a nominal aperture reports
+  it while an all-offline aperture suppresses it.
 
 These tests create no DDS participants, graphics window, or renderer, so they
 do not alter or compete with a live webinar run.
@@ -170,7 +173,9 @@ in `CalibrationStatus.rma_offline_mask`. `Radar.Beamformer` combines that
 health state with `BeamCommand`, publishes the effective response as
 `BeamPatternStatus`, and thereby reduces implant gain, reshapes the beam
 according to outage geometry, and activates the compact outage overlay on the
-B-scope.
+B-scope. With all 16 RMAs offline, raw receiver noise remains visible but
+`DetectionEvent` publication stops; confirmed tracks coast for up to 12
+seconds before the tracker drops them.
 
 > **macOS note (shared memory):** the shipped profiles use **UDPv4 only**.
 > macOS defaults allow very few System V shared-memory segments, and the
@@ -192,7 +197,7 @@ all setup, build, test, and launch commands in that directory.
 
 - Connext target: `x64Win64VS2017` (binary-compatible with VS2022).
 - The UI embeds Per-Monitor V2 DPI awareness and uses GLFW/OpenGL 3.3.
-- `windows-portable` builds all four regressions without Connext.
+- `windows-portable` builds all five regressions without Connext.
 - FetchContent supplies pinned GLFW, ImGui, and ImPlot sources.
 - Put the Connext target DLL directory on `PATH` before running.
 

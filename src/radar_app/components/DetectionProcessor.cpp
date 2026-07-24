@@ -1,4 +1,5 @@
 #include "DetectionProcessor.hpp"
+#include "DetectionSignalProcessing.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -119,6 +120,9 @@ void DetectionProcessor::on_beam_pattern(
         std::lock_guard lk(pattern_mutex_);
         pattern_ = pattern;
     }
+    receive_aperture_online_.store(
+        receive_aperture_online(pattern.active_elements),
+        std::memory_order_release);
     pattern_revision_.fetch_add(1, std::memory_order_release);
 }
 
@@ -167,10 +171,9 @@ void DetectionProcessor::return_synthesis_loop() {
         }
 
         // RMA-offline effect (Tier-1 physics): array gain ~ N_active,
-        // azimuth beamwidth ~ 1/sqrt(N_active) (aperture shrink). Floor is
-        // 1%, NOT 10%: at 10% the 35 dBsm ship still clears CFAR at 50 km
-        // (amp 0.45 > 0.26) — "array offline" must actually go dark.
-        // Elevation gate untouched — the 3-bar raster tiling depends on it.
+        // azimuth beamwidth ~ 1/sqrt(N_active) (aperture shrink). A completely
+        // dark aperture has exactly zero receive gain. Elevation is untouched
+        // for partial outages — the 3-bar raster tiling depends on it.
         const uint32_t rma_mask = pattern.rma_offline_mask;
         if (observed_pattern_revision != 0 &&
             rma_mask != logged_rma_mask) {
@@ -184,15 +187,19 @@ void DetectionProcessor::return_synthesis_loop() {
                       << " error_deg=" << pattern.boresight_error_deg
                       << "\n";
         }
-        const double active = std::max(0.01, pattern.active_fraction);
-        const double az_half_beam = kBeamwidthDeg * 0.5 / std::sqrt(active);
+        const bool aperture_online =
+            receive_aperture_online(pattern.active_elements);
+        const double active = aperture_online
+            ? pattern.active_fraction : 0.0;
+        const double az_half_beam = aperture_online
+            ? kBeamwidthDeg * 0.5 / std::sqrt(active) : 0.0;
 
         // Noise floor
         for (int i = 0; i < 2 * kRangeBins; ++i)
             sample.iq_samples[i] = noise_(rng_);
 
         // Implant targets inside the beam (snapshot truth under lock)
-        {
+        if (aperture_online) {
             std::lock_guard lk(truth_mutex_);
             const double heading = bus_.ship().heading_deg;
             for (const auto& [id, t] : truth_) {
@@ -315,11 +322,17 @@ void DetectionProcessor::on_raw_return(const types::RawReturn& ret) {
     geo.longitude_deg = ship.longitude_deg;
     geo.altitude_m    = ship.altitude_m;
 
-    // Peak picking above the CFAR threshold
-    for (int i = 1; i < n - 1; ++i) {
-        if (mag[i] > kCfarThreshold && mag[i] >= mag[i-1] && mag[i] > mag[i+1]) {
+    // Peak picking above the CFAR threshold. Preserve the raw-noise A-scope
+    // for an offline face, but do not let its thermal-noise peaks become
+    // DetectionEvents and seed new tracks.
+    for_each_cfar_detection(
+        mag,
+        receive_aperture_online_.load(std::memory_order_acquire),
+        static_cast<float>(kCfarThreshold),
+        [this, n, &ret, &geo](int i, float amplitude) {
             const double range_m = (static_cast<double>(i) / n) * kRangeMaxM;
-            const double snr_db  = 20.0 * std::log10(mag[i] / kNoiseSigma);
+            const double snr_db =
+                20.0 * std::log10(amplitude / kNoiseSigma);
 
             types::DetectionEvent det;
             det.sensor_id     = 0; // constant key: one DDS instance
@@ -329,12 +342,11 @@ void DetectionProcessor::on_raw_return(const types::RawReturn& ret) {
             det.range_m       = range_m;
             det.azimuth_deg   = ret.azimuth_deg;
             det.elevation_deg = ret.elevation_deg;
-            det.amplitude     = mag[i];
+            det.amplitude     = amplitude;
             det.snr_db        = snr_db;
             det_writer_.write(det);
             // PPI blips reach the UI via HmiUi's DetectionEvent subscription.
-        }
-    }
+        });
 }
 
 } // namespace radar::app

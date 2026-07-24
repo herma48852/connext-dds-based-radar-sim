@@ -347,8 +347,8 @@ Negative dB means less gain than the nominal reference:
 - -60 dB is effectively dark/offline.
 
 Clicking an RMA toggles the entire block offline or online. Its outline reacts
-immediately; the 64 heatmap cells update on the next one-second calibration
-sample. `ALL ONLINE` clears every RMA-offline bit.
+immediately; the 64 heatmap cells normally follow within about 20 ms, with a
+1 Hz heartbeat. `ALL ONLINE` clears every RMA-offline bit.
 
 Taking RMAs offline reduces simulated target return gain monotonically. It
 also changes the calculated azimuth width, pointing error, and sidelobes
@@ -356,7 +356,10 @@ according to the location of each failed block. Width and pointing therefore
 need not change monotonically for every mask: symmetric failures can cancel
 pointing error, while edge or fragmented failures can broaden the beam more
 than other masks with the same count. Receiver noise is retained, and the
-model uses a 1% gain floor even with all RMAs offline.
+finite -40 dB telemetry floor keeps the plot readable. With all RMAs offline,
+physical receive gain is exactly zero and no new detections are published.
+Existing confirmed tracks can remain visible for the 12-second coast interval;
+they are not new measurements.
 
 ## Ship Position
 
@@ -387,7 +390,7 @@ commands do not remain highlighted.
 | `RESTORE ARRAY` | Clears sparse injected element failures | Does not return manually disabled RMAs online |
 | `SELF TEST` | Sends the self-test command | No component currently consumes it and no result is displayed |
 | `RESET TRACKS` | Disposes current tracks and returns to Search Mode | Detections continue; tracks automatically reacquire over later revisits |
-| Click an RMA | Toggles that 64-element block offline/online | Outline changes immediately; face/health follow within about one second |
+| Click an RMA | Toggles that 64-element block offline/online | Outline changes immediately; face/health normally follow within about 20 ms |
 | `ALL ONLINE` | Returns all RMAs online | Does not clear the separate `DEGRADE ARRAY` state |
 
 `DEGRADE ARRAY` changes calibration and health data only. In the current

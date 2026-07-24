@@ -317,12 +317,22 @@ if(BUILD_TESTING)
     target_link_libraries(beam_pattern_regression PRIVATE
         beam_pattern_core radar_project_options)
 
+    add_executable(detection_processor_regression
+        tests/detection_processor_regression.cpp)
+    target_include_directories(detection_processor_regression PRIVATE
+        src/radar_app/components)
+    target_link_libraries(detection_processor_regression PRIVATE
+        beam_pattern_core radar_project_options)
+
     add_test(NAME target_scenario_regression COMMAND target_scenario_regression)
     add_test(NAME beam_pattern_regression COMMAND beam_pattern_regression)
+    add_test(NAME detection_processor_regression
+        COMMAND detection_processor_regression)
     add_test(NAME tracker_replay_regression
         COMMAND tracker_replay 300 --self-test --quiet)
     set_tests_properties(
         target_scenario_regression beam_pattern_regression
+        detection_processor_regression
         tracker_replay_regression
         PROPERTIES TIMEOUT 30 LABELS "smoke;regression;portable")
 endif()

@@ -88,7 +88,7 @@ int main() {
     check(offline.active_elements == 0,
           "all-offline mask removes the complete aperture");
     check(std::fabs(offline.gain_loss_db + 40.0) < 1.0e-9,
-          "all-offline telemetry matches the receiver's 1 percent floor");
+          "all-offline telemetry uses the finite display floor");
     check(std::all_of(offline.azimuth_pattern_db.begin(),
                       offline.azimuth_pattern_db.end(),
                       [](float db) { return std::isfinite(db) && db <= -79.0f; }),

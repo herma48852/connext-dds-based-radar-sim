@@ -34,8 +34,8 @@ detections, 198 births, 211 deaths). Rebuilt bundle on isolated domain 92:
 `SECTOR SCAN` produced `[CommandHandler] command=1`, and `ALL ONLINE`
 produced `[CommandHandler] command=7 params="all"`.
 
-**Regression coverage added (2026-07-21):** CTest now runs three headless,
-assertion-based tests in ~2 seconds. `ui_controls_smoke` drives production
+**Regression coverage added (2026-07-21):** CTest now runs five headless,
+assertion-based tests in under 10 seconds. `ui_controls_smoke` drives production
 ImGui widgets with real press/hold/release frames and covers all six SCENARIOS
 buttons, RMA offline/online, ALL ONLINE, the dynamic A-scope focus regression,
 and stable ImGui window count. `target_scenario_regression` accelerates a
@@ -43,7 +43,9 @@ and stable ImGui window count. `target_scenario_regression` accelerates a
 repeated eight-profile mix and periodic 120 km respawns. The existing
 `tracker_replay` is registered as a golden regression (1761/198/211 plus
 bounded track IDs) while its normal manual diagnostic mode is unchanged.
-Run all with `ctest --test-dir build --output-on-failure`; all 3 pass. No test
+`beam_pattern_regression` covers the array model, and
+`detection_processor_regression` guards all-offline CFAR suppression.
+Run all with `ctest --test-dir build --output-on-failure`; all 5 pass. No test
 opens a display or creates a DDS participant.
 
 **Geometry gotcha retained:** the OS may resize the app window from its
@@ -633,7 +635,9 @@ Report back: ASan report (or "ASan silent + zombie/scribble output").
   additionally attenuated sidelobes to create bounded strong-target ghosts.
   `beam_pattern_regression` covers nominal width, mask-position sensitivity,
   symmetric-error cancellation, monotonically cumulative gain loss, and
-  all-offline safety.
+  all-offline safety. With all 16 RMAs offline, DetectionProcessor retains
+  raw receiver noise for the A-scope but suppresses CFAR DetectionEvents so
+  noise peaks cannot create new tracks; existing tracks coast normally.
 - **RMA-offline, Tier 1** (2026-07-20, K5): 16 RMAs × 64 elements on a
   4×4 grid over the 32×32 face. `CMD_RMA_OFFLINE/ONLINE` (SystemCommand
   parameters "0".."15"/"all") drive `DataBus::rma_offline_mask`;

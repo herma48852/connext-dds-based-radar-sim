@@ -183,7 +183,7 @@ The demo launcher also supports `-Headless`, `-RunSeconds N`, and
 ## Optional: Portable Tests Without Connext
 
 This is not part of the clean-machine demo path above. On a machine without
-Connext, the three portable regressions can be built and run from the
+Connext, the five portable regressions can be built and run from the
 repository root with:
 
 ```bat
