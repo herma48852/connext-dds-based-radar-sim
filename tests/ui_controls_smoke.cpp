@@ -213,6 +213,20 @@ void expect_command(SmokeUi& ui, radar::ui::UiControl control,
 int main() {
     SmokeUi ui;
 
+    radar::ui::theme::apply_style(2.0f);
+    const ImGuiStyle expected_2x = ImGui::GetStyle();
+    radar::ui::theme::apply_style(1.0f);
+    radar::ui::theme::apply_style(2.0f);
+    const ImGuiStyle& repeated_2x = ImGui::GetStyle();
+    check(std::fabs(repeated_2x.FramePadding.x - expected_2x.FramePadding.x)
+              < 1.0e-6f &&
+          std::fabs(repeated_2x.ScrollbarSize - expected_2x.ScrollbarSize)
+              < 1.0e-6f &&
+          std::fabs(repeated_2x.WindowPadding.x - expected_2x.WindowPadding.x)
+              < 1.0e-6f,
+          "repeated monitor-scale changes do not compound ImGui dimensions");
+    radar::ui::theme::apply_style(1.0f);
+
     // Warm up hover/window state and capture every production control rect.
     for (int i = 0; i < 4; ++i)
         ui.frame();

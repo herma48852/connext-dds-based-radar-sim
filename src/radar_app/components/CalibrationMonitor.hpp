@@ -19,6 +19,8 @@ public:
     CalibrationMonitor(int32_t domain_id, DataBus& bus)
         : ComponentBase(domain_id, "Radar.CalibrationMonitor"), bus_(bus) {}
 
+    ~CalibrationMonitor() override { stop(); }
+
     void start() override;
 
 private:

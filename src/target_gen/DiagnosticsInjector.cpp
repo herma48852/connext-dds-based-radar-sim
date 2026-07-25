@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "SimClock.hpp"
+#include "WorkerGuard.hpp"
 
 namespace target_gen {
 
@@ -49,28 +50,30 @@ void DiagnosticsInjector::inject_type_mismatch() {
         pub, wrong_topic, dn::PROFILE_DETECTION_EVENT);
 
     mismatch_writer_thread_ = std::thread([this] {
-        while (!stop_.load()) {
-            types::DetectionEvent det;
-            det.sensor_id     = 0; // constant key (matches IDL @key)
-            det.detection_id  = -1;
-            det.timestamp     = SimClock::stamp();
-            det.range_m       = 0.0;
-            det.azimuth_deg   = 0.0;
-            det.elevation_deg = 0.0;
-            det.amplitude     = 0.0;
-            det.snr_db        = 0.0;
-            rogue_writer_.write(det);
-            std::this_thread::sleep_for(std::chrono::seconds(1));
-        }
+        run_worker_guarded("TargetGen.RogueWriter", [this] {
+            while (!stop_.load()) {
+                types::DetectionEvent det;
+                det.sensor_id     = 0; // constant key (matches IDL @key)
+                det.detection_id  = -1;
+                det.timestamp     = SimClock::stamp();
+                det.range_m       = 0.0;
+                det.azimuth_deg   = 0.0;
+                det.elevation_deg = 0.0;
+                det.amplitude     = 0.0;
+                det.snr_db        = 0.0;
+                rogue_writer_.write(det);
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+            }
+        });
     });
 }
 
 void DiagnosticsInjector::send_system_command(types::CommandType type,
                                               const std::string& params) {
-    if (commander_part_ == dds::core::null) {
+    std::call_once(commander_once_, [this] {
         commander_part_ = radds::make_participant(
             domain_id_, dn::PROFILE_TARGETGEN_PARTICIPANT, "TargetGen.Commander");
-    }
+    });
     dds::pub::Publisher pub(commander_part_);
     auto topic = radds::make_topic<types::SystemCommand>(
         commander_part_, dn::TOPIC_SYSTEM_COMMAND);

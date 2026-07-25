@@ -1,6 +1,7 @@
 #include "CommandHandler.hpp"
 
 #include <cstdlib>
+#include <cmath>
 #include <iostream>
 
 #include <dds/core/cond/WaitSet.hpp>
@@ -17,29 +18,24 @@ void CommandHandler::start() {
         subscriber_, topic, dds_names::PROFILE_SYSTEM_COMMAND);
 
     spawn([this] {
-        try {
-            dds::core::cond::StatusCondition condition(reader_);
-            condition.enabled_statuses(
-                dds::core::status::StatusMask::data_available());
+        dds::core::cond::StatusCondition condition(reader_);
+        condition.enabled_statuses(
+            dds::core::status::StatusMask::data_available());
 
-            dds::core::cond::WaitSet waitset;
-            waitset += condition;
-            while (!stop_.load()) {
-                const auto active = waitset.wait(
-                    dds::core::Duration::from_millisecs(200));
-                if (stop_.load() || active.empty())
-                    continue;
-                types::SystemCommand sample;
-                dds::sub::SampleInfo info;
-                for (int i = 0;
-                     i < 64 && reader_.extensions().take(sample, info); ++i) {
-                    if (info.valid())
-                        dispatch(sample);
-                }
+        dds::core::cond::WaitSet waitset;
+        waitset += condition;
+        while (!stop_.load()) {
+            const auto active = waitset.wait(
+                dds::core::Duration::from_millisecs(200));
+            if (stop_.load() || active.empty())
+                continue;
+            types::SystemCommand sample;
+            dds::sub::SampleInfo info;
+            for (int i = 0;
+                 i < 64 && reader_.extensions().take(sample, info); ++i) {
+                if (info.valid())
+                    dispatch(sample);
             }
-        } catch (const std::exception& e) {
-            RADAR_LOG << "[CommandHandler] worker exception: "
-                      << e.what() << "\n";
         }
     });
 }
@@ -52,13 +48,33 @@ void CommandHandler::dispatch(const types::SystemCommand& cmd) {
     switch (cmd.command_type) {
     case types::CommandType::CMD_SET_MODE:
         // parameters: "search" | "sector"
-        bus_.radar_mode.store(cmd.parameters == "sector" ? 1 : 0);
+        if (cmd.parameters == "sector")
+            bus_.radar_mode.store(1);
+        else if (cmd.parameters == "search")
+            bus_.radar_mode.store(0);
+        else
+            RADAR_LOG << "[CommandHandler] bad radar mode \""
+                      << cmd.parameters << "\" (want search or sector)\n";
         break;
-    case types::CommandType::CMD_SET_SECTOR:
-        bus_.sector_center_deg.store(cmd.sector_center_deg);
+    case types::CommandType::CMD_SET_SECTOR: {
+        if (!std::isfinite(cmd.sector_center_deg) ||
+            !std::isfinite(cmd.sector_width_deg) ||
+            cmd.sector_width_deg <= 0.0 ||
+            cmd.sector_width_deg > 360.0) {
+            RADAR_LOG << "[CommandHandler] bad sector center="
+                      << cmd.sector_center_deg << " width="
+                      << cmd.sector_width_deg
+                      << " (want finite center and width in (0,360])\n";
+            break;
+        }
+        double center = std::fmod(cmd.sector_center_deg, 360.0);
+        if (center < 0.0)
+            center += 360.0;
+        bus_.sector_center_deg.store(center);
         bus_.sector_width_deg.store(cmd.sector_width_deg);
         bus_.radar_mode.store(1);
         break;
+    }
     case types::CommandType::CMD_SELF_TEST:
         bus_.self_test_requested.store(true);
         break;
@@ -82,7 +98,8 @@ void CommandHandler::dispatch(const types::SystemCommand& cmd) {
         } else {
             char* end = nullptr;
             const long idx = std::strtol(cmd.parameters.c_str(), &end, 10);
-            if (end == cmd.parameters.c_str() || idx < 0 || idx >= 16) {
+            if (end == cmd.parameters.c_str() || *end != '\0' ||
+                idx < 0 || idx >= 16) {
                 RADAR_LOG << "[CommandHandler] bad RMA index \""
                           << cmd.parameters << "\" (want 0..15 or all)\n";
                 break;

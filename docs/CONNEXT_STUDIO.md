@@ -12,7 +12,7 @@ workspace-switching webinar runbook and AI visualization prompts, see
 1. Start the system:
    ```bash
    ./build/radar_app.app/Contents/MacOS/radar_app --domain 92 &
-   ./build/target_gen --domain 92 --targets 16 &
+   ./build/target_gen --domain 92 --targets 32 &
    ```
    (macOS: `radar_app` is a bundle — run the binary inside it, not the
    stale plain `./build/radar_app` path.)
@@ -76,7 +76,7 @@ All QoS comes from named profiles in `qos/radar_qos.xml`; the names are
 self-explanatory in Studio's QoS views:
 
 - Compare `DetectionEventProfile` (BEST_EFFORT, 1 ms latency budget) with
-  `TargetTrackProfile` (RELIABLE, TRANSIENT_LOCAL, 100 ms deadline).
+  `TargetTrackProfile` (RELIABLE, TRANSIENT_LOCAL, 200 ms deadline).
 - The reliability **variety is deliberate**: high-rate sensor paths trade
   reliability for latency; command and track paths are reliable.
 
@@ -88,7 +88,7 @@ duplicate target/truth publisher.
 
 1. **QoS mismatch** —
    ```bash
-   ./build/target_gen --domain 92 --targets 16 --inject-qos-mismatch
+   ./build/target_gen --domain 92 --targets 32 --inject-qos-mismatch
    ```
    Creates `TargetGen.RogueReader`: a RELIABLE DataReader on
    `Radar/DetectionEvent` whose writers are BEST_EFFORT. Discovery flags a
@@ -97,7 +97,7 @@ duplicate target/truth publisher.
 
 2. **Type mismatch** —
    ```bash
-   ./build/target_gen --domain 92 --targets 16 --inject-type-mismatch
+   ./build/target_gen --domain 92 --targets 32 --inject-type-mismatch
    ```
    Creates `TargetGen.RogueWriter`: writes type `DetectionEvent` on the
    topic **name** `TargetGen/TargetTruth` (registered type `TargetTruth`).
@@ -106,7 +106,7 @@ duplicate target/truth publisher.
 3. **Degraded array** — either press **DEGRADE ARRAY** in the radar UI's
    SCENARIOS panel, or:
    ```bash
-   ./build/target_gen --domain 92 --targets 16 --degrade-array
+   ./build/target_gen --domain 92 --targets 32 --degrade-array
    ```
    Watch `Radar/CalibrationStatus`: `overall_status` goes
    `ARRAY_NOMINAL -> ARRAY_DEGRADED`, `failed_element_count` jumps to
@@ -116,7 +116,7 @@ duplicate target/truth publisher.
 4. **RMA offline** — click a block in the radar UI's **ARRAY FACE** pane
    (each block = one Radar Modular Assembly, 64 T/R elements), or:
    ```bash
-   ./build/target_gen --domain 92 --targets 16 --rma-offline 3  # or "all"
+   ./build/target_gen --domain 92 --targets 32 --rma-offline 3  # or "all"
    ```
    Watch `Radar/CalibrationStatus`: `rma_offline_mask` gains the bit,
    `failed_element_count` jumps by 64 per offline RMA, and the drift

@@ -18,6 +18,7 @@
 #include <condition_variable>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <filesystem>
 #include <iostream>
 #include <mutex>
@@ -26,18 +27,20 @@
 #include <vector>
 
 #include "DiagnosticsInjector.hpp"
+#include "CliParse.hpp"
 #include "SimClock.hpp"
 #include "TargetFleet.hpp"
+#include "WorkerGuard.hpp"
 
 namespace {
 std::atomic<bool> g_running{true};
 void on_sigint(int) { g_running.store(false); }
 }
 
-int main(int argc, char** argv) {
+int run_target_gen(int argc, char** argv) {
     radds::disable_monitoring_lib(); // no monitoring DPs (see DdsSupport)
     int32_t domain = 0;
-    int num_targets = 8;
+    int num_targets = 32;
     double respawn_km = 120.0;
     bool qos_mismatch = false, type_mismatch = false, degrade = false;
     std::string rma_offline;
@@ -45,24 +48,67 @@ int main(int argc, char** argv) {
     std::string stop_file;
 
     for (int i = 1; i < argc; ++i) {
-        if (std::strcmp(argv[i], "--domain") == 0 && i + 1 < argc)
-            domain = std::atoi(argv[++i]);
-        else if (std::strcmp(argv[i], "--targets") == 0 && i + 1 < argc)
-            num_targets = std::atoi(argv[++i]);
+        if (std::strcmp(argv[i], "--domain") == 0) {
+            if (++i >= argc ||
+                !radar::cli::parse_integer<int32_t>(
+                    argv[i], 0, 232, domain)) {
+                std::cerr << "--domain must be an integer from 0 to 232\n";
+                return 2;
+            }
+        }
+        else if (std::strcmp(argv[i], "--targets") == 0) {
+            if (++i >= argc ||
+                !radar::cli::parse_integer<int>(
+                    argv[i], 1, 256, num_targets)) {
+                std::cerr << "--targets must be an integer from 1 to 256\n";
+                return 2;
+            }
+        }
         else if (std::strcmp(argv[i], "--inject-qos-mismatch") == 0)
             qos_mismatch = true;
         else if (std::strcmp(argv[i], "--inject-type-mismatch") == 0)
             type_mismatch = true;
         else if (std::strcmp(argv[i], "--degrade-array") == 0)
             degrade = true;
-        else if (std::strcmp(argv[i], "--respawn-range") == 0 && i + 1 < argc)
-            respawn_km = std::atof(argv[++i]);
-        else if (std::strcmp(argv[i], "--rma-offline") == 0 && i + 1 < argc)
-            rma_offline = argv[++i];
-        else if (std::strcmp(argv[i], "--run-seconds") == 0 && i + 1 < argc)
-            run_seconds = std::atof(argv[++i]);
-        else if (std::strcmp(argv[i], "--stop-file") == 0 && i + 1 < argc)
-            stop_file = argv[++i];
+        else if (std::strcmp(argv[i], "--respawn-range") == 0) {
+            if (++i >= argc ||
+                !radar::cli::parse_finite_double(
+                    argv[i], 0.0, 1000000.0, respawn_km)) {
+                std::cerr << "--respawn-range must be between 0 and 1000000 km\n";
+                return 2;
+            }
+        }
+        else if (std::strcmp(argv[i], "--rma-offline") == 0) {
+            if (++i >= argc) {
+                std::cerr << "--rma-offline requires 0..15 or all\n";
+                return 2;
+            }
+            if (std::strcmp(argv[i], "all") == 0) {
+                rma_offline = "all";
+            } else {
+                int rma = 0;
+                if (!radar::cli::parse_integer<int>(argv[i], 0, 15, rma)) {
+                    std::cerr << "--rma-offline requires 0..15 or all\n";
+                    return 2;
+                }
+                rma_offline = std::to_string(rma);
+            }
+        }
+        else if (std::strcmp(argv[i], "--run-seconds") == 0) {
+            if (++i >= argc ||
+                !radar::cli::parse_finite_double(
+                    argv[i], 0.0, 604800.0, run_seconds)) {
+                std::cerr << "--run-seconds must be between 0 and 604800\n";
+                return 2;
+            }
+        }
+        else if (std::strcmp(argv[i], "--stop-file") == 0) {
+            if (++i >= argc) {
+                std::cerr << "--stop-file requires a path\n";
+                return 2;
+            }
+            stop_file = argv[i];
+        }
         else if (std::strcmp(argv[i], "--help") == 0) {
             std::cout <<
                 "target_gen [--domain N] [--targets N] [--respawn-range KM]\n"
@@ -80,13 +126,10 @@ int main(int argc, char** argv) {
         }
     }
 
-    if (run_seconds < 0.0) {
-        std::cerr << "--run-seconds must be non-negative\n";
-        return 2;
-    }
-
     const auto process_started = std::chrono::steady_clock::now();
     const auto stop_requested = [&] {
+        if (radar::worker_failure_requested())
+            return true;
         if (run_seconds > 0.0 &&
             std::chrono::duration<double>(std::chrono::steady_clock::now()
                                           - process_started).count() >= run_seconds)
@@ -124,15 +167,19 @@ int main(int argc, char** argv) {
     if (type_mismatch) injector.inject_type_mismatch();
     if (degrade) {
         delayed_commands.emplace_back([&injector, &delay_completed] {
-            if (delay_completed())
-                injector.send_degrade_command();
+            radar::run_worker_guarded("TargetGen.DelayedDegrade", [&] {
+                if (delay_completed())
+                    injector.send_degrade_command();
+            });
         });
     }
     if (!rma_offline.empty()) {
         delayed_commands.emplace_back(
             [&injector, &delay_completed, p = rma_offline] {
-                if (delay_completed())
-                    injector.send_rma_offline(p);
+                radar::run_worker_guarded("TargetGen.DelayedRma", [&] {
+                    if (delay_completed())
+                        injector.send_rma_offline(p);
+                });
             });
     }
 
@@ -151,4 +198,17 @@ int main(int argc, char** argv) {
     injector.stop();
     fleet.stop();
     return 0;
+}
+
+int main(int argc, char** argv) {
+    try {
+        return run_target_gen(argc, argv);
+    } catch (const std::exception& e) {
+        std::cerr << "[target_gen] startup/runtime exception: "
+                  << e.what() << "\n";
+        return 1;
+    } catch (...) {
+        std::cerr << "[target_gen] startup/runtime exception: unknown exception\n";
+        return 1;
+    }
 }

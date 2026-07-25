@@ -13,6 +13,7 @@
 #include "SimClock.hpp"
 #include "SpscQueue.hpp"
 #include "TopicNames.hpp"
+#include "WorkerGuard.hpp"
 
 namespace radar::app {
 
@@ -32,25 +33,28 @@ public:
 
     void start() {
         thread_ = std::thread([this] {
-            while (!stop_.load()) {
-                CmdReq req;
-                bool any = false;
-                while (queue_.pop(req)) {
-                    any = true;
-                    types::SystemCommand cmd;
-                    // Bounded key space: an ever-incrementing command id
-                    // would leak one DDS instance per command.
-                    cmd.command_id        = 100 + (cmd_id_++ % 128);
-                    cmd.timestamp         = SimClock::stamp();
-                    cmd.command_type      = static_cast<types::CommandType>(req.type);
-                    cmd.sector_center_deg = req.center;
-                    cmd.sector_width_deg  = req.width;
-                    cmd.priority          = req.priority;
-                    cmd.parameters        = req.params;
-                    writer_.write(cmd);
+            run_worker_guarded("Radar.CommandConsole", [this] {
+                while (!stop_.load()) {
+                    CmdReq req;
+                    bool any = false;
+                    while (queue_.pop(req)) {
+                        any = true;
+                        types::SystemCommand cmd;
+                        // Bounded key space: an ever-incrementing command id
+                        // would leak one DDS instance per command.
+                        cmd.command_id        = 100 + (cmd_id_++ % 128);
+                        cmd.timestamp         = SimClock::stamp();
+                        cmd.command_type      = static_cast<types::CommandType>(req.type);
+                        cmd.sector_center_deg = req.center;
+                        cmd.sector_width_deg  = req.width;
+                        cmd.priority          = req.priority;
+                        cmd.parameters        = req.params;
+                        writer_.write(cmd);
+                    }
+                    if (!any)
+                        std::this_thread::sleep_for(std::chrono::milliseconds(2));
                 }
-                if (!any) std::this_thread::sleep_for(std::chrono::milliseconds(2));
-            }
+            });
         });
     }
 

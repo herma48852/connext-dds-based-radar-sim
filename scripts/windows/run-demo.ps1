@@ -6,7 +6,7 @@ param(
     [ValidateRange(0, 232)]
     [int]$Domain = 92,
     [ValidateRange(1, 256)]
-    [int]$Targets = 16,
+    [int]$Targets = 32,
     [ValidateRange(0, 604800)]
     [int]$RunSeconds = 0,
     [string]$ConnextDir,

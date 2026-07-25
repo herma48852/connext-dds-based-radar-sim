@@ -9,6 +9,7 @@
 // Regression:                 ./build/tracker_replay 300 --self-test --quiet
 
 #include "TrackerCore.hpp"
+#include "DetectionModel.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -24,12 +25,12 @@ using radar::app::TrackerCore;
 
 namespace {
 constexpr double kDeg2Rad       = 3.14159265358979323846 / 180.0;
-constexpr int    kRangeBins     = 512;
-constexpr double kRangeMaxM     = 100000.0;
-constexpr double kNoiseSigma    = 0.05;
-constexpr double kCfarThreshold = 0.26;
-constexpr double kSignalScale   = 3.0e8;
-constexpr double kBeamwidthDeg  = 2.0;
+constexpr int    kRangeBins     = radar::app::detection_model::kRangeBins;
+constexpr double kRangeMaxM     = radar::app::detection_model::kRangeMaxM;
+constexpr double kNoiseSigma    = radar::app::detection_model::kNoiseSigma;
+constexpr double kCfarThreshold = radar::app::detection_model::kCfarThreshold;
+constexpr double kSignalScale   = radar::app::detection_model::kSignalScale;
+constexpr double kBeamwidthDeg  = radar::app::detection_model::kBeamwidthDeg;
 constexpr double kAzStepDeg     = 2.25;
 constexpr double kDwellSec      = 0.01;
 constexpr int    kNumElBars     = 3;
@@ -244,6 +245,21 @@ int main(int argc, char** argv) {
         check(max_tracks <= static_cast<size_t>(TrackerCore::kMaxTracks),
               "track count exceeded the bounded instance pool");
         check(id_pool_valid, "a track ID escaped the bounded 1000..1255 pool");
+
+        TrackerCore coast_core;
+        const auto coast_birth = coast_core.update(
+            std::vector<CoreDetection>{{20000.0, 45.0, 3.0}}, 0.0, 0);
+        check(coast_birth.empty() && coast_core.tracks().size() == 1,
+              "coast boundary setup creates one live track");
+        const auto at_boundary =
+            coast_core.update({}, 0.0, TrackerCore::kCoastMs);
+        check(at_boundary.empty() && coast_core.tracks().size() == 1,
+              "track remains alive at the exact 12 second coast boundary");
+        const auto after_boundary =
+            coast_core.update({}, 0.0, TrackerCore::kCoastMs + 1);
+        check(after_boundary.size() == 1 && coast_core.tracks().empty(),
+              "track drops immediately after the 12 second coast boundary");
+
         if (!ok) return 1;
         std::printf("PASS: deterministic detection/tracker replay golden counts "
                     "and ID bounds\n");

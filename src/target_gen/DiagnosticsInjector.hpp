@@ -13,6 +13,7 @@
 //       the degraded-array scenario can be driven from this app too.
 
 #include <atomic>
+#include <mutex>
 #include <string>
 #include <thread>
 
@@ -41,6 +42,7 @@ private:
     int32_t domain_id_;
     std::atomic<bool> stop_{false};
     std::thread mismatch_writer_thread_;
+    std::once_flag commander_once_;
 
     // Keep entities alive for the lifetime of the injector
     dds::domain::DomainParticipant rogue_reader_part_{dds::core::null};

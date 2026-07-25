@@ -67,11 +67,11 @@ Target-generator terminal:
 
 ```bash
 source /Applications/rti_connext_dds-7.7.0/resource/scripts/rtisetenv_arm64Darwin23clang16.0.bash
-./build/target_gen --domain 92 --targets 16
+./build/target_gen --domain 92 --targets 32
 ```
 
-The webinar scenario deliberately uses 16 targets: two repeats of the stable
-eight-profile mix. Targets recycle past 120 km so the display remains busy.
+The webinar scenario uses 32 targets: four repeats of the stable eight-profile
+mix. Targets recycle past 120 km so the display remains busy.
 
 ### 2.3 Connect Connext Studio
 

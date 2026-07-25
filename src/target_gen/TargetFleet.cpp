@@ -6,6 +6,7 @@
 
 #include "PeriodicDeadline.hpp"
 #include "SimClock.hpp"
+#include "WorkerGuard.hpp"
 
 namespace target_gen {
 
@@ -47,7 +48,9 @@ void TargetFleet::start() {
     ship_writer_ = radds::make_writer<radar::types::ShipPosition>(
         publisher_, ship_topic, radar::dds_names::PROFILE_SHIP_POSITION);
 
-    thread_ = std::thread([this] { loop(); });
+    thread_ = std::thread([this] {
+        radar::run_worker_guarded("TargetGen.Generator", [this] { loop(); });
+    });
 }
 
 void TargetFleet::stop() {

@@ -14,6 +14,8 @@ public:
     BeamScheduler(int32_t domain_id, DataBus& bus)
         : ComponentBase(domain_id, "Radar.BeamScheduler"), bus_(bus) {}
 
+    ~BeamScheduler() override { stop(); }
+
     void start() override;
 
 private:

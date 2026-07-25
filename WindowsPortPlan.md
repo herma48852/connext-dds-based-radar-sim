@@ -6,7 +6,7 @@ Port AesaRadarSim to native Windows 11 x64 using Visual Studio 2022 and RTI
 Connext DDS 7.7.0 while preserving:
 
 - The radar display and all operator controls.
-- The 16-target, periodically respawning webinar scenario.
+- The 32-target, periodically respawning webinar scenario.
 - DDS topology and Connext Studio observability.
 - The existing headless regression suite.
 - Repeatable demo startup and packaging.
@@ -17,7 +17,7 @@ This should be a moderate port rather than a rewrite. The project already:
 - Includes an initial MSVC toolchain file.
 - Excludes POSIX crash handling on non-POSIX platforms.
 - Uses portable C++20 threading, atomics, and filesystem APIs.
-- Provides three fast, headless CTest regressions.
+- Provides six fast, headless CTest regressions.
 
 The assumed target is native Windows 11 x64 with Visual Studio 2022 and
 Connext DDS 7.7.0.
@@ -34,10 +34,12 @@ The native Windows implementation is now present on `main`'s working tree:
 - Windows hosted portable CI, self-hosted full CI, ZIP packaging, and a
   Windows runbook.
 
-Local Windows verification completed with all three CTest regressions, a
-16-target DDS integration smoke from both the source and installed layouts,
-a timed windowed OpenGL launch, embedded-manifest inspection, and ZIP
-generation. The remaining final-acceptance work is hardware/network/manual:
+Local Windows verification originally completed with the then-current three
+CTest regressions and a 16-target DDS integration smoke from both the source
+and installed layouts, plus a timed windowed OpenGL launch, embedded-manifest
+inspection, and ZIP generation. The suite now contains six regressions and the
+webinar baseline is 32 targets, so those expanded checks must be rerun. The
+remaining final-acceptance work is hardware/network/manual:
 the 30-minute DDS soak, 60-minute windowed soak, DPI checks at every supported
 scale, multi-host discovery, Connext Studio choreography, and execution on a
 clean Windows 11 machine.
@@ -126,9 +128,12 @@ Build targets in this order:
 
 1. `target_scenario_regression`
 2. `tracker_replay`
-3. `ui_controls_smoke`
-4. `target_gen`
-5. `radar_app`
+3. `beam_pattern_regression`
+4. `detection_processor_regression`
+5. `periodic_deadline_regression`
+6. `ui_controls_smoke`
+7. `target_gen`
+8. `radar_app`
 
 This isolates standard-library and compiler issues before combining DDS and
 the Windows graphics driver.
@@ -148,7 +153,7 @@ later without delaying the first functional build.
 
 ### Exit criteria
 
-- All five targets compile and link in `RelWithDebInfo`.
+- All eight targets compile and link in `RelWithDebInfo`.
 - No Apple framework, Objective-C++, or Metal source enters a Windows target.
 - `radar_app.exe --help` and `target_gen.exe --help` run successfully.
 
@@ -184,7 +189,7 @@ display-free on Windows.
 
 ### Exit criteria
 
-- All three CTest regressions pass on macOS and Windows.
+- All six CTest regressions pass on macOS and Windows.
 - The tracker replay has one documented, reproducible golden result.
 - No Windows test requires an interactive desktop or DDS participant.
 
@@ -225,7 +230,7 @@ Run both applications on one Windows machine using an isolated domain:
 
 ```powershell
 .\build\windows\RelWithDebInfo\radar_app.exe --domain 92
-.\build\windows\RelWithDebInfo\target_gen.exe --domain 92 --targets 16
+.\build\windows\RelWithDebInfo\target_gen.exe --domain 92 --targets 32
 ```
 
 Validate:
@@ -257,7 +262,7 @@ Add a PowerShell smoke runner that:
 
 1. Selects an isolated DDS domain.
 2. Starts `radar_app --headless`.
-3. Starts `target_gen --targets 16` on the same domain.
+3. Starts `target_gen --targets 32` on the same domain.
 4. Captures each process's output separately.
 5. Waits for discovery, detections, tracker heartbeats, and published tracks.
 6. Stops both processes cleanly.
@@ -303,7 +308,7 @@ Create `run-demo.ps1` that:
 - Locates `qos\radar_qos.xml`.
 - Verifies that Connext DLLs and the RTI license are available.
 - Checks for stale demo processes.
-- Launches `radar_app` and the 16-target generator.
+- Launches `radar_app` and the 32-target generator.
 - Writes separate timestamped logs.
 - Stops both processes cleanly on request.
 
@@ -409,6 +414,9 @@ tests/
   ui_controls_smoke.cpp
   target_scenario_regression.cpp
   tracker_replay.cpp
+  beam_pattern_regression.cpp
+  detection_processor_regression.cpp
+  periodic_deadline_regression.cpp
 
 .github/workflows/
   portable-tests.yml
@@ -532,9 +540,9 @@ platform-specific build products, launchers, renderers, and packaging.**
 The Windows port is complete when all of the following are true:
 
 - Visual Studio 2022 x64 builds without errors.
-- All three CTest regressions pass on Windows and macOS.
+- All six CTest regressions pass on Windows and macOS.
 - A 30-minute headless DDS integration soak passes.
-- A 60-minute windowed run with 16 targets remains stable.
+- A 60-minute windowed run with 32 targets remains stable.
 - Every scenario and RMA control works at multiple DPI scales.
 - Connext Studio observes every documented command and downstream transition.
 - Same-host and intended multi-host DDS configurations pass.

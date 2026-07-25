@@ -8,7 +8,7 @@ repo_root="$(cd "$script_dir/.." && pwd)"
 build_dir=""
 connext_dir="${CONNEXTDDS_DIR:-${NDDSHOME:-}}"
 domain=92
-targets=16
+targets=32
 run_seconds=0
 headless=0
 
@@ -30,7 +30,7 @@ Options:
   --build-dir PATH    CMake build directory (auto-detected by default)
   --connext-dir PATH  RTI Connext DDS installation (uses CONNEXTDDS_DIR/NDDSHOME)
   --domain N          DDS domain, 0..232 (default: 92)
-  --targets N         Number of targets, 1..256 (default: 16)
+  --targets N         Number of targets, 1..256 (default: 32)
   --run-seconds N     Stop after N seconds; 0 runs until window close/Ctrl-C
   --headless          Run radar_app without a window
   -h, --help          Show this help
@@ -161,7 +161,16 @@ export CONNEXTDDS_DIR="$connext_dir"
 export NDDSHOME="$connext_dir"
 
 connext_lib_dir=""
-if [[ -n "${CONNEXTDDS_ARCH:-}" && -d "$connext_dir/lib/$CONNEXTDDS_ARCH" ]]; then
+if [[ -f "$build_dir/radar-connext-arch.txt" ]]; then
+    IFS= read -r configured_arch < "$build_dir/radar-connext-arch.txt"
+    [[ -n "$configured_arch" ]] ||
+        die "empty Connext architecture manifest: $build_dir/radar-connext-arch.txt"
+    [[ "$configured_arch" != */* ]] ||
+        die "invalid Connext architecture in build manifest: $configured_arch"
+    [[ -d "$connext_dir/lib/$configured_arch" ]] ||
+        die "build requires missing Connext architecture: $configured_arch"
+    connext_lib_dir="$connext_dir/lib/$configured_arch"
+elif [[ -n "${CONNEXTDDS_ARCH:-}" && -d "$connext_dir/lib/$CONNEXTDDS_ARCH" ]]; then
     connext_lib_dir="$connext_dir/lib/$CONNEXTDDS_ARCH"
 else
     case "$(uname -s)" in
@@ -178,6 +187,7 @@ else
 fi
 [[ -n "$connext_lib_dir" ]] ||
     die "no Connext target library directory found under: $connext_dir/lib"
+export CONNEXTDDS_ARCH="${connext_lib_dir##*/}"
 
 case "$(uname -s)" in
     Darwin)

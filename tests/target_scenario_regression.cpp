@@ -31,16 +31,16 @@ bool same_state(const TargetState& a, const TargetState& b) {
 } // namespace
 
 int main() {
-    constexpr int kWebinarTargets = 16;
+    constexpr int kRegressionTargets = 16;
     constexpr double kDt = 0.02;
     constexpr int kSteps = 90'000; // 30 live minutes, accelerated (no sleeps)
 
-    TargetScenario scenario(kWebinarTargets);
-    TargetScenario repeat(kWebinarTargets);
+    TargetScenario scenario(kRegressionTargets);
+    TargetScenario repeat(kRegressionTargets);
     bool ok = true;
 
-    ok &= require(scenario.targets().size() == kWebinarTargets,
-                  "webinar scenario must contain exactly 16 targets");
+    ok &= require(scenario.targets().size() == kRegressionTargets,
+                  "two-repeat regression scenario must contain exactly 16 targets");
     ok &= require(scenario.respawn_range_km() == 120.0,
                   "default periodic respawn range must remain 120 km");
 
@@ -56,9 +56,9 @@ int main() {
         ok &= require(target.profile == static_cast<int>(i % 8),
                       "the eight-profile live mix must repeat twice");
         ok &= require(same_state(target, repeat.targets()[i]),
-                      "fixed seed must reproduce the initial webinar picture");
+                      "fixed seed must reproduce the initial regression picture");
     }
-    ok &= require(ids.size() == kWebinarTargets, "target IDs must be unique");
+    ok &= require(ids.size() == kRegressionTargets, "target IDs must be unique");
     ok &= require(observed_types == expected_types,
                   "16-target mix must remain 4 fighters, 2 bombers, 4 missiles, "
                   "2 ships, 2 drones, and 2 decoys");
@@ -73,7 +73,7 @@ int main() {
         for (const int32_t id : respawned) ++respawn_count[id];
 
         if (step % 500 == 0 || !respawned.empty()) {
-            ok &= require(scenario.targets().size() == kWebinarTargets,
+            ok &= require(scenario.targets().size() == kRegressionTargets,
                           "respawn must recycle targets, never add or remove them");
             for (size_t i = 0; i < scenario.targets().size(); ++i) {
                 const auto& target = scenario.targets()[i];
@@ -98,7 +98,7 @@ int main() {
     for (const auto& [id, count] : respawn_count) {
         total_respawns += count;
         if (count >= 2) ++repeatedly_recycled;
-        ok &= require(ids.count(id) == 1, "only webinar target IDs may respawn");
+        ok &= require(ids.count(id) == 1, "only configured target IDs may respawn");
     }
     ok &= require(total_respawns >= 16,
                   "30-minute live run must recycle a meaningful number of targets");
@@ -106,7 +106,7 @@ int main() {
                   "multiple targets must recycle periodically, not only once");
 
     if (!ok) return 1;
-    std::printf("PASS: 16-target webinar scenario stayed bounded with %d respawns "
+    std::printf("PASS: 16-target two-repeat scenario stayed bounded with %d respawns "
                 "across %zu targets\n",
                 total_respawns, respawn_count.size());
     return 0;

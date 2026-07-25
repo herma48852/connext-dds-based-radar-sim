@@ -18,6 +18,8 @@ public:
     CommandHandler(int32_t domain_id, DataBus& bus)
         : ComponentBase(domain_id, "Radar.CommandHandler"), bus_(bus) {}
 
+    ~CommandHandler() override { stop(); }
+
     void start() override;
 
 private:

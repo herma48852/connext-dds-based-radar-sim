@@ -50,7 +50,9 @@ public:
 private:
     void housekeeping_loop(); // publishes track views to the bus, ages out stale
 
-    static constexpr int64_t kTrackStaleMs = 6000; // mirrors tracker coast + margin
+    // Backstop for a missed DDS disposal. Coasting tracks are still republished
+    // at 10 Hz, so this does not shorten TrackerCore's 12-second coast.
+    static constexpr int64_t kTrackStaleMs = 6000;
 
     DataBus& bus_;
     dds::sub::DataReader<types::TargetTrack>       track_reader_{dds::core::null};

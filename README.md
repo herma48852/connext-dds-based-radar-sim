@@ -28,7 +28,7 @@ AesaRadarSim/
 ├── CMakeLists.txt               # macOS-first, Windows-ready build
 ├── cmake/                       # toolchain files (arm64 macOS, MSVC x64)
 ├── idl/radar_types.idl          # @appendable types, module radar::types
-├── qos/radar_qos.xml            # single QoS file, 10 named profiles
+├── qos/radar_qos.xml            # single QoS file, 11 named profiles
 ├── src/common/                  # DDS bootstrap, SPSC queue, sim clock
 ├── src/radar_app/
 │   ├── components/              # one class per radar component, one
@@ -46,9 +46,10 @@ AesaRadarSim/
 
 ## Prerequisites (macOS, Apple Silicon)
 
-1. **RTI Connext DDS 7.7.0 LTS** with the `arm64Darwin20clang12.0` target
-   installed, e.g. at `/Applications/rti_connext_dds-7.7.0`.
-2. CMake >= 3.20 (`brew install cmake`), Xcode Command Line Tools.
+1. **RTI Connext DDS 7.7.0 LTS** with an Apple Silicon target matching the
+   active toolchain (for example `arm64Darwin23clang16.0`), installed at a
+   location such as `/Applications/rti_connext_dds-7.7.0`.
+2. CMake >= 3.21 (`brew install cmake`), Xcode Command Line Tools.
 3. Git (GLFW / Dear ImGui / ImPlot are pulled by CMake FetchContent at
    configure time — no vcpkg or manual dependency management needed).
 
@@ -79,8 +80,8 @@ ctest --test-dir build --output-on-failure
   scenario controls (including the local **BEAM FORMATION** toggle), manual
   RMA offline/online, and **ALL ONLINE**. The A-scope
   azimuth/elevation changes throughout to cover the focus-loss regression.
-- `target_scenario_regression` accelerates 30 minutes of the production
-  16-target webinar scenario and checks stable IDs/profile mix, bounded motion,
+- `target_scenario_regression` accelerates 30 minutes of a deterministic
+  16-target two-repeat scenario and checks stable IDs/profile mix, bounded motion,
   deterministic seeded behavior, the missile altitude floor, and periodic
   120 km respawns.
 - `tracker_replay_regression` converts the existing deterministic detection →
@@ -125,7 +126,7 @@ Launcher options:
 | `--build-dir PATH` | Auto-detect | Use a specific CMake build directory instead of searching `build/macos-arm64`, `build`, and the repository installation layout. |
 | `--connext-dir PATH` | Environment/auto-detect | Use a specific RTI Connext installation instead of `CONNEXTDDS_DIR`, `NDDSHOME`, or the default macOS installation. |
 | `--domain N` | `92` | Select DDS domain `0..232`. |
-| `--targets N` | `16` | Launch `target_gen` with `1..256` targets. |
+| `--targets N` | `32` | Launch `target_gen` with `1..256` targets. |
 | `--run-seconds N` | `0` | Stop automatically after `N` seconds (`0..604800`); zero runs until window close or Ctrl-C. |
 | `--headless` | Off | Run `radar_app` without the graphics window. |
 | `-h`, `--help` | — | Print launcher usage and exit. |
@@ -240,7 +241,7 @@ on-demand diagnostic endpoints `target_gen` creates with
 | `Radar/DetectionEvent` | DetectionEvent | ~100 Hz | DetectionEventProfile | BEST_EFFORT CFAR blips; consumed by TrackManager and HMI-UI (PPI) |
 | `Radar/BeamCommand` | BeamCommand | 100 Hz | BeamCommandProfile | RELIABLE dwell schedule; consumed by Beamformer and DetectionProcessor |
 | `Radar/BeamPatternStatus` | BeamPatternStatus | 20 Hz | BeamPatternStatusProfile | Beamformer-owned RELIABLE + TRANSIENT_LOCAL outage metrics and 181-sample azimuth cut; consumed by DetectionProcessor (return synthesis) and HMI-UI (B-scope overlay) |
-| `Radar/TargetTrack` | TargetTrack | 10 Hz | TargetTrackProfile | RELIABLE + TRANSIENT_LOCAL + 100 ms deadline; consumed by HMI-UI (track list) |
+| `Radar/TargetTrack` | TargetTrack | 10 Hz | TargetTrackProfile | RELIABLE + TRANSIENT_LOCAL + 200 ms deadline; consumed by HMI-UI (track list) |
 | `Radar/CalibrationStatus` | CalibrationStatus | 1 Hz + changes | CalibrationStatusProfile | array health: 1024-element drift + `rma_offline_mask`; consumed by Beamformer and HMI-UI (health + ARRAY FACE panels) |
 | `Radar/SystemCommand` | SystemCommand | bursty | SystemCommandProfile | RELIABLE, WaitSet-handled |
 | `Ship/ShipPosition` | ShipPosition | 10 Hz | ShipPositionProfile | keyed: 0 = INS, 1 = truth; key 0 consumed by HMI-UI (ship panel) |
@@ -315,10 +316,10 @@ ship-relative polar for detections, ship-relative ENU for tracks/truth.
 
 ## Performance notes
 
-- 60 FPS with 100+ tracks / 1000+ active blips: blip pooling (fixed ring,
-  no per-frame allocation), preallocated polyline buffers, single GL
-  texture upload per frame for the B-scope, SPSC handoff (no locks on the
-  render path), delta-time animation everywhere.
+- 60 FPS with 100+ tracks / 1000+ active blips: bounded blip retention,
+  reusable polyline buffers, a single texture upload per B-scope frame,
+  lock-free SPSC handoff for high-rate display events, and small
+  mutex-protected snapshot copies for the latest aggregate views.
 
 ## Connext Studio
 

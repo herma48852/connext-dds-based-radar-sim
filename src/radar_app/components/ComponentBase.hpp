@@ -18,14 +18,16 @@
 
 #include "DdsSupport.hpp"
 #include "TopicNames.hpp"
+#include "WorkerGuard.hpp"
 
 namespace radar::app {
 
 class ComponentBase {
 public:
     ComponentBase(int32_t domain_id, std::string entity_name)
-        : participant_(radds::make_participant(
-              domain_id, dds_names::PROFILE_RADAR_PARTICIPANT, std::move(entity_name))),
+        : entity_name_(std::move(entity_name)),
+          participant_(radds::make_participant(
+              domain_id, dds_names::PROFILE_RADAR_PARTICIPANT, entity_name_)),
           publisher_(participant_),
           subscriber_(participant_) {}
 
@@ -42,7 +44,12 @@ public:
 
 protected:
     template <typename F>
-    void spawn(F&& fn) { threads_.emplace_back(std::forward<F>(fn)); }
+    void spawn(F&& fn) {
+        threads_.emplace_back(
+            [name = entity_name_, task = std::forward<F>(fn)]() mutable {
+                run_worker_guarded(name.c_str(), std::move(task));
+            });
+    }
 
     template <typename T>
     static void detach_listener(dds::sub::DataReader<T>& reader) {
@@ -56,6 +63,7 @@ protected:
         threads_.clear();
     }
 
+    std::string                    entity_name_;
     dds::domain::DomainParticipant participant_;
     dds::pub::Publisher            publisher_;
     dds::sub::Subscriber           subscriber_;

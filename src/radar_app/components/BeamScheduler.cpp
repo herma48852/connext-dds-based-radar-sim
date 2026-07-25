@@ -14,11 +14,16 @@ double wrap360(double a) {
     while (a < 0.0)     a += 360.0;
     return a;
 }
+double wrap180(double a) {
+    while (a > 180.0)  a -= 360.0;
+    while (a < -180.0) a += 360.0;
+    return a;
+}
 // Three-bar elevation raster: with the +/-5.5 deg elevation gate in
 // DetectionProcessor these tile without overlap, covering the deck up to
 // ~30.5 deg (ship / fighters / bomber / decoy / drone). The bar advances
 // once per azimuth revolution (or per sector bounce). Revisit per bar:
-// 3 x 1.6 s = 4.8 s < 9 s coast. Targets above ~30.5 deg at close range
+// 3 x 1.6 s = 4.8 s < 12 s coast. Targets above ~30.5 deg at close range
 // stay outside the surveillance cone ("cone of silence").
 constexpr int kNumElBars = 3;
 constexpr double kElBarsDeg[kNumElBars] = {3.0, 14.0, 25.0};
@@ -50,14 +55,24 @@ void BeamScheduler::start() {
             cmd.timestamp = SimClock::stamp();
 
             if (mode == 1) {
-                // Sector scan: sweep back and forth inside [center-w/2, center+w/2]
+                // Scan in center-relative coordinates so a sector spanning
+                // north (for example 350 +/- 30 deg) remains normalized.
                 const double center = bus_.sector_center_deg.load();
                 const double width  = bus_.sector_width_deg.load();
-                const double lo = center - width * 0.5;
-                const double hi = center + width * 0.5;
-                az += sector_dir * kAzStepDeg;
-                if (az > hi) { az = hi; sector_dir = -1; el_bar = (el_bar + 1) % kNumElBars; }
-                if (az < lo) { az = lo; sector_dir = +1; el_bar = (el_bar + 1) % kNumElBars; }
+                const double half_width = width * 0.5;
+                double relative = wrap180(az - center)
+                                + sector_dir * kAzStepDeg;
+                if (relative > half_width) {
+                    relative = half_width;
+                    sector_dir = -1;
+                    el_bar = (el_bar + 1) % kNumElBars;
+                }
+                if (relative < -half_width) {
+                    relative = -half_width;
+                    sector_dir = +1;
+                    el_bar = (el_bar + 1) % kNumElBars;
+                }
+                az = wrap360(center + relative);
                 cmd.mode     = types::BeamMode::BEAM_MODE_SEARCH;
                 cmd.priority = 2;
             } else {

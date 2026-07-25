@@ -25,13 +25,13 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <filesystem>
 #include <iostream>
 #include <string>
 #include <thread>
 
 #if defined(_WIN32)
-#include <exception>
 #include <memory>
 #include <windows.h>
 #include <dbghelp.h>
@@ -184,10 +184,12 @@ void install_crash_handler() {}
 #endif
 
 #include "CommandConsole.hpp"
+#include "CliParse.hpp"
 #include "DataBus.hpp"
 #include "Log.hpp"
 #include "ShipSimulator.hpp"
 #include "SimClock.hpp"
+#include "WorkerGuard.hpp"
 #include "components/Beamformer.hpp"
 #include "components/BeamScheduler.hpp"
 #include "components/CalibrationMonitor.hpp"
@@ -202,7 +204,7 @@ std::atomic<bool> g_running{true};
 void on_sigint(int) { g_running.store(false); }
 } // namespace
 
-int main(int argc, char** argv) {
+int run_radar_app(int argc, char** argv) {
     radds::disable_monitoring_lib(); // no monitoring DPs (see DdsSupport)
     install_crash_handler();
     int32_t domain = 0;
@@ -214,8 +216,14 @@ int main(int argc, char** argv) {
     double run_seconds = 0.0;
     std::string stop_file;
     for (int i = 1; i < argc; ++i) {
-        if (std::strcmp(argv[i], "--domain") == 0 && i + 1 < argc)
-            domain = std::atoi(argv[++i]);
+        if (std::strcmp(argv[i], "--domain") == 0) {
+            if (++i >= argc ||
+                !radar::cli::parse_integer<int32_t>(
+                    argv[i], 0, 232, domain)) {
+                std::cerr << "--domain must be an integer from 0 to 232\n";
+                return 2;
+            }
+        }
         else if (std::strcmp(argv[i], "--headless") == 0)
             headless = true;
         else if (std::strcmp(argv[i], "--no-dispose") == 0)
@@ -224,12 +232,29 @@ int main(int argc, char** argv) {
             gl_throttle = true;
         else if (std::strcmp(argv[i], "--no-titlebar") == 0)
             no_titlebar = true;
-        else if (std::strcmp(argv[i], "--swap-interval") == 0 && i + 1 < argc)
-            swap_interval = std::atoi(argv[++i]);
-        else if (std::strcmp(argv[i], "--run-seconds") == 0 && i + 1 < argc)
-            run_seconds = std::atof(argv[++i]);
-        else if (std::strcmp(argv[i], "--stop-file") == 0 && i + 1 < argc)
-            stop_file = argv[++i];
+        else if (std::strcmp(argv[i], "--swap-interval") == 0) {
+            if (++i >= argc ||
+                !radar::cli::parse_integer<int>(
+                    argv[i], 0, 4, swap_interval)) {
+                std::cerr << "--swap-interval must be an integer from 0 to 4\n";
+                return 2;
+            }
+        }
+        else if (std::strcmp(argv[i], "--run-seconds") == 0) {
+            if (++i >= argc ||
+                !radar::cli::parse_finite_double(
+                    argv[i], 0.0, 604800.0, run_seconds)) {
+                std::cerr << "--run-seconds must be between 0 and 604800\n";
+                return 2;
+            }
+        }
+        else if (std::strcmp(argv[i], "--stop-file") == 0) {
+            if (++i >= argc) {
+                std::cerr << "--stop-file requires a path\n";
+                return 2;
+            }
+            stop_file = argv[i];
+        }
         else if (std::strcmp(argv[i], "--help") == 0) {
             RADAR_LOG << "radar_app [--domain N] [--headless] [--no-dispose]\n"
                          "          [--gl-throttle] [--swap-interval N]\n"
@@ -248,13 +273,10 @@ int main(int argc, char** argv) {
         }
     }
 
-    if (run_seconds < 0.0) {
-        std::cerr << "--run-seconds must be non-negative\n";
-        return 2;
-    }
-
     const auto process_started = std::chrono::steady_clock::now();
     const auto stop_requested = [&] {
+        if (!g_running.load() || radar::worker_failure_requested())
+            return true;
         if (run_seconds > 0.0 &&
             std::chrono::duration<double>(std::chrono::steady_clock::now()
                                           - process_started).count() >= run_seconds)
@@ -268,6 +290,7 @@ int main(int argc, char** argv) {
     };
 
     radar::SimClock::start();
+    std::signal(SIGINT, on_sigint);
     RADAR_LOG << "[radar_app] starting on DDS domain " << domain << "\n";
 
     radar::app::DataBus bus;
@@ -304,7 +327,6 @@ int main(int argc, char** argv) {
         // no ImGui and no AppKit. If this survives for hours while the
         // windowed build dies after ~1 minute, the corruptor lives in the
         // UI/windowing layer, not in the DDS/component layer.
-        std::signal(SIGINT, on_sigint);
         RADAR_LOG << "[radar_app] headless soak mode; Ctrl+C to stop\n";
         auto next_heartbeat = std::chrono::steady_clock::now();
         while (g_running.load() && !stop_requested()) {
@@ -345,4 +367,17 @@ int main(int argc, char** argv) {
     ship.stop();
     RADAR_LOG << "[radar_app] components stopped\n";
     return rc;
+}
+
+int main(int argc, char** argv) {
+    try {
+        return run_radar_app(argc, argv);
+    } catch (const std::exception& e) {
+        RADAR_LOG << "[radar_app] startup/runtime exception: "
+                  << e.what() << "\n";
+        return 1;
+    } catch (...) {
+        RADAR_LOG << "[radar_app] startup/runtime exception: unknown exception\n";
+        return 1;
+    }
 }

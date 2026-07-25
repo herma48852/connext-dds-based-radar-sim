@@ -17,6 +17,8 @@ public:
     ShipSimulator(int32_t domain_id, DataBus& bus)
         : ComponentBase(domain_id, "Radar.ShipINS"), bus_(bus) {}
 
+    ~ShipSimulator() override { stop(); }
+
     void start() override;
 
 private:

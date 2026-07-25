@@ -146,7 +146,8 @@ if(RADAR_BUILD_APPLICATIONS)
         COMMAND "${RTIDDSGEN_EXECUTABLE}" -language C++11 -replace
                 -d "${GEN_DIR}" "${RADAR_IDL}"
         DEPENDS "${RADAR_IDL}"
-        COMMENT "rtiddsgen: generating C++11 types from idl/radar_types.idl")
+        COMMENT "rtiddsgen: generating C++11 types from idl/radar_types.idl"
+        VERBATIM)
 
     add_library(radar_types STATIC ${GEN_SOURCES})
     target_include_directories(radar_types PUBLIC "${GEN_DIR}")
@@ -253,22 +254,41 @@ if(RADAR_BUILD_APPLICATIONS)
         target_compile_definitions(radar_app PRIVATE GL_SILENCE_DEPRECATION)
     endif()
 
-    # Copy QoS beside each executable. TARGET_FILE_DIR handles VS config dirs.
-    add_custom_command(TARGET radar_app POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${CMAKE_CURRENT_SOURCE_DIR}/qos"
+    # Always refresh QoS before either executable is built. Unlike POST_BUILD,
+    # these dependency targets run after an XML-only edit even when no source
+    # needs recompilation. TARGET_FILE_DIR handles bundles and VS config dirs.
+    add_custom_target(radar_app_qos
+        COMMAND ${CMAKE_COMMAND} -E make_directory
                 "$<TARGET_FILE_DIR:radar_app>/qos"
-        COMMENT "Copying QoS profiles beside radar_app")
-    add_custom_command(TARGET target_gen POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${CMAKE_CURRENT_SOURCE_DIR}/qos"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_CURRENT_SOURCE_DIR}/qos/radar_qos.xml"
+                "$<TARGET_FILE_DIR:radar_app>/qos/radar_qos.xml"
+        COMMENT "Refreshing QoS profiles beside radar_app"
+        VERBATIM)
+    add_dependencies(radar_app radar_app_qos)
+    add_custom_target(target_gen_qos
+        COMMAND ${CMAKE_COMMAND} -E make_directory
                 "$<TARGET_FILE_DIR:target_gen>/qos"
-        COMMENT "Copying QoS profiles beside target_gen")
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_CURRENT_SOURCE_DIR}/qos/radar_qos.xml"
+                "$<TARGET_FILE_DIR:target_gen>/qos/radar_qos.xml"
+        COMMENT "Refreshing QoS profiles beside target_gen"
+        VERBATIM)
+    add_dependencies(target_gen target_gen_qos)
+
+    # The launcher must use the same RTI target architecture selected by
+    # FindRTIConnextDDS. Auto-detected CONNEXTDDS_ARCH is a normal variable,
+    # not necessarily a CMakeCache entry, so export it explicitly.
+    file(GENERATE
+        OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/radar-connext-arch.txt"
+        CONTENT "${CONNEXTDDS_ARCH}\n")
 
     install(TARGETS radar_app target_gen
         RUNTIME DESTINATION bin
         BUNDLE DESTINATION .)
     install(DIRECTORY qos/ DESTINATION bin/qos)
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/radar-connext-arch.txt"
+        DESTINATION .)
 
     if(WIN32)
         install(PROGRAMS

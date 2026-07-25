@@ -134,7 +134,7 @@ void DetectionProcessor::on_truth(const types::TargetTruth& t) {
     s.vx = t.velocity.x_east_m;  s.vy = t.velocity.y_north_m;  s.vz = t.velocity.z_up_m;
     s.rcs_dbsm    = t.rcs_dbsm;
     s.target_type = static_cast<int32_t>(t.target_type);
-    s.last_sim_ms = t.timestamp.sim_millis;
+    s.received_at = std::chrono::steady_clock::now();
 }
 
 // --- Receiver simulation: 1 kHz RawReturn synthesis for the current dwell --
@@ -203,6 +203,8 @@ void DetectionProcessor::return_synthesis_loop() {
         // Implant targets inside the beam (snapshot truth under lock)
         if (aperture_online) {
             std::lock_guard lk(truth_mutex_);
+            const auto now = steady_clock::now();
+            detection_model::prune_stale_truth(truth_, now);
             const double heading = bus_.ship().heading_deg;
             for (const auto& [id, t] : truth_) {
                 const double range_xy = std::hypot(t.x, t.y);

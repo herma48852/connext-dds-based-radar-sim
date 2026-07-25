@@ -66,6 +66,10 @@ inline ImFont* configure_default_font(float raster_density) {
 
 // Apply the flat dark style to the current ImGui context.
 inline void apply_style(float content_scale) {
+    // ScaleAllSizes multiplies the current style. Restore every metric first so
+    // moving between monitors cannot compound fields this theme does not
+    // explicitly customize (frame padding, scrollbar size, grab size, ...).
+    ImGui::GetStyle() = ImGuiStyle{};
     ImGui::StyleColorsDark();
     ImGuiStyle& s = ImGui::GetStyle();
     s.WindowRounding    = 6.0f;
