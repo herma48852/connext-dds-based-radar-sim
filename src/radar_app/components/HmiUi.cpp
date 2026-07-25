@@ -47,20 +47,15 @@ public:
         for (int i = 0;
              i < 256 && reader.extensions().take(sample, info); ++i) {
             if (info.valid()) {
-                owner_->on_track(sample);
+                owner_->on_track(sample, info.instance_handle());
                 continue;
             }
-            // Invalid sample on take(): instance lifecycle event (dispose /
-            // unregister). Recover the key to drop the track from the UI.
-            // (RTI 7.7: SampleInfo has no instance_state(); key_value uses
-            // the two-argument out-param form.)
-            try {
-                types::TargetTrack key;
-                reader.key_value(key, info.instance_handle());
-                owner_->on_track_dropped(key.track_id);
-            } catch (const dds::core::Error&) {
-                // instance already reclaimed; the age-out will catch it
-            }
+            // Invalid sample on take(): instance lifecycle event (dispose or
+            // no writers). The reader can reclaim its key lookup before a
+            // remote-writer removal callback runs, so resolve the track from
+            // the instance handle captured with valid samples instead of
+            // calling key_value() here.
+            owner_->on_track_dropped(info.instance_handle());
         }
     }
 private:
@@ -126,7 +121,9 @@ void HmiUi::stop() {
 
 // --- DDS callbacks (receive threads) ---------------------------------------
 
-void HmiUi::on_track(const types::TargetTrack& t) {
+void HmiUi::on_track(
+        const types::TargetTrack& t,
+        const dds::core::InstanceHandle& instance_handle) {
     TrackView v;
     v.track_id       = t.track_id;
     v.x_m            = t.position.x_east_m;
@@ -140,12 +137,20 @@ void HmiUi::on_track(const types::TargetTrack& t) {
     v.sim_millis     = t.timestamp.sim_millis;
 
     std::lock_guard lk(tracks_mutex_);
-    tracks_[v.track_id] = v;
+    tracks_.insert_or_assign(
+        v.track_id,
+        TrackEntry{v, instance_handle, std::chrono::steady_clock::now()});
 }
 
-void HmiUi::on_track_dropped(int64_t track_id) {
+void HmiUi::on_track_dropped(
+        const dds::core::InstanceHandle& instance_handle) {
     std::lock_guard lk(tracks_mutex_);
-    tracks_.erase(track_id);
+    for (auto it = tracks_.begin(); it != tracks_.end();) {
+        if (it->second.instance_handle == instance_handle)
+            it = tracks_.erase(it);
+        else
+            ++it;
+    }
 }
 
 void HmiUi::on_detection(const types::DetectionEvent& d) {
@@ -222,17 +227,20 @@ void HmiUi::housekeeping_loop() {
         next = advance_periodic_deadline(
             next, milliseconds(200)); // 5 Hz view refresh
 
-        const int64_t now_ms = SimClock::sim_millis();
+        const auto now = steady_clock::now();
         std::vector<TrackView> views;
         std::size_t map_size = 0;
         {
             std::lock_guard lk(tracks_mutex_);
             map_size = tracks_.size();
             for (auto it = tracks_.begin(); it != tracks_.end();) {
-                if (now_ms - it->second.sim_millis > kTrackStaleMs)
+                // Source sim_millis is process-relative and cannot be used
+                // for age comparisons when another radar publisher joins
+                // the DDS domain. Age from local reception time instead.
+                if (now - it->second.received_at > kTrackStale)
                     it = tracks_.erase(it); // dispose missed; age out
                 else {
-                    views.push_back(it->second);
+                    views.push_back(it->second.view);
                     ++it;
                 }
             }

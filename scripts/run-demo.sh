@@ -19,6 +19,7 @@ target_status=""
 cleanup_started=0
 stop_file=""
 log_dir=""
+session_lock_dir=""
 
 usage() {
     cat <<'EOF'
@@ -53,6 +54,61 @@ require_unsigned() {
     case "$value" in
         ""|*[!0-9]*) die "$name must be an unsigned integer" ;;
     esac
+}
+
+same_domain_demo_pids() {
+    ps -axo pid=,command= 2>/dev/null | awk -v domain="$domain" '
+        {
+            executable = $2
+            sub(/^.*\//, "", executable)
+            if (executable != "radar_app" && executable != "target_gen")
+                next
+            for (i = 3; i < NF; ++i) {
+                if ($i == "--domain" && $(i + 1) == domain) {
+                    print $1
+                    break
+                }
+            }
+        }
+    '
+}
+
+release_session_lock() {
+    [[ -n "$session_lock_dir" ]] || return 0
+
+    local owner=""
+    if [[ -f "$session_lock_dir/launcher.pid" ]]; then
+        IFS= read -r owner < "$session_lock_dir/launcher.pid" || true
+    fi
+    if [[ "$owner" == "$$" ]]; then
+        rm -f "$session_lock_dir/launcher.pid"
+        rmdir "$session_lock_dir" 2>/dev/null || true
+    fi
+    session_lock_dir=""
+}
+
+acquire_session_lock() {
+    local lock_root="${TMPDIR:-/tmp}/aesa-radar-demo-$(id -u)"
+    session_lock_dir="$lock_root/domain-$domain.lock"
+    mkdir -p "$lock_root"
+
+    if ! mkdir "$session_lock_dir" 2>/dev/null; then
+        local owner=""
+        if [[ -f "$session_lock_dir/launcher.pid" ]]; then
+            IFS= read -r owner < "$session_lock_dir/launcher.pid" || true
+        fi
+        if [[ "$owner" =~ ^[0-9]+$ ]] && kill -0 "$owner" 2>/dev/null; then
+            die "another demo launcher owns DDS domain $domain (PID $owner)"
+        fi
+
+        # The previous launcher died without running its EXIT trap.
+        rm -f "$session_lock_dir/launcher.pid"
+        rmdir "$session_lock_dir" 2>/dev/null ||
+            die "cannot recover stale domain lock: $session_lock_dir"
+        mkdir "$session_lock_dir" 2>/dev/null ||
+            die "another demo launcher acquired DDS domain $domain"
+    fi
+    printf '%s\n' "$$" > "$session_lock_dir/launcher.pid"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -208,6 +264,13 @@ else
     die "qos/radar_qos.xml was not found in the repository or build directory"
 fi
 
+existing_demo_pids="$(same_domain_demo_pids)"
+if [[ -n "$existing_demo_pids" ]]; then
+    existing_demo_pids="${existing_demo_pids//$'\n'/, }"
+    die "radar demo processes already use DDS domain $domain (PIDs $existing_demo_pids); stop them or select another domain"
+fi
+acquire_session_lock
+
 stamp="$(date +%Y%m%d-%H%M%S)"
 log_dir="$build_dir/demo-logs/$stamp-$$"
 mkdir -p "$log_dir"
@@ -261,6 +324,7 @@ cleanup() {
     if [[ -n "$log_dir" ]]; then
         echo "Demo stopped. Logs: $log_dir"
     fi
+    release_session_lock
     return 0
 }
 

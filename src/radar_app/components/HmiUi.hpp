@@ -19,9 +19,10 @@
 // and Radar/BeamCommand (already consumed by DetectionProcessor; the beam
 // timeline mirrors it in-process).
 
-#include <map>
 #include <atomic>
+#include <chrono>
 #include <cstdint>
+#include <map>
 #include <mutex>
 
 #include "ComponentBase.hpp"
@@ -40,8 +41,10 @@ public:
     void stop() override;
 
     // Listener callbacks (invoked on DDS receive threads).
-    void on_track(const types::TargetTrack& t);
-    void on_track_dropped(int64_t track_id);
+    void on_track(const types::TargetTrack& t,
+                  const dds::core::InstanceHandle& instance_handle);
+    void on_track_dropped(
+        const dds::core::InstanceHandle& instance_handle);
     void on_detection(const types::DetectionEvent& d);
     void on_ship(const types::ShipPosition& s);
     void on_calibration(const types::CalibrationStatus& c);
@@ -52,7 +55,13 @@ private:
 
     // Backstop for a missed DDS disposal. Coasting tracks are still republished
     // at 10 Hz, so this does not shorten TrackerCore's 12-second coast.
-    static constexpr int64_t kTrackStaleMs = 6000;
+    static constexpr auto kTrackStale = std::chrono::seconds(6);
+
+    struct TrackEntry {
+        TrackView view;
+        dds::core::InstanceHandle instance_handle;
+        std::chrono::steady_clock::time_point received_at;
+    };
 
     DataBus& bus_;
     dds::sub::DataReader<types::TargetTrack>       track_reader_{dds::core::null};
@@ -63,7 +72,7 @@ private:
     std::atomic<uint32_t> last_pattern_mask_{0xFFFFFFFFu};
 
     mutable std::mutex tracks_mutex_;
-    std::map<int64_t, TrackView> tracks_; // keyed by track_id
+    std::map<int64_t, TrackEntry> tracks_; // keyed by track_id
 };
 
 } // namespace radar::app

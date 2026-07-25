@@ -55,6 +55,18 @@ void TrackManager::stop() {
     stop_.store(true);
     detach_listener(reader_);
     join_all();
+
+    // Dispose every keyed instance while the writer is still alive. Remote
+    // HMIs can then remove this publisher's rows immediately instead of
+    // relying on a no-writers notification or the stale-reception backstop.
+    if (writer_ != dds::core::null && bus_.dispose_enabled.load()) {
+        for (const auto& [id, handle] : handles_) {
+            (void)id;
+            writer_.dispose_instance(handle);
+        }
+    }
+    handles_.clear();
+    core_.reset();
 }
 
 void TrackManager::on_detection(const types::DetectionEvent& det) {
