@@ -137,22 +137,26 @@ void DetectionProcessor::on_truth(const types::TargetTruth& t) {
     s.received_at = std::chrono::steady_clock::now();
 }
 
-// --- Receiver simulation: 1 kHz RawReturn synthesis for the current dwell --
+// --- Receiver simulation: PRF-rate RawReturn synthesis for current dwell ---
 void DetectionProcessor::return_synthesis_loop() {
     using namespace std::chrono;
     auto next = steady_clock::now();
+    constexpr duration<double> kPulseRepetitionPeriod{
+        1.0 / rf_model::kPulseRepetitionFrequencyHz};
 
     types::RawReturn sample;
     sample.range_bin_count = kRangeBins;
     sample.iq_samples.resize(2 * kRangeBins);
 
-    BeamPattern pattern;
+    // Use a physical nominal pattern during the brief DDS discovery interval
+    // before the first BeamPatternStatus sample arrives.
+    BeamPattern pattern = BeamPatternModel::calculate(0u);
     uint64_t observed_pattern_revision = 0;
     uint32_t logged_rma_mask = 0xFFFFFFFFu;
 
     while (!stop_.load()) {
         next = advance_periodic_deadline(
-            next, milliseconds(1)); // 1 kHz simulated PRF
+            next, kPulseRepetitionPeriod);
 
         const int64_t beam_id = dwell_beam_id_.load();
         if (beam_id < 0) { // no dwell scheduled yet
@@ -193,8 +197,6 @@ void DetectionProcessor::return_synthesis_loop() {
             receive_aperture_online(pattern.active_elements);
         const double active = aperture_online
             ? pattern.active_fraction : 0.0;
-        const double az_half_beam = aperture_online
-            ? kBeamwidthDeg * 0.5 / std::sqrt(active) : 0.0;
 
         // Noise floor
         for (int i = 0; i < 2 * kRangeBins; ++i)
@@ -207,57 +209,66 @@ void DetectionProcessor::return_synthesis_loop() {
             detection_model::prune_stale_truth(truth_, now);
             const double heading = bus_.ship().heading_deg;
             for (const auto& [id, t] : truth_) {
-                const double range_xy = std::hypot(t.x, t.y);
-                const double range    = std::sqrt(t.x*t.x + t.y*t.y + t.z*t.z);
-                if (range < 100.0 || range > kRangeMaxM) continue;
+                // Extrapolate the latest 50 Hz truth sample to this pulse.
+                // This creates coherent pulse-to-pulse carrier phase and
+                // therefore preserves Doppler information in the raw I/Q.
+                const double age_sec =
+                    duration<double>(now - t.received_at).count();
+                const double x = t.x + t.vx * age_sec;
+                const double y = t.y + t.vy * age_sec;
+                const double z = t.z + t.vz * age_sec;
+                const double range_xy = std::hypot(x, y);
+                const double range = std::sqrt(x*x + y*y + z*z);
+                if (!detection_model::within_instrumented_range(range))
+                    continue;
 
                 // world ENU azimuth -> ship-relative azimuth
-                const double az_world = std::atan2(t.x, t.y) / kDeg2Rad;
+                const double az_world = std::atan2(x, y) / kDeg2Rad;
                 const double az_ship  = wrap180(az_world - heading);
                 const double beam_offset = wrap180(az_ship - az_deg);
 
-                double pattern_response = 1.0;
-                if (rma_mask == 0) {
-                    // Preserve the established nominal regression exactly.
-                    if (std::fabs(beam_offset) > az_half_beam)
+                // Use the calculated array factor for nominal and degraded
+                // beams alike. The physical ~3.2-degree nominal HPBW is wider
+                // than the 2.25-degree raster spacing, so adjacent half-power
+                // footprints overlap instead of leaving hard dead stripes.
+                const double main_offset =
+                    wrap180(beam_offset - pattern.boresight_error_deg);
+                const double main_half_width =
+                    pattern.beamwidth_3db_deg * 0.5;
+                double pattern_response = 0.0;
+                if (std::fabs(main_offset) <= main_half_width) {
+                    pattern_response =
+                        pattern.relative_amplitude(beam_offset);
+                } else if (rma_mask != 0) {
+                    // Bound outage-created sidelobe theatre to the two
+                    // dominant lobes. The extra -9 dB scale keeps ordinary
+                    // air targets quiet while allowing a strong ship-sized
+                    // return to make an occasional displaced ghost.
+                    constexpr double kSidelobeDwellGateDeg = 1.2;
+                    constexpr double kSidelobeTheatreScale = 0.35;
+                    const bool pattern_has_sidelobe =
+                        pattern.active_elements > 0 &&
+                        pattern.peak_sidelobe_level_db > -30.0;
+                    const bool near_left = pattern_has_sidelobe &&
+                        std::fabs(wrap180(
+                            beam_offset
+                            - pattern.left_sidelobe_offset_deg))
+                            <= kSidelobeDwellGateDeg;
+                    const bool near_right = pattern_has_sidelobe &&
+                        std::fabs(wrap180(
+                            beam_offset
+                            - pattern.right_sidelobe_offset_deg))
+                            <= kSidelobeDwellGateDeg;
+                    if (!near_left && !near_right)
                         continue;
+                    pattern_response =
+                        pattern.relative_amplitude(beam_offset)
+                        * kSidelobeTheatreScale;
                 } else {
-                    const double main_offset =
-                        wrap180(beam_offset - pattern.boresight_error_deg);
-                    const double main_half_width = std::max(
-                        az_half_beam, pattern.beamwidth_3db_deg * 0.5);
-                    if (std::fabs(main_offset) <= main_half_width) {
-                        pattern_response =
-                            pattern.relative_amplitude(beam_offset);
-                    } else {
-                        // Bound sidelobe theatre to the two dominant lobes.
-                        // The extra -9 dB scale keeps ordinary air targets
-                        // quiet while allowing a strong ship-sized return to
-                        // make an occasional, explainable displaced ghost.
-                        constexpr double kSidelobeDwellGateDeg = 1.2;
-                        constexpr double kSidelobeTheatreScale = 0.35;
-                        const bool pattern_has_sidelobe =
-                            pattern.active_elements > 0 &&
-                            pattern.peak_sidelobe_level_db > -30.0;
-                        const bool near_left = pattern_has_sidelobe &&
-                            std::fabs(wrap180(
-                                beam_offset
-                                - pattern.left_sidelobe_offset_deg))
-                                <= kSidelobeDwellGateDeg;
-                        const bool near_right = pattern_has_sidelobe &&
-                            std::fabs(wrap180(
-                                beam_offset
-                                - pattern.right_sidelobe_offset_deg))
-                                <= kSidelobeDwellGateDeg;
-                        if (!near_left && !near_right)
-                            continue;
-                        pattern_response =
-                            pattern.relative_amplitude(beam_offset)
-                            * kSidelobeTheatreScale;
-                    }
+                    continue;
                 }
 
-                const double el_t = std::atan2(t.z, range_xy) / kDeg2Rad;
+                const double el_t = std::atan2(z, range_xy) / kDeg2Rad;
                 // Elevation gate: +/-5.5 deg so the scheduler's 3/14 deg
                 // bars tile WITHOUT overlap (-2.5..8.5 / 8.5..19.5) — an
                 // overlapping target would alternate bars sweep-to-sweep
@@ -265,20 +276,26 @@ void DetectionProcessor::return_synthesis_loop() {
                 if (std::fabs(el_t - el_deg) > 5.5)
                     continue; // outside elevation beam
 
-                const double rcs_lin = std::pow(10.0, t.rcs_dbsm / 10.0);
                 const double amp =
-                    kSignalScale * active * pattern_response
-                    * std::sqrt(rcs_lin) / (range * range);
+                    detection_model::target_voltage_amplitude(
+                        t.rcs_dbsm, range, active, pattern_response);
+                const double carrier_phase =
+                    detection_model::two_way_carrier_phase_rad(range);
+                const double in_phase = std::cos(carrier_phase);
+                const double quadrature = std::sin(carrier_phase);
 
-                const double bin_f = range / kRangeMaxM * kRangeBins;
-                const int b0 = static_cast<int>(bin_f);
-                // spread the return over ~3 bins (matched-filter response)
+                const int b0 = detection_model::range_bin_for(range);
+                // Approximate the compressed matched-filter response in
+                // bandwidth-derived range-resolution cells.
                 for (int db = -1; db <= 1; ++db) {
                     const int b = b0 + db;
                     if (b < 0 || b >= kRangeBins) continue;
-                    const double w = (db == 0) ? 1.0 : 0.4;
-                    sample.iq_samples[2*b]   += static_cast<float>(amp * w);
-                    sample.iq_samples[2*b+1] += static_cast<float>(amp * w * 0.3);
+                    const double w =
+                        detection_model::compressed_pulse_weight(db);
+                    sample.iq_samples[2*b] +=
+                        static_cast<float>(amp * w * in_phase);
+                    sample.iq_samples[2*b+1] +=
+                        static_cast<float>(amp * w * quadrature);
                 }
             }
         }
@@ -333,8 +350,9 @@ void DetectionProcessor::on_raw_return(const types::RawReturn& ret) {
         mag,
         receive_aperture_online_.load(std::memory_order_acquire),
         static_cast<float>(kCfarThreshold),
-        [this, n, &ret, &geo](int i, float amplitude) {
-            const double range_m = (static_cast<double>(i) / n) * kRangeMaxM;
+        [this, &ret, &geo](int i, float amplitude) {
+            const double range_m =
+                detection_model::range_m_for_bin(i);
             const double snr_db =
                 20.0 * std::log10(amplitude / kNoiseSigma);
 

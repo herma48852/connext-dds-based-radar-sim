@@ -53,6 +53,7 @@ add_library(beam_pattern_core STATIC
 target_include_directories(beam_pattern_core PUBLIC
     src/radar_app/components)
 target_link_libraries(beam_pattern_core PRIVATE radar_project_options)
+target_link_libraries(tracker_replay PRIVATE beam_pattern_core)
 
 # --- Optional graphics dependencies ----------------------------------------
 set(RADAR_NEEDS_IMGUI OFF)
@@ -337,12 +338,26 @@ if(BUILD_TESTING)
     target_link_libraries(beam_pattern_regression PRIVATE
         beam_pattern_core radar_project_options)
 
+    add_executable(search_raster_regression
+        tests/search_raster_regression.cpp)
+    target_include_directories(search_raster_regression PRIVATE
+        src/radar_app/components)
+    target_link_libraries(search_raster_regression PRIVATE
+        beam_pattern_core radar_project_options)
+
     add_executable(detection_processor_regression
         tests/detection_processor_regression.cpp)
     target_include_directories(detection_processor_regression PRIVATE
         src/radar_app/components)
     target_link_libraries(detection_processor_regression PRIVATE
         beam_pattern_core radar_project_options)
+
+    add_executable(radar_rf_model_regression
+        tests/radar_rf_model_regression.cpp)
+    target_include_directories(radar_rf_model_regression PRIVATE
+        src/radar_app/components)
+    target_link_libraries(radar_rf_model_regression PRIVATE
+        radar_project_options)
 
     add_executable(periodic_deadline_regression
         tests/periodic_deadline_regression.cpp)
@@ -353,15 +368,20 @@ if(BUILD_TESTING)
 
     add_test(NAME target_scenario_regression COMMAND target_scenario_regression)
     add_test(NAME beam_pattern_regression COMMAND beam_pattern_regression)
+    add_test(NAME search_raster_regression COMMAND search_raster_regression)
     add_test(NAME detection_processor_regression
         COMMAND detection_processor_regression)
+    add_test(NAME radar_rf_model_regression
+        COMMAND radar_rf_model_regression)
     add_test(NAME periodic_deadline_regression
         COMMAND periodic_deadline_regression)
     add_test(NAME tracker_replay_regression
         COMMAND tracker_replay 300 --self-test --quiet)
     set_tests_properties(
         target_scenario_regression beam_pattern_regression
+        search_raster_regression
         detection_processor_regression
+        radar_rf_model_regression
         periodic_deadline_regression
         tracker_replay_regression
         PROPERTIES TIMEOUT 30 LABELS "smoke;regression;portable")

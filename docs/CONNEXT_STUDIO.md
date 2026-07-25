@@ -56,7 +56,11 @@ display.
 Hierarchical names render as a tree: `Radar/...`, `Ship/...`,
 `TargetGen/...`. Open live data inspection on:
 
-- `Radar/RawReturn` — watch the sample rate (~1 kHz) and `iq_samples`
+- `Radar/RawReturn` — watch the sample rate (~1 kHz) and the 668 complex
+  range cells in `iq_samples`
+- `Radar/BeamPatternStatus` — inspect the appended representative S-band
+  carrier, wavelength, physical pitch, bandwidth, PRF, pulse width, range
+  resolution, and unambiguous-range fields alongside the live array pattern
   content; show that Studio decodes it via TypeLookup alone.
 - `Ship/ShipPosition` — **two instances** of the same keyed topic:
   `source_id = 0` (radar INS) and `source_id = 1` (ground truth). Show

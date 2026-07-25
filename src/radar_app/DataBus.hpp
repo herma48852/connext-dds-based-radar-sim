@@ -48,7 +48,7 @@ struct BeamPatternView {
     double commanded_azimuth_deg = 0.0;
     double boresight_error_deg = 0.0;
     double gain_loss_db = 0.0;
-    double beamwidth_3db_deg = 2.0;
+    double beamwidth_3db_deg = 3.2;
     double peak_sidelobe_level_db = -80.0;
     double left_sidelobe_offset_deg = 0.0;
     double right_sidelobe_offset_deg = 0.0;

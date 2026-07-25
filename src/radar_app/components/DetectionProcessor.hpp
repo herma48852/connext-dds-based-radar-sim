@@ -10,10 +10,12 @@
 //
 // The RawReturn write->read loopback inside one participant is deliberate:
 // it puts the 1 kHz "receiver wire" on the DDS bus where Connext Studio can
-// watch it, at ~2 MB/s over loopback/shared memory.
+// watch it, at ~5.3 MB/s over loopback/shared memory.
 //
 // Detection model (deliberately simple but physically plausible):
-//   amplitude  ~ sqrt(RCS_linear) * k / R^2   (radar equation, amplitude)
+//   amplitude  ~ wavelength * sqrt(RCS_linear) * k / R^2
+//   range cell : c / (2 * waveform bandwidth)
+//   I/Q phase  : 4*pi*range / wavelength, extrapolated at the pulse PRF
 //   detection  : magnitude > CFAR threshold above the noise floor
 
 #include <array>
@@ -49,16 +51,14 @@ private:
     };
 
     static constexpr int    kRangeBins      = detection_model::kRangeBins;
+    static constexpr double kRangeMinM      = detection_model::kRangeMinM;
     static constexpr double kRangeMaxM      = detection_model::kRangeMaxM;
-    static constexpr double kBeamwidthDeg   = detection_model::kBeamwidthDeg;
     static constexpr double kNoiseSigma     = detection_model::kNoiseSigma;
     // CFAR: for Rayleigh noise, Pfa = exp(-T^2 / (2*sigma^2)).
     // T = 0.26 -> Pfa ~ 1.4e-6 per bin (a few false alarms per second,
     // not tens of thousands). Amplitudes: fighter (0 dBsm) at 20 km
     // gives ~0.75 -> ~23.5 dB SNR, detection range ~34 km.
     static constexpr double kCfarThreshold  = detection_model::kCfarThreshold;
-    static constexpr double kSignalScale    = detection_model::kSignalScale;
-
     void on_beam_command(const types::BeamCommand& cmd);
     void on_beam_pattern(const types::BeamPatternStatus& status);
     void on_truth(const types::TargetTruth& truth);

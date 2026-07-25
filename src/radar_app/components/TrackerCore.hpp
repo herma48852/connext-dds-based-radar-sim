@@ -60,8 +60,8 @@ public:
     static constexpr double kInitSpeedMps = 350.0; // capture-gate velocity uncertainty
     static constexpr double kAlpha        = 0.55;
     static constexpr double kBeta         = 0.20;
-    // Must survive two fully missed bar visits: 3 bars x 1.6 s = 4.8 s
-    // revisit, so 12 s covers an unlucky az dead-stripe crossing.
+    // Must survive two fully missed full-volume revisits:
+    // 3 bars x 1.6 s = 4.8 s, so 12 s leaves margin for scheduler jitter.
     static constexpr int64_t kCoastMs     = 12000;
     static constexpr int    kMaxTracks    = 256;
     // Merge radius for az-cell split duplicates: 2.25 deg dwell cells are

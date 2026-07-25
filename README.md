@@ -92,6 +92,9 @@ ctest --test-dir build --output-on-failure
 - `beam_pattern_regression` verifies nominal beamwidth, outage gain loss,
   symmetric-error cancellation, mask-position sensitivity, and safe
   all-offline behavior without DDS or a display.
+- `search_raster_regression` enumerates the 480-point full-volume raster and
+  verifies its 4.8-second period plus nominal half-power overlap between
+  adjacent azimuth pointings.
 - `detection_processor_regression` forces an above-threshold noise peak through
   the production CFAR peak picker and verifies that a nominal aperture reports
   it while an all-offline aperture suppresses it.
@@ -201,7 +204,7 @@ all setup, build, test, and launch commands in that directory.
 
 - Connext target: `x64Win64VS2017` (binary-compatible with VS2022).
 - The UI embeds Per-Monitor V2 DPI awareness and uses GLFW/OpenGL 3.3.
-- `windows-portable` builds all six regressions without Connext.
+- `windows-portable` builds all seven regressions without Connext.
 - FetchContent supplies pinned GLFW, ImGui, and ImPlot sources.
 - Put the Connext target DLL directory on `PATH` before running.
 
@@ -237,7 +240,7 @@ on-demand diagnostic endpoints `target_gen` creates with
 
 | Topic | Type | Rate | Profile | Notes |
 |---|---|---|---|---|
-| `Radar/RawReturn` | RawReturn | 1 kHz | RawReturnProfile | BEST_EFFORT, 500us latency budget. The "receiver wire", looped back inside DetectionProcessor |
+| `Radar/RawReturn` | RawReturn | 1 kHz | RawReturnProfile | BEST_EFFORT, 500us latency budget. The "receiver wire": 668 complex range cells looped back inside DetectionProcessor |
 | `Radar/DetectionEvent` | DetectionEvent | ~100 Hz | DetectionEventProfile | BEST_EFFORT CFAR blips; consumed by TrackManager and HMI-UI (PPI) |
 | `Radar/BeamCommand` | BeamCommand | 100 Hz | BeamCommandProfile | RELIABLE dwell schedule; consumed by Beamformer and DetectionProcessor |
 | `Radar/BeamPatternStatus` | BeamPatternStatus | 20 Hz | BeamPatternStatusProfile | Beamformer-owned RELIABLE + TRANSIENT_LOCAL outage metrics and 181-sample azimuth cut; consumed by DetectionProcessor (return synthesis) and HMI-UI (B-scope overlay) |
@@ -266,16 +269,47 @@ that would come from the radar face — and then **consumes it back** to run CFA
 detection processing.
 
 The realism is baked in via the `TargetGen/TargetTruth` subscription:
-DetectionProcessor reads the ground-truth target positions, then synthesizes
-range-bin I/Q samples with RCS-based amplitude, 1/r^4 range attenuation and a
-Rayleigh noise floor. It applies the effective gain, width, pointing error,
-and sidelobes received from `Radar.Beamformer` over
-`Radar/BeamPatternStatus`, then spreads each return over ~3 bins as a
-matched-filter response. The 1 kHz `RawReturn` stream therefore behaves like
-genuine radar data rather than random numbers.
+DetectionProcessor reads the ground-truth target positions, extrapolates each
+50 Hz truth sample to the current pulse, and then synthesizes coherent range-bin
+I/Q with two-way carrier phase, RCS-based amplitude, 1/r^4 received-power
+attenuation, and a Rayleigh noise floor. It applies the effective gain, width,
+pointing error, and sidelobes received from `Radar.Beamformer` over
+`Radar/BeamPatternStatus`, then spreads each return over a short compressed-pulse
+response. The 1 kHz `RawReturn` stream therefore behaves like radar data rather
+than random numbers.
 
-> **Production note:** a real system would not put raw I/Q on DDS at 1 kHz × 512 bins
-> (~4 MB/s). The loopback exists here to stress-test the middleware and to make the
+### Representative RF and waveform model
+
+The simulator treats SPY-6 as the S-band component of the ship radar suite. It
+does not claim an exact operational SPY-6 frequency or waveform. The shared
+unclassified model in `RadarRfModel.hpp` uses a representative 3.0 GHz search
+carrier:
+
+- wavelength: 9.993 cm;
+- physical azimuth-element pitch: 50 mm, or 0.5003 wavelength;
+- waveform bandwidth: 1 MHz, giving 149.9 m range resolution;
+- pulse repetition frequency: 1 kHz, giving 149.9 km unambiguous range;
+- pulse width: 20 microseconds, giving a 3.0 km transmit/receive blind range
+  and 2 percent duty cycle;
+- instrumented range: 100 km, represented by 668 complex range cells.
+
+These quantities drive the simulation. Physical pitch divided by wavelength
+sets the array factor; wavelength scales received voltage consistently with
+the monostatic radar equation; bandwidth sets range-bin spacing; pulse width
+sets minimum receive range; PRF schedules raw returns; and propagated
+two-way carrier phase is written into I/Q. The same metadata is appended to
+`Radar/BeamPatternStatus` so it is visible in Connext Studio.
+
+The full-volume search raster contains 160 azimuth positions at 2.25-degree
+spacing on each of three elevation bars: 480 unique pointings at 100 Hz, or a
+4.8-second revisit. The nominal azimuth pattern is calculated from the
+32-column aperture with 50 mm physical spacing at the representative 3 GHz
+carrier and has an approximately 3.2-degree 3 dB beamwidth. Adjacent
+half-power footprints therefore overlap by about 0.9 degree; the raster has
+no nominal azimuth dead stripes.
+
+> **Production note:** a real system would not put raw I/Q on DDS at 1 kHz × 668
+> complex cells (~5.3 MB/s). The loopback exists here to stress-test the middleware and to make the
 > full data flow visible in Connext Studio. A deployed architecture would use separate
 > `Radar.Transmitter` and `Radar.Receiver` participants, with the raw data staying on
 > a high-bandwidth internal fabric (PCIe, RDMA, or shared memory) rather than the
@@ -309,7 +343,7 @@ ship-relative polar for detections, ship-relative ENU for tracks/truth.
   Studio's topology map shows `Radar.BeamScheduler`, `Radar.TrackManager`,
   etc. as individual nodes. A production system would use one participant
   with several publishers/subscribers.
-- `RawReturn` at 1 kHz x 512 bins (~4 MB/s) exercises the bus for the demo;
+- `RawReturn` at 1 kHz x 668 complex cells (~5.3 MB/s) exercises the bus for the demo;
   a real system would not put raw I/Q on DDS at this rate.
 - QoS **variety is intentional** (BEST_EFFORT sensor paths vs RELIABLE
   command/track paths) so Studio's match analysis has something to show.

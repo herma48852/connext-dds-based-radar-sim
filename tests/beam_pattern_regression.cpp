@@ -26,9 +26,9 @@ int main() {
           "nominal gain loss is zero");
     check(std::fabs(nominal.boresight_error_deg) < 1.0e-9,
           "nominal boresight error is zero");
-    check(nominal.beamwidth_3db_deg > 1.8 &&
-          nominal.beamwidth_3db_deg < 2.2,
-          "nominal 3 dB beamwidth remains approximately 2 degrees");
+    check(nominal.beamwidth_3db_deg > 3.1 &&
+          nominal.beamwidth_3db_deg < 3.3,
+          "32-column 50 mm S-band aperture has approximately 3.2 degree HPBW");
     check(nominal.peak_sidelobe_level_db < -10.0 &&
           nominal.peak_sidelobe_level_db > -17.0,
           "nominal peak sidelobe is in the expected ULA range");

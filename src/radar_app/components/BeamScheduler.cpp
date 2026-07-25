@@ -9,11 +9,6 @@
 namespace radar::app {
 
 namespace {
-double wrap360(double a) {
-    while (a >= 360.0) a -= 360.0;
-    while (a < 0.0)     a += 360.0;
-    return a;
-}
 double wrap180(double a) {
     while (a > 180.0)  a -= 360.0;
     while (a < -180.0) a += 360.0;
@@ -25,8 +20,6 @@ double wrap180(double a) {
 // once per azimuth revolution (or per sector bounce). Revisit per bar:
 // 3 x 1.6 s = 4.8 s < 12 s coast. Targets above ~30.5 deg at close range
 // stay outside the surveillance cone ("cone of silence").
-constexpr int kNumElBars = 3;
-constexpr double kElBarsDeg[kNumElBars] = {3.0, 14.0, 25.0};
 } // namespace
 
 void BeamScheduler::start() {
@@ -39,14 +32,15 @@ void BeamScheduler::start() {
         int64_t beam_id = 0;
         double az = 0.0;
         int sector_dir = +1;
-        int el_bar = 0; // index into kElBarsDeg
+        int el_bar = 0;
         auto next = std::chrono::steady_clock::now();
 
         while (!stop_.load()) {
             next = advance_periodic_deadline(
                 next,
                 std::chrono::milliseconds(
-                    static_cast<int>(kDwellPeriodSec * 1000.0))); // 100 Hz
+                    static_cast<int>(
+                        search_raster::kDwellPeriodSec * 1000.0))); // 100 Hz
 
             const int32_t mode = bus_.radar_mode.load();
             types::BeamCommand cmd;
@@ -61,32 +55,39 @@ void BeamScheduler::start() {
                 const double width  = bus_.sector_width_deg.load();
                 const double half_width = width * 0.5;
                 double relative = wrap180(az - center)
-                                + sector_dir * kAzStepDeg;
+                                + sector_dir
+                                    * search_raster::kAzimuthStepDeg;
                 if (relative > half_width) {
                     relative = half_width;
                     sector_dir = -1;
-                    el_bar = (el_bar + 1) % kNumElBars;
+                    el_bar = (el_bar + 1)
+                           % static_cast<int>(
+                               search_raster::kElevationBarsDeg.size());
                 }
                 if (relative < -half_width) {
                     relative = -half_width;
                     sector_dir = +1;
-                    el_bar = (el_bar + 1) % kNumElBars;
+                    el_bar = (el_bar + 1)
+                           % static_cast<int>(
+                               search_raster::kElevationBarsDeg.size());
                 }
-                az = wrap360(center + relative);
+                az = search_raster::wrap360(center + relative);
                 cmd.mode     = types::BeamMode::BEAM_MODE_SEARCH;
                 cmd.priority = 2;
             } else {
-                if (az + kAzStepDeg >= 360.0)
-                    el_bar = (el_bar + 1) % kNumElBars; // new revolution
-                az = wrap360(az + kAzStepDeg);
+                const auto pointing = search_raster::advance(az, el_bar);
+                az = pointing.azimuth_deg;
                 cmd.mode     = types::BeamMode::BEAM_MODE_SEARCH;
                 cmd.priority = 3;
             }
 
-            const double el_deg = kElBarsDeg[el_bar];
+            const double el_deg =
+                search_raster::kElevationBarsDeg[
+                    static_cast<std::size_t>(el_bar)];
             cmd.azimuth_deg   = az;
             cmd.elevation_deg = el_deg;
-            cmd.dwell_time_us = static_cast<int32_t>(kDwellPeriodSec * 1e6);
+            cmd.dwell_time_us = static_cast<int32_t>(
+                search_raster::kDwellPeriodSec * 1e6);
             writer_.write(cmd);
 
             bus_.current_beam_az_deg.store(az);

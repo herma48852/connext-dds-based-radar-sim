@@ -16,6 +16,8 @@ namespace radar::app {
 inline constexpr int kBeamPatternSampleCount = 181;
 inline constexpr double kBeamPatternStartDeg = -45.0;
 inline constexpr double kBeamPatternStepDeg = 0.5;
+inline constexpr int kAzimuthElementCount = 32;
+inline constexpr double kNominalBeamwidthApproxDeg = 3.2;
 
 struct BeamPattern {
     uint32_t rma_offline_mask = 0;
@@ -23,7 +25,7 @@ struct BeamPattern {
     double active_fraction = 1.0;
     double gain_loss_db = 0.0;
     double boresight_error_deg = 0.0;
-    double beamwidth_3db_deg = 2.0;
+    double beamwidth_3db_deg = kNominalBeamwidthApproxDeg;
     double peak_sidelobe_level_db = -13.0;
     double left_sidelobe_offset_deg = 0.0;
     double right_sidelobe_offset_deg = 0.0;

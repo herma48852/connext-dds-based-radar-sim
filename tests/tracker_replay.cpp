@@ -1,5 +1,5 @@
 // Offline replay of the detection -> tracking chain. NO DDS / Connext:
-// replicates BeamScheduler (2-bar elevation raster, 2.25 deg per 10 ms
+// replicates BeamScheduler (3-bar elevation raster, 2.25 deg per 10 ms
 // dwell), the DetectionProcessor implant gates + noise + CFAR peak-pick,
 // and drives the production TrackerCore. Prints track lifecycle so tracker
 // changes can be verified without running the full app.
@@ -8,8 +8,10 @@
 // Run:                        ./build/tracker_replay [seconds]
 // Regression:                 ./build/tracker_replay 300 --self-test --quiet
 
+#include "BeamPatternModel.hpp"
 #include "TrackerCore.hpp"
 #include "DetectionModel.hpp"
+#include "SearchRaster.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -26,19 +28,17 @@ using radar::app::TrackerCore;
 namespace {
 constexpr double kDeg2Rad       = 3.14159265358979323846 / 180.0;
 constexpr int    kRangeBins     = radar::app::detection_model::kRangeBins;
-constexpr double kRangeMaxM     = radar::app::detection_model::kRangeMaxM;
 constexpr double kNoiseSigma    = radar::app::detection_model::kNoiseSigma;
 constexpr double kCfarThreshold = radar::app::detection_model::kCfarThreshold;
-constexpr double kSignalScale   = radar::app::detection_model::kSignalScale;
-constexpr double kBeamwidthDeg  = radar::app::detection_model::kBeamwidthDeg;
-constexpr double kAzStepDeg     = 2.25;
-constexpr double kDwellSec      = 0.01;
-constexpr int    kNumElBars     = 3;
-constexpr double kElBars[kNumElBars] = {3.0, 14.0, 25.0};
+constexpr double kDwellSec =
+    radar::app::search_raster::kDwellPeriodSec;
+constexpr int kPulsesPerDwell = static_cast<int>(
+    radar::app::rf_model::kPulseRepetitionFrequencyHz * kDwellSec);
 constexpr double kElGateDeg     = 5.5;
 
+static_assert(kPulsesPerDwell == 10);
+
 double wrap180(double a) { while (a > 180.0) a -= 360.0; while (a < -180.0) a += 360.0; return a; }
-double wrap360(double a) { while (a >= 360.0) a -= 360.0; while (a < 0.0) a += 360.0; return a; }
 
 struct Truth {
     const char* name;
@@ -101,6 +101,8 @@ int main(int argc, char** argv) {
         }
     }
     DeterministicNormal noise(42, static_cast<float>(kNoiseSigma));
+    const auto nominal_pattern =
+        radar::app::BeamPatternModel::calculate(0u);
 
     // Fleet: inbound profiles echoing target_gen (world ENU at t=0)
     std::vector<Truth> fleet = {
@@ -131,38 +133,64 @@ int main(int argc, char** argv) {
     const int64_t total_dwells = (int64_t)(sim_s / kDwellSec);
     for (int64_t dwell = 0; dwell < total_dwells; ++dwell, now_ms += 10) {
         // --- BeamScheduler replica: advance bar per revolution ---
-        if (az + kAzStepDeg >= 360.0) el_bar = (el_bar + 1) % kNumElBars;
-        az = wrap360(az + kAzStepDeg);
-        const double el_deg = kElBars[el_bar];
+        const auto pointing =
+            radar::app::search_raster::advance(az, el_bar);
+        az = pointing.azimuth_deg;
+        const double el_deg = pointing.elevation_deg;
 
         // --- own ship + fleet motion ---
         own_x += own_vx * kDwellSec; own_y += own_vy * kDwellSec;
         for (auto& t : fleet) { t.x += t.vx * kDwellSec; t.y += t.vy * kDwellSec; }
 
-        // --- DetectionProcessor replica: 10 x 1 kHz pulses per 10 ms dwell ---
-        for (int pulse = 0; pulse < 10; ++pulse) {
+        // --- DetectionProcessor replica: PRF-rate pulses per search dwell ---
+        for (int pulse = 0; pulse < kPulsesPerDwell; ++pulse) {
             for (auto& v : iq) v = noise.next();
             for (size_t ti = 0; ti < fleet.size(); ++ti) {
                 const auto& t = fleet[ti];
-                const double rx = t.x - own_x, ry = t.y - own_y;
+                const double pulse_age =
+                    pulse / radar::app::rf_model::kPulseRepetitionFrequencyHz;
+                const double rx =
+                    t.x - own_x + (t.vx - own_vx) * pulse_age;
+                const double ry =
+                    t.y - own_y + (t.vy - own_vy) * pulse_age;
+                const double rz = t.z + t.vz * pulse_age;
                 const double rxy = std::hypot(rx, ry);
-                const double range = std::sqrt(rx*rx + ry*ry + t.z*t.z);
-                if (range < 100.0 || range > kRangeMaxM) continue;
+                const double range =
+                    std::sqrt(rx*rx + ry*ry + rz*rz);
+                if (!radar::app::detection_model::
+                        within_instrumented_range(range))
+                    continue;
                 const double az_world = std::atan2(rx, ry) / kDeg2Rad;
                 const double az_ship  = wrap180(az_world - kOwnHdgDeg);
-                if (std::fabs(wrap180(az_ship - az)) > kBeamwidthDeg * 0.5) continue;
-                const double el_t = std::atan2(t.z, rxy) / kDeg2Rad;
+                const double beam_offset = wrap180(az_ship - az);
+                if (std::fabs(beam_offset)
+                    > nominal_pattern.beamwidth_3db_deg * 0.5)
+                    continue;
+                const double pattern_response =
+                    nominal_pattern.relative_amplitude(beam_offset);
+                const double el_t = std::atan2(rz, rxy) / kDeg2Rad;
                 if (std::fabs(el_t - el_deg) > kElGateDeg) continue;
                 ++illum[ti];
-                const double rcs_lin = std::pow(10.0, t.rcs_dbsm / 10.0);
-                const double amp = kSignalScale * std::sqrt(rcs_lin) / (range * range);
-                const int b0 = (int)(range / kRangeMaxM * kRangeBins);
+                const double amp =
+                    radar::app::detection_model::target_voltage_amplitude(
+                        t.rcs_dbsm, range, 1.0, pattern_response);
+                const double phase =
+                    radar::app::detection_model::
+                        two_way_carrier_phase_rad(range);
+                const double in_phase = std::cos(phase);
+                const double quadrature = std::sin(phase);
+                const int b0 =
+                    radar::app::detection_model::range_bin_for(range);
                 for (int db = -1; db <= 1; ++db) {
                     const int b = b0 + db;
                     if (b < 0 || b >= kRangeBins) continue;
-                    const double w = (db == 0) ? 1.0 : 0.4;
-                    iq[2*b]   += (float)(amp * w);
-                    iq[2*b+1] += (float)(amp * w * 0.3);
+                    const double w =
+                        radar::app::detection_model::
+                            compressed_pulse_weight(db);
+                    iq[2*b] +=
+                        static_cast<float>(amp * w * in_phase);
+                    iq[2*b+1] +=
+                        static_cast<float>(amp * w * quadrature);
                 }
                 (void)ti;
             }
@@ -173,7 +201,9 @@ int main(int argc, char** argv) {
             for (int i = 1; i < kRangeBins - 1; ++i) {
                 if (mag[i] > kCfarThreshold && mag[i] >= mag[i-1] && mag[i] > mag[i+1]) {
                     pending.push_back(CoreDetection{
-                        (double)i / kRangeBins * kRangeMaxM, az, el_deg});
+                        radar::app::detection_model::range_m_for_bin(i),
+                        az,
+                        el_deg});
                     ++det_count;
                 }
             }
@@ -239,9 +269,9 @@ int main(int argc, char** argv) {
         };
         check(std::fabs(sim_s - 300.0) < 1e-9,
               "tracker golden regression requires a 300 second replay");
-        check(det_count == 1703, "expected 1703 deterministic detections");
+        check(det_count == 2553, "expected 2553 deterministic detections");
         check(births == 29, "expected 29 deterministic track births");
-        check(deaths == 35, "expected 35 deterministic track deaths");
+        check(deaths == 106, "expected 106 deterministic track removals");
         check(max_tracks <= static_cast<size_t>(TrackerCore::kMaxTracks),
               "track count exceeded the bounded instance pool");
         check(id_pool_valid, "a track ID escaped the bounded 1000..1255 pool");

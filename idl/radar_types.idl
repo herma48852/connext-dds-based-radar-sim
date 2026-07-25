@@ -24,7 +24,7 @@ module radar {
 module types {
 
     // ---- Bounds ------------------------------------------------------------
-    const long MAX_RANGE_BINS      = 2048;  // range samples per beam dwell
+    const long MAX_RANGE_BINS      = 2048;  // scalar I/Q values per beam dwell
     const long MAX_ARRAY_ELEMENTS  = 1024;  // T/R modules in the array face
     const long MAX_BEAM_PATTERN_SAMPLES = 181; // -45..+45 deg azimuth cut
     const long COVARIANCE_SIZE     = 9;     // 3x3 position covariance, row-major
@@ -153,6 +153,15 @@ module types {
         double      pattern_start_offset_deg;
         double      pattern_step_deg;
         sequence<float, MAX_BEAM_PATTERN_SAMPLES> azimuth_pattern_db;
+        // Representative, unclassified RF/search-waveform configuration.
+        double      carrier_frequency_hz;
+        double      wavelength_m;
+        double      element_pitch_m;
+        double      waveform_bandwidth_hz;
+        double      pulse_repetition_frequency_hz;
+        double      pulse_width_sec;
+        double      range_resolution_m;
+        double      unambiguous_range_m;
     };
 
     // Simulated raw receiver output for one beam dwell.
@@ -167,7 +176,7 @@ module types {
         TimeStamp             timestamp;
         double                azimuth_deg;   // beam pointing direction [deg]
         double                elevation_deg;
-        long                  range_bin_count; // valid entries in iq_samples
+        long                  range_bin_count; // complex cells; 2 I/Q values each
         sequence<float, MAX_RANGE_BINS> iq_samples; // interleaved I,Q per bin
     };
 

@@ -37,7 +37,7 @@ The native Windows implementation is now present on `main`'s working tree:
 Local Windows verification originally completed with the then-current three
 CTest regressions and a 16-target DDS integration smoke from both the source
 and installed layouts, plus a timed windowed OpenGL launch, embedded-manifest
-inspection, and ZIP generation. The suite now contains six regressions and the
+inspection, and ZIP generation. The suite now contains seven regressions and the
 webinar baseline is 32 targets, so those expanded checks must be rerun. The
 remaining final-acceptance work is hardware/network/manual:
 the 30-minute DDS soak, 60-minute windowed soak, DPI checks at every supported
@@ -129,11 +129,12 @@ Build targets in this order:
 1. `target_scenario_regression`
 2. `tracker_replay`
 3. `beam_pattern_regression`
-4. `detection_processor_regression`
-5. `periodic_deadline_regression`
-6. `ui_controls_smoke`
-7. `target_gen`
-8. `radar_app`
+4. `search_raster_regression`
+5. `detection_processor_regression`
+6. `periodic_deadline_regression`
+7. `ui_controls_smoke`
+8. `target_gen`
+9. `radar_app`
 
 This isolates standard-library and compiler issues before combining DDS and
 the Windows graphics driver.
@@ -415,6 +416,7 @@ tests/
   target_scenario_regression.cpp
   tracker_replay.cpp
   beam_pattern_regression.cpp
+  search_raster_regression.cpp
   detection_processor_regression.cpp
   periodic_deadline_regression.cpp
 

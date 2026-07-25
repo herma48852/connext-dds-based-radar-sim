@@ -6,17 +6,14 @@
 #include <complex>
 #include <limits>
 
+#include "RadarRfModel.hpp"
+
 namespace radar::app {
 
 namespace {
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kDeg2Rad = kPi / 180.0;
 constexpr double kPatternFloorDb = -80.0;
-
-// A 32-column half-wave ULA has a ~3.2-degree nominal HPBW.  The simulator's
-// established beam is 2 degrees, so this effective-aperture scale preserves
-// that baseline while retaining the outage-dependent array-factor shape.
-constexpr double kEffectiveSpacingScale = 1.585;
 
 double wrap180(double a) {
     while (a > 180.0) a -= 360.0;
@@ -29,11 +26,17 @@ double array_amplitude(const std::array<int, 32>& column_weights,
     if (active_elements <= 0)
         return 0.0;
 
+    // Standard uniform linear-array phase progression, derived from the
+    // shared physical RF model rather than a unitless beam-width fit:
+    // psi = 2*pi*(element spacing / wavelength)*sin(theta).
+    // The 50 mm pitch is approximately lambda/2 at the representative 3 GHz
+    // S-band carrier, yielding a broadside HPBW of approximately 3.2 degrees.
     const double spatial_phase =
-        kPi * kEffectiveSpacingScale * std::sin(relative_deg * kDeg2Rad);
+        2.0 * kPi * rf_model::kElementSpacingWavelengths
+        * std::sin(relative_deg * kDeg2Rad);
     std::complex<double> sum{0.0, 0.0};
-    for (int c = 0; c < 32; ++c) {
-        const double x = c - 15.5;
+    for (int c = 0; c < kAzimuthElementCount; ++c) {
+        const double x = c - (kAzimuthElementCount - 1) * 0.5;
         const double phase = x * spatial_phase;
         sum += static_cast<double>(column_weights[c])
              * std::complex<double>(std::cos(phase), std::sin(phase));
@@ -67,12 +70,12 @@ BeamPattern BeamPatternModel::calculate(uint32_t rma_offline_mask) {
     BeamPattern result;
     result.rma_offline_mask = rma_offline_mask & 0xFFFFu;
 
-    std::array<int, 32> column_weights{};
+    std::array<int, kAzimuthElementCount> column_weights{};
     double offline_horizontal_moment = 0.0;
     int active_elements = 0;
 
     for (int r = 0; r < 32; ++r) {
-        for (int c = 0; c < 32; ++c) {
+        for (int c = 0; c < kAzimuthElementCount; ++c) {
             const int rma = (r / 8) * 4 + (c / 8);
             if ((result.rma_offline_mask >> rma) & 1u)
                 continue;

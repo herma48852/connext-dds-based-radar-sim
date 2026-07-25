@@ -276,8 +276,20 @@ commanded recently?**
   search revolution or at each sector reversal.
 
 The scheduler commands 100 beam dwells per second. Its 2.25-degree azimuth
-step produces a full search revolution in about 1.6 seconds. The panel keeps
-the latest 240 commands, or about 2.4 seconds of history.
+step produces 160 positions and a full search revolution in 1.6 seconds.
+Across the three elevation bars, the full raster contains 480 unique
+pointings and repeats every 4.8 seconds. The representative S-band model uses
+a 3.0 GHz carrier (9.993 cm wavelength) and a fixed 50 mm element pitch. The
+physical 32-column aperture consequently has an approximately 3.2-degree
+azimuth 3 dB beamwidth, so adjacent half-power footprints overlap by about
+0.9 degree rather than leaving gaps. The panel keeps the latest 240 commands,
+or about 2.4 seconds of history.
+
+The receiver uses a 1 MHz pulse-compressed waveform at 1 kHz PRF. This gives
+149.9 m range resolution, 149.9 km unambiguous range, and 668 complex cells
+across the 100 km instrumented range. A 20 microsecond pulse creates an
+approximately 3.0 km transmit/receive blind range. These are representative,
+unclassified S-band search values, not claimed operational SPY-6 parameters.
 
 The underlying beam-command priority is 3 in Search Mode and 2 in Sector
 Scan, but this panel plots only azimuth and elevation.

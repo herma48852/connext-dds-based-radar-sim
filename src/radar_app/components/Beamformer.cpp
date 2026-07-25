@@ -5,6 +5,7 @@
 
 #include "Log.hpp"
 #include "PeriodicDeadline.hpp"
+#include "RadarRfModel.hpp"
 #include "SimClock.hpp"
 
 namespace radar::app {
@@ -87,6 +88,15 @@ void Beamformer::publish_loop() {
     types::BeamPatternStatus status;
     status.array_id = 0;
     status.azimuth_pattern_db.resize(kBeamPatternSampleCount);
+    status.carrier_frequency_hz = rf_model::kCarrierFrequencyHz;
+    status.wavelength_m = rf_model::kWavelengthM;
+    status.element_pitch_m = rf_model::kElementPitchM;
+    status.waveform_bandwidth_hz = rf_model::kWaveformBandwidthHz;
+    status.pulse_repetition_frequency_hz =
+        rf_model::kPulseRepetitionFrequencyHz;
+    status.pulse_width_sec = rf_model::kPulseWidthSec;
+    status.range_resolution_m = rf_model::kRangeResolutionM;
+    status.unambiguous_range_m = rf_model::kUnambiguousRangeM;
 
     while (!stop_.load()) {
         next = advance_periodic_deadline(
