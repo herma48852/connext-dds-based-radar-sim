@@ -7,6 +7,17 @@ namespace radar::app {
 
 namespace {
 constexpr double kDeg2Rad = 3.14159265358979323846 / 180.0;
+constexpr double kRad2Deg = 180.0 / 3.14159265358979323846;
+
+double wrap180(double angle_deg) {
+    while (angle_deg > 180.0) angle_deg -= 360.0;
+    while (angle_deg < -180.0) angle_deg += 360.0;
+    return angle_deg;
+}
+
+double azimuth_deg(double x, double y) {
+    return std::atan2(x, y) * kRad2Deg;
+}
 
 // ship-relative polar -> ship-relative ENU (az 0 = bow, CW positive;
 // ENU axes are north/east aligned, so rotate by ship heading)
@@ -33,6 +44,87 @@ int classify(double speed, double range_xy_m, double z) {
         return TrackerCore::CLASS_SURFACE;
     return TrackerCore::CLASS_UNKNOWN;
 }
+
+void prune_scan_hits(CoreTrack& track, int64_t now_ms) {
+    while (!track.scan_hit_times.empty() &&
+           now_ms - track.scan_hit_times.front()
+               > TrackerCore::kConfirmationWindowMs) {
+        track.scan_hit_times.pop_front();
+    }
+}
+
+bool record_scan_hit(CoreTrack& track, int64_t now_ms) {
+    prune_scan_hits(track, now_ms);
+    if (!track.scan_hit_times.empty() &&
+        now_ms - track.scan_hit_times.back()
+            < TrackerCore::kIndependentScanMs) {
+        return false;
+    }
+    track.scan_hit_times.push_back(now_ms);
+    if (static_cast<int>(track.scan_hit_times.size())
+        >= TrackerCore::kConfirmationHits) {
+        track.confirmed = true;
+    }
+    return true;
+}
+
+void absorb_duplicate(CoreTrack& survivor, const CoreTrack& fragment) {
+    // A fragment created at a beam-cell transition contains the newest
+    // measurement. Move the established track toward that measurement and,
+    // crucially, carry its update time forward. Simply deleting the fragment
+    // makes the established track coast out despite continuing detections.
+    if (fragment.last_update_ms > survivor.last_update_ms) {
+        const double dt = std::max(
+            0.02,
+            (fragment.last_update_ms - survivor.last_update_ms) / 1000.0);
+        const double px = survivor.x + survivor.vx * dt;
+        const double py = survivor.y + survivor.vy * dt;
+        const double pz = survivor.z + survivor.vz * dt;
+        survivor.x = px + TrackerCore::kAlpha * (fragment.x - px);
+        survivor.y = py + TrackerCore::kAlpha * (fragment.y - py);
+        survivor.z = pz + TrackerCore::kAlpha * (fragment.z - pz);
+        survivor.last_update_ms = fragment.last_update_ms;
+    }
+
+    if (!survivor.v_init && fragment.v_init) {
+        survivor.vx = fragment.vx;
+        survivor.vy = fragment.vy;
+        survivor.vz = fragment.vz;
+        survivor.v_init = true;
+    }
+    survivor.cross_hits =
+        std::max(survivor.cross_hits, fragment.cross_hits);
+    survivor.hits = std::max(survivor.hits, fragment.hits);
+    survivor.quality = std::max(survivor.quality, fragment.quality);
+    survivor.confirmed = survivor.confirmed || fragment.confirmed;
+
+    std::vector<int64_t> combined_hits;
+    combined_hits.reserve(
+        survivor.scan_hit_times.size()
+        + fragment.scan_hit_times.size());
+    combined_hits.insert(
+        combined_hits.end(),
+        survivor.scan_hit_times.begin(),
+        survivor.scan_hit_times.end());
+    combined_hits.insert(
+        combined_hits.end(),
+        fragment.scan_hit_times.begin(),
+        fragment.scan_hit_times.end());
+    std::sort(combined_hits.begin(), combined_hits.end());
+    survivor.scan_hit_times.clear();
+    for (const int64_t hit_ms : combined_hits) {
+        if (survivor.scan_hit_times.empty() ||
+            hit_ms - survivor.scan_hit_times.back()
+                >= TrackerCore::kIndependentScanMs) {
+            survivor.scan_hit_times.push_back(hit_ms);
+        }
+    }
+    prune_scan_hits(survivor, survivor.last_update_ms);
+    if (static_cast<int>(survivor.scan_hit_times.size())
+        >= TrackerCore::kConfirmationHits) {
+        survivor.confirmed = true;
+    }
+}
 } // namespace
 
 void TrackerCore::reset() {
@@ -47,26 +139,57 @@ std::vector<int64_t> TrackerCore::update(const std::vector<CoreDetection>& dets,
         polar_to_enu(det.range_m, det.azimuth_deg, det.elevation_deg,
                      ship_heading_deg, x, y, z);
 
-        // Nearest-neighbour association, gated in XY ONLY: reported z is
-        // quantized to the elevation bar (z = R sin(el_bar)) and would
-        // dominate a 3D gate. The gate grows with time-since-update while
-        // velocity is unseeded or freshly seeded — azimuth is quantized to
-        // 2.25 deg dwell cells (~1.2 km at 30 km), so early velocity
-        // estimates are noisy.
+        // Range/angle nearest-neighbour association. Elevation remains
+        // excluded because it is the center of an 11-degree acceptance gate,
+        // not a measured target elevation. The cross-range gate scales with
+        // range, matching the physical uncertainty of a beam-centered plot.
         CoreTrack* best = nullptr;
-        double best_d2 = 1e30;
+        double best_score = 1e30;
         for (auto& tr : tracks_) {
             const double dtg = std::max(0.02, (now_ms - tr.last_update_ms) / 1000.0);
-            double px = tr.x, py = tr.y, gate = kGateM;
+            double px = tr.x, py = tr.y;
+            double motion_uncertainty_m = 0.0;
             if (tr.v_init) {
                 px += tr.vx * dtg; py += tr.vy * dtg;
-                if (tr.cross_hits < 4) gate += 0.5 * kInitSpeedMps * dtg;
+                if (tr.cross_hits < 4)
+                    motion_uncertainty_m =
+                        0.5 * kInitSpeedMps * dtg;
             } else {
-                gate += kInitSpeedMps * dtg;
+                motion_uncertainty_m = kInitSpeedMps * dtg;
             }
-            const double dx = px - x, dy = py - y;
-            const double d2 = dx*dx + dy*dy;
-            if (d2 < gate * gate && d2 < best_d2) { best_d2 = d2; best = &tr; }
+
+            const double predicted_range = std::hypot(px, py);
+            const double measured_range = std::hypot(x, y);
+            const double range_error =
+                std::fabs(predicted_range - measured_range);
+            const double azimuth_error_rad =
+                std::fabs(wrap180(
+                    azimuth_deg(px, py) - azimuth_deg(x, y)))
+                * kDeg2Rad;
+            const double mean_range =
+                0.5 * (predicted_range + measured_range);
+            const double cross_range_error =
+                mean_range * std::fabs(std::sin(azimuth_error_rad));
+            const double range_gate =
+                kRangeGateM + motion_uncertainty_m;
+            const double cross_range_gate =
+                kCrossRangeFloorM
+                + mean_range
+                    * std::tan(kAzimuthGateDeg * kDeg2Rad)
+                + motion_uncertainty_m;
+            if (range_error >= range_gate ||
+                cross_range_error >= cross_range_gate) {
+                continue;
+            }
+            const double score =
+                (range_error / range_gate)
+                    * (range_error / range_gate)
+                + (cross_range_error / cross_range_gate)
+                    * (cross_range_error / cross_range_gate);
+            if (score < best_score) {
+                best_score = score;
+                best = &tr;
+            }
         }
 
         if (best) {
@@ -103,7 +226,11 @@ std::vector<int64_t> TrackerCore::update(const std::vector<CoreDetection>& dets,
                 best->vz += (kBeta / dt) * rz;
             }
             best->hits++;
-            best->quality = std::min(100, best->quality + 2);
+            const bool independent_scan =
+                record_scan_hit(*best, now_ms);
+            best->quality = std::min(
+                100,
+                best->quality + (independent_scan ? 12 : 1));
             best->last_update_ms = now_ms;
         } else if (tracks_.size() < (size_t)kMaxTracks) {
             // Bounded id pool: recycle ids of dropped tracks so the keyed
@@ -122,49 +249,61 @@ std::vector<int64_t> TrackerCore::update(const std::vector<CoreDetection>& dets,
             t.vx = t.vy = t.vz = 0.0;
             t.bx = x; t.by = y; t.birth_ms = now_ms;
             t.hits = 1;
+            t.confirmed = false;
             t.quality = 30;
             t.classification = CLASS_UNKNOWN;
             t.last_update_ms = now_ms;
+            t.scan_hit_times.push_back(now_ms);
             tracks_.push_back(t);
         }
     }
 
-    // Merge duplicate tracks of one physical contact. Strong returns
-    // (the 35 dBsm ship) straddle adjacent 2.25 deg az cells (~1.9 km at
-    // 50 km) and otherwise spawn 2-3 persistent tracks per contact, all
-    // reaching q=100 — the pane then shows several "ships". Pairs within
-    // kMergeM in XY merge; velocity must match only when BOTH tracks have
-    // it seeded (an unseeded track just hasn't measured yet). The
-    // higher-hits track survives; the other is dropped (disposed by the
-    // adapter). z is not compared (bar-quantized, like the gate).
+    // Fuse fragments that occupy the same radar resolution cell. This is a
+    // safety net behind dwell-plot clustering and the range/angle gate.
+    // Unlike the former delete-only merge, absorb_duplicate transfers a newer
+    // measurement and timestamp into the established survivor.
     std::vector<int64_t> dropped;
-    std::vector<int64_t> merge_drop;
     for (size_t i = 0; i < tracks_.size(); ++i) {
-        if (std::find(merge_drop.begin(), merge_drop.end(), tracks_[i].id) != merge_drop.end())
-            continue;
-        for (size_t j = i + 1; j < tracks_.size(); ++j) {
-            if (std::find(merge_drop.begin(), merge_drop.end(), tracks_[j].id) != merge_drop.end())
+        for (size_t j = i + 1; j < tracks_.size();) {
+            const auto& a = tracks_[i];
+            const auto& b = tracks_[j];
+            const double range_a = std::hypot(a.x, a.y);
+            const double range_b = std::hypot(b.x, b.y);
+            if (std::fabs(range_a - range_b) >= kMergeRangeM ||
+                std::fabs(wrap180(
+                    azimuth_deg(a.x, a.y)
+                    - azimuth_deg(b.x, b.y)))
+                    >= kMergeAzimuthDeg) {
+                ++j;
                 continue;
-            const CoreTrack& a = tracks_[i];
-            const CoreTrack& b = tracks_[j];
-            const double dx = a.x - b.x, dy = a.y - b.y;
-            if (dx*dx + dy*dy >= kMergeM*kMergeM) continue;
+            }
             if (a.v_init && b.v_init) {
                 const double dvx = a.vx - b.vx, dvy = a.vy - b.vy;
-                if (dvx*dvx + dvy*dvy >= kMergeDvMps*kMergeDvMps) continue;
+                if (dvx*dvx + dvy*dvy
+                    >= kMergeDvMps*kMergeDvMps) {
+                    ++j;
+                    continue;
+                }
             }
-            merge_drop.push_back((a.hits >= b.hits ? b : a).id);
+
+            const bool prefer_j =
+                (b.confirmed && !a.confirmed)
+                || (b.confirmed == a.confirmed && b.hits > a.hits);
+            if (prefer_j)
+                std::swap(tracks_[i], tracks_[j]);
+            dropped.push_back(tracks_[j].id);
+            absorb_duplicate(tracks_[i], tracks_[j]);
+            tracks_.erase(tracks_.begin()
+                          + static_cast<std::ptrdiff_t>(j));
         }
     }
-    for (const int64_t id : merge_drop) dropped.push_back(id);
-    tracks_.erase(std::remove_if(tracks_.begin(), tracks_.end(),
-        [&](const CoreTrack& t) {
-            return std::find(merge_drop.begin(), merge_drop.end(), t.id) != merge_drop.end();
-        }), tracks_.end());
 
     // coast / drop + classify
     for (auto it = tracks_.begin(); it != tracks_.end();) {
-        if (now_ms - it->last_update_ms > kCoastMs) {
+        prune_scan_hits(*it, now_ms);
+        const int64_t coast_ms =
+            it->confirmed ? kCoastMs : kTentativeCoastMs;
+        if (now_ms - it->last_update_ms > coast_ms) {
             dropped.push_back(it->id);
             it = tracks_.erase(it);
             continue;
@@ -173,7 +312,7 @@ std::vector<int64_t> TrackerCore::update(const std::vector<CoreDetection>& dets,
         // Re-evaluate every cycle: velocity seeds on the SECOND cross-sweep
         // hit, so a track classified at birth (v unseeded) would otherwise
         // be stuck forever (fast movers read SURF/UNK at 240+ m/s).
-        if (it->hits >= 3)
+        if (it->confirmed)
             it->classification = classify(speed, std::hypot(it->x, it->y), it->z);
 
         it->history.push_back({it->x, it->y, it->z});

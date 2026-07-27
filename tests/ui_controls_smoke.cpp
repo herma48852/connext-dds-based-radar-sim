@@ -5,10 +5,13 @@
 
 #include "CommandSink.hpp"
 #include "DataBus.hpp"
+#include "RadarFaces.hpp"
 #include "ui/AScopeView.hpp"
 #include "ui/Panels.hpp"
 #include "ui/Theme.hpp"
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -55,35 +58,71 @@ struct RecordedCommand {
     double width;
     std::string params;
     int32_t priority;
+    uint32_t target_face_mask;
 };
 
 class RecordingSink final : public radar::app::CommandSink {
 public:
     void send(int32_t type, double center, double width,
-              const char* params, int32_t priority) override {
-        commands.push_back({type, center, width, params ? params : "", priority});
+              const char* params, int32_t priority,
+              uint32_t target_face_mask) override {
+        commands.push_back({
+            type, center, width, params ? params : "", priority,
+            radar::faces::normalize_target_mask(target_face_mask)});
 
         // Mirror CommandHandler's state transitions so subsequent frames
         // render the same active-state highlights as the live application.
+        const uint32_t normalized_mask = commands.back().target_face_mask;
+        const auto for_each_targeted_face = [&](auto&& action) {
+            for (const auto& face : radar::faces::kDefinitions) {
+                if ((normalized_mask & face.mask) != 0u)
+                    action(static_cast<std::size_t>(face.id));
+            }
+        };
         switch (type) {
-        case 0: radar_mode = 0; break;                         // CMD_SET_MODE
-        case 1: radar_mode = 1; break;                         // CMD_SET_SECTOR
+        case 0:
+            for_each_targeted_face(
+                [&](std::size_t i) { radar_modes[i] = 0; });
+            break;
+        case 1:
+            for_each_targeted_face(
+                [&](std::size_t i) { radar_modes[i] = 1; });
+            break;
         case 2: self_test_requested = true; break;             // CMD_SELF_TEST
-        case 3: reset_requested = true; radar_mode = 0; break; // CMD_RESET
-        case 4: degraded = true; break;                        // CMD_DEGRADE_ARRAY
-        case 5: degraded = false; break;                       // CMD_RESTORE_ARRAY
+        case 3:
+            reset_requested = true;
+            radar_modes.fill(0);
+            break;
+        case 4:
+            for_each_targeted_face(
+                [&](std::size_t i) { degraded[i] = true; });
+            break;
+        case 5:
+            for_each_targeted_face(
+                [&](std::size_t i) { degraded[i] = false; });
+            break;
         case 6: {                                              // CMD_RMA_OFFLINE
-            const int rma = std::atoi(commands.back().params.c_str());
-            rma_mask |= (1u << rma);
+            for_each_targeted_face([&](std::size_t i) {
+                if (commands.back().params == "all") {
+                    rma_masks[i] = 0xFFFFu;
+                } else {
+                    const int rma =
+                        std::atoi(commands.back().params.c_str());
+                    rma_masks[i] |= (1u << rma);
+                }
+            });
             break;
         }
         case 7: {                                              // CMD_RMA_ONLINE
-            if (commands.back().params == "all") {
-                rma_mask = 0;
-            } else {
-                const int rma = std::atoi(commands.back().params.c_str());
-                rma_mask &= ~(1u << rma);
-            }
+            for_each_targeted_face([&](std::size_t i) {
+                if (commands.back().params == "all") {
+                    rma_masks[i] = 0;
+                } else {
+                    const int rma =
+                        std::atoi(commands.back().params.c_str());
+                    rma_masks[i] &= ~(1u << rma);
+                }
+            });
             break;
         }
         default: break;
@@ -91,11 +130,11 @@ public:
     }
 
     std::vector<RecordedCommand> commands;
-    int32_t radar_mode = 0;
-    bool degraded = false;
+    std::array<int32_t, radar::faces::kFaceCount> radar_modes{};
+    std::array<bool, radar::faces::kFaceCount> degraded{};
     bool self_test_requested = false;
     bool reset_requested = false;
-    uint32_t rma_mask = 0;
+    std::array<uint32_t, radar::faces::kFaceCount> rma_masks{};
 };
 
 class SmokeUi {
@@ -119,7 +158,9 @@ public:
 
         trace_.magnitude.assign(512, 0.05f);
         trace_.magnitude[180] = 0.45f;
+        trace_.face_id = selected_face_id;
         grid_.drift_db.assign(1024, 0.0f);
+        grid_.face_id = selected_face_id;
         io.AddMousePosEvent(-1000.0f, -1000.0f);
     }
 
@@ -138,15 +179,22 @@ public:
         // remain stable or Begin()->FocusWindow() kills a held button ActiveID.
         trace_.azimuth_deg = std::fmod(frame_number_ * 2.25, 360.0);
         trace_.elevation_deg = 3.0 + 11.0 * (frame_number_ % 3);
+        trace_.face_id = selected_face_id;
+        grid_.face_id = selected_face_id;
+        const auto selected_index =
+            static_cast<std::size_t>(selected_face_id);
         ascope_.render("A-SCOPE - AMPLITUDE / RANGE", ImVec2(0, 0),
                        ImVec2(1200, 380), trace_, io.DeltaTime);
 
         radar::ui::render_array_panel(
             "ARRAY FACE", ImVec2(0, 400), ImVec2(700, 580), grid_,
-            sink.rma_mask, sink, &probe);
+            sink.rma_masks[selected_index], selected_face_id, sink, &probe);
+        const auto scenario_index =
+            static_cast<std::size_t>(selected_face_id);
         radar::ui::render_scenario_bar(
             "SCENARIOS", ImVec2(720, 400), ImVec2(460, 580), sink,
-            sink.radar_mode, sink.degraded, beam_formation_overlay, &probe);
+            sink.radar_modes[scenario_index], sink.degraded[scenario_index],
+            selected_face_id, beam_formation_overlay, &probe);
 
         ImGui::Render();
         ++frame_number_;
@@ -172,6 +220,7 @@ public:
 
     Probe probe;
     RecordingSink sink;
+    int32_t selected_face_id = radar::faces::kForwardStarboard;
     bool beam_formation_overlay = false;
 
 private:
@@ -193,7 +242,9 @@ void check(bool condition, const char* message) {
 void expect_command(SmokeUi& ui, radar::ui::UiControl control,
                     int32_t type, const char* params = "",
                     double center = 0.0, double width = 0.0,
-                    int index = -1) {
+                    int index = -1,
+                    uint32_t expected_face_mask =
+                        radar::faces::kForwardStarboardMask) {
     const size_t before = ui.sink.commands.size();
     check(ui.click(control, index) == 1, "control emitted exactly one command");
     if (ui.sink.commands.size() <= before)
@@ -206,6 +257,8 @@ void expect_command(SmokeUi& ui, radar::ui::UiControl control,
     check(std::fabs(cmd.width - width) < 1.0e-9,
           "command sector width matches control");
     check(cmd.priority == 3, "command priority remains the UI default");
+    check(cmd.target_face_mask == expected_face_mask,
+          "command targets the expected face set");
 }
 
 } // namespace
@@ -250,10 +303,13 @@ int main() {
           "dynamic A-scope title keeps one stable ImGui window identity");
 
     expect_command(ui, radar::ui::UiControl::SearchMode, 0, "search");
-    check(ui.sink.radar_mode == 0, "SEARCH MODE leaves search active");
+    check(ui.sink.radar_modes[radar::faces::kForwardStarboard] == 0,
+          "SEARCH MODE leaves selected face search active");
 
-    expect_command(ui, radar::ui::UiControl::SectorScan, 1, "", 90.0, 60.0);
-    check(ui.sink.radar_mode == 1, "SECTOR SCAN activates sector mode");
+    expect_command(
+        ui, radar::ui::UiControl::SectorScan, 1, "", 45.0, 30.0);
+    check(ui.sink.radar_modes[radar::faces::kForwardStarboard] == 1,
+          "SECTOR SCAN activates selected face sector mode");
 
     const size_t before_overlay = ui.sink.commands.size();
     check(ui.click(radar::ui::UiControl::BeamFormation) == 0,
@@ -268,35 +324,78 @@ int main() {
           "BEAM FORMATION disables the comparison overlay");
 
     expect_command(ui, radar::ui::UiControl::DegradeArray, 4);
-    check(ui.sink.degraded, "DEGRADE ARRAY sets degraded state");
+    check(ui.sink.degraded[radar::faces::kForwardStarboard],
+          "DEGRADE ARRAY sets selected-face degraded state");
 
     expect_command(ui, radar::ui::UiControl::RestoreArray, 5);
-    check(!ui.sink.degraded, "RESTORE ARRAY clears degraded state");
+    check(!ui.sink.degraded[radar::faces::kForwardStarboard],
+          "RESTORE ARRAY clears selected-face degraded state");
 
-    expect_command(ui, radar::ui::UiControl::SelfTest, 2);
+    expect_command(
+        ui, radar::ui::UiControl::SelfTest, 2, "", 0.0, 0.0, -1,
+        radar::faces::kAllFacesMask);
     check(ui.sink.self_test_requested, "SELF TEST request is observed");
 
-    expect_command(ui, radar::ui::UiControl::ResetTracks, 3);
+    expect_command(
+        ui, radar::ui::UiControl::ResetTracks, 3, "", 0.0, 0.0, -1,
+        radar::faces::kAllFacesMask);
     check(ui.sink.reset_requested, "RESET TRACKS request is observed");
-    check(ui.sink.radar_mode == 0, "RESET TRACKS returns to search mode");
+    check(std::all_of(
+              ui.sink.radar_modes.begin(), ui.sink.radar_modes.end(),
+              [](int32_t mode) { return mode == 0; }),
+          "RESET TRACKS returns every face to search mode");
 
     // Cover the manual RMA hit-test in both directions.
     expect_command(ui, radar::ui::UiControl::RmaBlock, 6, "0", 0.0, 0.0, 0);
-    check(ui.sink.rma_mask == 0x0001u, "RMA 0 selection takes block offline");
+    check(ui.sink.rma_masks[radar::faces::kForwardStarboard] == 0x0001u,
+          "RMA 0 selection takes selected-face block offline");
     expect_command(ui, radar::ui::UiControl::RmaBlock, 7, "0", 0.0, 0.0, 0);
-    check(ui.sink.rma_mask == 0u, "offline RMA selection restores block online");
+    check(ui.sink.rma_masks[radar::faces::kForwardStarboard] == 0u,
+          "offline RMA selection restores selected-face block online");
 
-    // Establish a nonzero mask through the real grid, then verify the standard
-    // SmallButton path that was broken alongside all scenario buttons.
+    // A partially degraded face first transitions to all-offline, then the
+    // same control changes to ALL ONLINE and restores only that face.
     expect_command(ui, radar::ui::UiControl::RmaBlock, 6, "5", 0.0, 0.0, 5);
-    check(ui.sink.rma_mask == 0x0020u, "RMA 5 is offline before ALL ONLINE");
+    check(ui.sink.rma_masks[radar::faces::kForwardStarboard] == 0x0020u,
+          "RMA 5 is offline before whole-face toggle");
+    expect_command(ui, radar::ui::UiControl::AllOffline, 6, "all");
+    check(ui.sink.rma_masks[radar::faces::kForwardStarboard] == 0xFFFFu,
+          "ALL OFFLINE darkens every RMA on the selected face");
     expect_command(ui, radar::ui::UiControl::AllOnline, 7, "all");
-    check(ui.sink.rma_mask == 0u, "ALL ONLINE clears the complete RMA mask");
+    check(ui.sink.rma_masks[radar::faces::kForwardStarboard] == 0u,
+          "ALL ONLINE restores every RMA on the selected face");
+
+    // Face selection is local UI state; subsequent scenarios and RMA actions
+    // carry the selected face mask and leave the other three faces unchanged.
+    const size_t before_face_select = ui.sink.commands.size();
+    check(ui.click(
+              radar::ui::UiControl::FaceSelect,
+              radar::faces::kForwardPort) == 0,
+          "face selector emits no DDS command");
+    check(ui.selected_face_id == radar::faces::kForwardPort,
+          "face selector activates Forward Port");
+    check(ui.sink.commands.size() == before_face_select,
+          "face selection remains display-local");
+
+    expect_command(
+        ui, radar::ui::UiControl::SectorScan, 1, "", 315.0, 30.0, -1,
+        radar::faces::kForwardPortMask);
+    check(ui.sink.radar_modes[radar::faces::kForwardPort] == 1 &&
+              ui.sink.radar_modes[radar::faces::kForwardStarboard] == 0,
+          "Forward Port sector command does not alter Forward Starboard");
+    expect_command(
+        ui, radar::ui::UiControl::RmaBlock, 6, "3", 0.0, 0.0, 3,
+        radar::faces::kForwardPortMask);
+    check(ui.sink.rma_masks[radar::faces::kForwardPort] == 0x0008u &&
+              ui.sink.rma_masks[radar::faces::kForwardStarboard] == 0u,
+          "Forward Port RMA outage is face-local");
 
     if (failures != 0) {
         std::fprintf(stderr, "ui_controls_smoke: %d failure(s)\n", failures);
         return 1;
     }
-    std::printf("ui_controls_smoke: PASS (all scenario, RMA, and ALL ONLINE controls)\n");
+    std::printf(
+        "ui_controls_smoke: PASS "
+        "(face selection, 30-degree sector, and face-local RMA controls)\n");
     return 0;
 }

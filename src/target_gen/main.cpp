@@ -28,6 +28,7 @@
 
 #include "DiagnosticsInjector.hpp"
 #include "CliParse.hpp"
+#include "RadarFaces.hpp"
 #include "SimClock.hpp"
 #include "TargetFleet.hpp"
 #include "WorkerGuard.hpp"
@@ -43,6 +44,8 @@ int run_target_gen(int argc, char** argv) {
     int num_targets = 32;
     double respawn_km = 120.0;
     bool qos_mismatch = false, type_mismatch = false, degrade = false;
+    radar::faces::FaceMask diagnostic_face_mask =
+        radar::faces::kForwardStarboardMask;
     std::string rma_offline;
     double run_seconds = 0.0;
     std::string stop_file;
@@ -70,6 +73,29 @@ int run_target_gen(int argc, char** argv) {
             type_mismatch = true;
         else if (std::strcmp(argv[i], "--degrade-array") == 0)
             degrade = true;
+        else if (std::strcmp(argv[i], "--face") == 0) {
+            if (++i >= argc) {
+                std::cerr << "--face requires fs, as, ap, fp, or all\n";
+                return 2;
+            }
+            const std::string face = argv[i];
+            if (face == "fs")
+                diagnostic_face_mask =
+                    radar::faces::kForwardStarboardMask;
+            else if (face == "as")
+                diagnostic_face_mask =
+                    radar::faces::kAftStarboardMask;
+            else if (face == "ap")
+                diagnostic_face_mask = radar::faces::kAftPortMask;
+            else if (face == "fp")
+                diagnostic_face_mask = radar::faces::kForwardPortMask;
+            else if (face == "all")
+                diagnostic_face_mask = radar::faces::kAllFacesMask;
+            else {
+                std::cerr << "--face requires fs, as, ap, fp, or all\n";
+                return 2;
+            }
+        }
         else if (std::strcmp(argv[i], "--respawn-range") == 0) {
             if (++i >= argc ||
                 !radar::cli::parse_finite_double(
@@ -114,12 +140,15 @@ int run_target_gen(int argc, char** argv) {
                 "target_gen [--domain N] [--targets N] [--respawn-range KM]\n"
                 "           [--inject-qos-mismatch] [--inject-type-mismatch]\n"
                 "           [--degrade-array] [--rma-offline N|all]\n"
+                "           [--face fs|as|ap|fp|all]\n"
                 "           [--run-seconds N] [--stop-file PATH]\n"
                 "  --respawn-range  targets past this ship-relative range are\n"
                 "                   recycled inbound (default 120 km, 0 disables);\n"
                 "                   keeps the demo picture busy indefinitely\n"
                 "  --rma-offline    send CMD_RMA_OFFLINE at t+5s (RMA index\n"
                 "                   0..15 or \"all\"); scripted degraded-array demo\n"
+                "  --face           target face for degrade/RMA scenarios\n"
+                "                   (default fs; use all for all four faces)\n"
                 "  --run-seconds    stop cleanly after N seconds (automation)\n"
                 "  --stop-file      stop cleanly when PATH appears\n";
             return 0;
@@ -166,19 +195,25 @@ int run_target_gen(int argc, char** argv) {
     if (qos_mismatch)  injector.inject_qos_mismatch();
     if (type_mismatch) injector.inject_type_mismatch();
     if (degrade) {
-        delayed_commands.emplace_back([&injector, &delay_completed] {
-            radar::run_worker_guarded("TargetGen.DelayedDegrade", [&] {
-                if (delay_completed())
-                    injector.send_degrade_command();
+        delayed_commands.emplace_back(
+            [&injector, &delay_completed, diagnostic_face_mask] {
+                radar::run_worker_guarded(
+                    "TargetGen.DelayedDegrade", [&] {
+                        if (delay_completed()) {
+                            injector.send_degrade_command(
+                                diagnostic_face_mask);
+                        }
+                    });
             });
-        });
     }
     if (!rma_offline.empty()) {
         delayed_commands.emplace_back(
-            [&injector, &delay_completed, p = rma_offline] {
+            [&injector, &delay_completed, p = rma_offline,
+             diagnostic_face_mask] {
                 radar::run_worker_guarded("TargetGen.DelayedRma", [&] {
                     if (delay_completed())
-                        injector.send_rma_offline(p);
+                        injector.send_rma_offline(
+                            p, diagnostic_face_mask);
                 });
             });
     }

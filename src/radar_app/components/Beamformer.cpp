@@ -5,6 +5,7 @@
 
 #include "Log.hpp"
 #include "PeriodicDeadline.hpp"
+#include "RadarFaces.hpp"
 #include "RadarRfModel.hpp"
 #include "SimClock.hpp"
 
@@ -68,13 +69,18 @@ void Beamformer::stop() {
 }
 
 void Beamformer::on_beam_command(const types::BeamCommand& command) {
-    beam_id_.store(command.beam_id);
-    commanded_azimuth_deg_.store(command.azimuth_deg);
+    if (!faces::valid(command.scheduler_id))
+        return;
+    const auto i = static_cast<std::size_t>(command.scheduler_id);
+    beam_ids_[i].store(command.beam_id);
+    commanded_azimuth_deg_[i].store(command.azimuth_deg);
 }
 
 void Beamformer::on_calibration_status(
         const types::CalibrationStatus& status) {
-    rma_offline_mask_.store(
+    if (!faces::valid(status.array_id))
+        return;
+    rma_offline_masks_[static_cast<std::size_t>(status.array_id)].store(
         static_cast<uint32_t>(status.rma_offline_mask) & 0xFFFFu);
 }
 
@@ -82,11 +88,11 @@ void Beamformer::publish_loop() {
     using namespace std::chrono;
 
     auto next = steady_clock::now();
-    uint32_t cached_rma_mask = 0xFFFFFFFFu;
-    BeamPattern pattern;
+    std::array<uint32_t, faces::kFaceCount> cached_rma_masks{};
+    cached_rma_masks.fill(0xFFFFFFFFu);
+    std::array<BeamPattern, faces::kFaceCount> patterns{};
 
     types::BeamPatternStatus status;
-    status.array_id = 0;
     status.azimuth_pattern_db.resize(kBeamPatternSampleCount);
     status.carrier_frequency_hz = rf_model::kCarrierFrequencyHz;
     status.wavelength_m = rf_model::kWavelengthM;
@@ -102,46 +108,55 @@ void Beamformer::publish_loop() {
         next = advance_periodic_deadline(
             next, milliseconds(50)); // 20 Hz
 
-        const int64_t beam_id = beam_id_.load();
-        if (beam_id < 0) {
-            std::this_thread::sleep_until(next);
-            continue;
+        for (const auto& face : faces::kDefinitions) {
+            const auto i = static_cast<std::size_t>(face.id);
+            const int64_t beam_id = beam_ids_[i].load();
+            if (beam_id < 0)
+                continue;
+
+            const uint32_t rma_mask =
+                rma_offline_masks_[i].load() & 0xFFFFu;
+            if (rma_mask != cached_rma_masks[i]) {
+                patterns[i] = BeamPatternModel::calculate(rma_mask);
+                cached_rma_masks[i] = rma_mask;
+                RADAR_LOG << "[Beamformer] face=" << face.short_name
+                          << " beam pattern mask="
+                          << patterns[i].rma_offline_mask
+                          << " active=" << patterns[i].active_elements
+                          << " loss_db=" << patterns[i].gain_loss_db
+                          << " bw_deg=" << patterns[i].beamwidth_3db_deg
+                          << " psl_db="
+                          << patterns[i].peak_sidelobe_level_db
+                          << " error_deg="
+                          << patterns[i].boresight_error_deg
+                          << "\n";
+            }
+            const auto& pattern = patterns[i];
+            status.array_id = face.id;
+            status.timestamp = SimClock::stamp();
+            status.beam_id = static_cast<int32_t>(beam_id);
+            status.rma_offline_mask =
+                static_cast<int32_t>(pattern.rma_offline_mask);
+            status.commanded_azimuth_deg =
+                commanded_azimuth_deg_[i].load();
+            status.boresight_error_deg = pattern.boresight_error_deg;
+            status.gain_loss_db = pattern.gain_loss_db;
+            status.beamwidth_3db_deg = pattern.beamwidth_3db_deg;
+            status.peak_sidelobe_level_db =
+                pattern.peak_sidelobe_level_db;
+            status.left_sidelobe_offset_deg =
+                pattern.left_sidelobe_offset_deg;
+            status.right_sidelobe_offset_deg =
+                pattern.right_sidelobe_offset_deg;
+            status.pattern_start_offset_deg = kBeamPatternStartDeg;
+            status.pattern_step_deg = kBeamPatternStepDeg;
+            for (int sample_index = 0;
+                 sample_index < kBeamPatternSampleCount; ++sample_index) {
+                status.azimuth_pattern_db[sample_index] =
+                    pattern.azimuth_pattern_db[sample_index];
+            }
+            pattern_writer_.write(status);
         }
-
-        const uint32_t rma_mask = rma_offline_mask_.load() & 0xFFFFu;
-        if (rma_mask != cached_rma_mask) {
-            pattern = BeamPatternModel::calculate(rma_mask);
-            cached_rma_mask = rma_mask;
-            RADAR_LOG << "[Beamformer] beam pattern mask="
-                      << pattern.rma_offline_mask
-                      << " active=" << pattern.active_elements
-                      << " loss_db=" << pattern.gain_loss_db
-                      << " bw_deg=" << pattern.beamwidth_3db_deg
-                      << " psl_db=" << pattern.peak_sidelobe_level_db
-                      << " error_deg=" << pattern.boresight_error_deg
-                      << "\n";
-        }
-
-        status.timestamp = SimClock::stamp();
-        status.beam_id = static_cast<int32_t>(beam_id);
-        status.rma_offline_mask =
-            static_cast<int32_t>(pattern.rma_offline_mask);
-        status.commanded_azimuth_deg = commanded_azimuth_deg_.load();
-        status.boresight_error_deg = pattern.boresight_error_deg;
-        status.gain_loss_db = pattern.gain_loss_db;
-        status.beamwidth_3db_deg = pattern.beamwidth_3db_deg;
-        status.peak_sidelobe_level_db =
-            pattern.peak_sidelobe_level_db;
-        status.left_sidelobe_offset_deg =
-            pattern.left_sidelobe_offset_deg;
-        status.right_sidelobe_offset_deg =
-            pattern.right_sidelobe_offset_deg;
-        status.pattern_start_offset_deg = kBeamPatternStartDeg;
-        status.pattern_step_deg = kBeamPatternStepDeg;
-        for (int i = 0; i < kBeamPatternSampleCount; ++i)
-            status.azimuth_pattern_db[i] = pattern.azimuth_pattern_db[i];
-
-        pattern_writer_.write(status);
         std::this_thread::sleep_until(next);
     }
 }

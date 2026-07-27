@@ -8,6 +8,7 @@
 //  - Default RMA outage overlay: moving response curtain and feature markers
 //  - BEAM FORMATION mode: animated nominal-vs-live rotating 3D comparison
 
+#include <array>
 #include <vector>
 
 #include <imgui.h>
@@ -19,6 +20,7 @@
 #endif
 
 #include "../DataBus.hpp"
+#include "RadarFaces.hpp"
 
 namespace radar::ui {
 
@@ -26,7 +28,7 @@ class MetalContext; // Apple: fwd-decl keeps this header GL/Metal-free
 
 class BScopeView {
 public:
-    BScopeView() = default;
+    BScopeView();
     ~BScopeView();
 
 #if defined(__APPLE__)
@@ -54,12 +56,10 @@ private:
     static constexpr int kRangeBins = 256;
     static constexpr double kRangeMaxM = 100000.0;
 
-    // Parens, NOT braces: heat_{count, 0.0f} would select the
-    // initializer_list<float> ctor (count converts to float without
-    // narrowing) -> a TWO-element vector {92160, 0}. Every splat() then
-    // wrote up to ~368 KB past the tiny buffer into random heap (or read
-    // it) — the windowed-crash corruptor found by ASan on 2026-07-20.
-    std::vector<float> heat_ = std::vector<float>(size_t(kAzBins) * kRangeBins, 0.0f);
+    // One phosphor plane per face so selecting a face never shows another
+    // aperture's detections. Construct with (count, value), not braces:
+    // the latter selects initializer_list and creates only two elements.
+    std::array<std::vector<float>, faces::kFaceCount> heat_{};
     std::vector<unsigned char> rgba_;       // lazily sized W*H*4
     unsigned char lut_[256][4]{};           // gradient lookup table
 #if defined(__APPLE__)

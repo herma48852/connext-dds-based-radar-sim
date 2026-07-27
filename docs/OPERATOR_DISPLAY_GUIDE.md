@@ -41,10 +41,11 @@ Angles increase clockwise. The relationship is:
 `true bearing = ship-relative azimuth + ship heading`, wrapped to 0-360
 degrees.
 
-For example, Sector Scan commands 60-120 degrees relative to the bow. With
-the simulator's nominal 45-degree heading, the PPI sweep covers approximately
-105-165 degrees true. The displays agree; they use different reference
-frames.
+For example, with FS selected, Sector Scan commands a 30-degree sector
+centered at the face's 45-degree boresight. Its displayed limits are 30-60
+degrees relative to the bow. With the simulator's nominal 45-degree heading,
+that appears at 75-105 degrees true on the PPI. The displays agree; they use
+different reference frames.
 
 ## PPI - Plan Position Indicator
 
@@ -55,8 +56,10 @@ The PPI answers: **Where are detections and tracks around the ship?**
 - The short white line from the center is the ship's true heading.
 - Range rings are labeled in kilometers.
 - Spokes and labels are true bearings, clockwise from north.
-- The bright green arm is the current beam position. Its fading arc is visual
-  persistence, not a second beam.
+- Four sweep arms show the independently scheduled faces. The selected face
+  is brightest; an all-offline face is red and dim. Fading arcs are visual
+  persistence, not additional beams.
+- Thin radial boundaries divide the four 90-degree face fields of regard.
 - The top readout shows true heading (`HDG`), ship speed in knots (`SPD`), and
   the selected display range (`RNG`).
 - The mouse wheel changes the displayed range smoothly from 10 to 100 km. The
@@ -130,12 +133,14 @@ returns appeared?**
   Hotter color means stronger accumulated display intensity; it does not
   indicate target class or threat.
 - Cyan squares and numeric labels are track overlays.
-- Yellow dashed vertical lines are the commanded sector limits. They appear
-  only in Sector Scan.
+- Yellow dashed vertical lines are the selected face's commanded sector
+  limits. They appear only when that face is in Sector Scan.
 
-In the standard sector, the dashed lines are at 60 and 120 degrees because
-the B-scope is bow-relative. The corresponding PPI sweep is rotated by the
-ship's true heading.
+The B-scope keeps independent phosphor planes for FS, AS, AP, and FP. The
+ARRAY FACE selector chooses which post-beamforming I/Q-derived plane is
+visible. In the FS priority sector, the dashed limits are at 30 and 60
+degrees. Other faces use the same 30-degree width centered on their own
+boresight. The corresponding PPI sweep is rotated by ship heading.
 
 ### Beam-formation displays
 
@@ -198,9 +203,9 @@ angular coordinates remain relative to the scheduled beam.
 Strong targets entering a dominant degraded sidelobe can produce an
 occasional displaced detection or “ghost.” The model deliberately limits
 this behavior to the two dominant sidelobes so the demonstration remains
-bounded and explainable. Pressing `ALL ONLINE` removes the automatic curtain
-and restores the live pattern to nominal. **BEAM FORMATION** remains selected
-until the operator toggles it off.
+bounded and explainable. Returning every RMA on the selected face online
+removes the automatic curtain and restores its live pattern to nominal.
+**BEAM FORMATION** remains selected until the operator toggles it off.
 
 ## A-Scope - Amplitude / Range
 
@@ -210,10 +215,11 @@ being examined?**
 - Horizontal axis: range from 0 to 100 km, labeled every 10 km.
 - Vertical axis: linear receiver magnitude. It is intentionally not labeled
   in dB.
-- The window title shows the current ship-relative beam azimuth (`AZ`) and
-  elevation (`EL`).
+- The window title shows the selected face code plus its current
+  ship-relative beam azimuth (`AZ`) and elevation (`EL`).
 - The green line is the receiver magnitude by range bin, with brief
-  phosphor-style peak persistence.
+  phosphor-style peak persistence. It is the RMS magnitude after noncoherent
+  integration of the ten pulses in the selected 10 ms dwell.
 - A yellow triangle marks each local peak above the simulated CFAR detection
   threshold.
 - The cyan `GATE` bracket surrounds the strongest above-threshold peak and
@@ -268,22 +274,41 @@ The timeline answers: **Where has the electronically steered beam been
 commanded recently?**
 
 - Horizontal axis: time in seconds relative to the oldest visible command.
-- Green trace and left axis: ship-relative azimuth, 0-360 degrees.
+- Green trace and left axis: selected-face ship-relative azimuth.
 - Amber trace and right axis: elevation.
-- Search Mode produces a repeating 0-360-degree sawtooth.
-- Sector Scan produces a back-and-forth trace between 60 and 120 degrees.
+- Search Mode produces a repeating 90-degree face-local sawtooth.
+- Sector Scan produces a 30-degree back-and-forth trace around that face's
+  boresight.
 - Elevation cycles through 3, 14, and 25 degrees. It advances after a full
-  search revolution or at each sector reversal.
+  face sweep or at each sector reversal.
 
-The scheduler commands 100 beam dwells per second. Its 2.25-degree azimuth
-step produces 160 positions and a full search revolution in 1.6 seconds.
-Across the three elevation bars, the full raster contains 480 unique
-pointings and repeats every 4.8 seconds. The representative S-band model uses
-a 3.0 GHz carrier (9.993 cm wavelength) and a fixed 50 mm element pitch. The
-physical 32-column aperture consequently has an approximately 3.2-degree
-azimuth 3 dB beamwidth, so adjacent half-power footprints overlap by about
-0.9 degree rather than leaving gaps. The panel keeps the latest 240 commands,
-or about 2.4 seconds of history.
+Each of the four face instances advances at 100 beam dwells per second. A
+face has 40 half-step-inset centers at 2.25-degree spacing and three
+elevation bars, or 120 pointings. All four schedules run concurrently:
+400 `BeamCommand` samples per second, 480 face-keyed pointings per
+1.2-second full volume. The representative S-band model uses a 3.0 GHz
+carrier (9.993 cm wavelength) and fixed 50 mm element pitch. The physical
+32-column aperture consequently has a measured 3.1719-degree azimuth 3 dB
+beamwidth. Adjacent centers are only 2.25 degrees apart, so their half-power
+footprints overlap by about 0.92 degree instead of leaving gaps. The panel
+filters its 2.4-second history to the selected face.
+
+![Azimuth face geometry, beam-center spacing, and half-power overlap](beam_spacing_geometry.svg)
+
+The `-3 dB` marks are the two half-power boundaries of each physical azimuth
+beam: power there is one-half of that beam's peak (voltage amplitude is about
+0.707 of peak). They are not gaps or separate beams. Because adjacent centers
+are closer than one full HPBW, the neighboring half-power footprints overlap.
+At the exact midpoint between centers, both beams are still inside their
+half-power contours, providing scan coverage margin.
+
+![Three-bar elevation acceptance-gate tiling](elevation_geometry.svg)
+
+Elevation is deliberately different. The three ±5.5-degree acceptance gates
+meet exactly at 8.5 and 19.5 degrees, so every modeled elevation belongs to
+one bar without double-implanting a target. Those gates are simulation
+classification bins; they are not claimed to be the physical elevation-array
+factor or its HPBW. Physical elevation beams would ordinarily overlap too.
 
 The receiver uses a 1 MHz pulse-compressed waveform at 1 kHz PRF. This gives
 149.9 m range resolution, 149.9 km unambiguous range, and 668 complex cells
@@ -291,12 +316,18 @@ across the 100 km instrumented range. A 20 microsecond pulse creates an
 approximately 3.0 km transmit/receive blind range. These are representative,
 unclassified S-band search values, not claimed operational SPY-6 parameters.
 
+The [signal-processing pipeline diagram](signal_processing_pipeline.svg)
+compares the corresponding physical element-domain workload with the
+implemented post-beamforming DDS stream, dwell integration, plot extraction,
+and track output.
+
 The underlying beam-command priority is 3 in Search Mode and 2 in Sector
 Scan, but this panel plots only azimuth and elevation.
 
 ## System Health
 
-The panel summarizes the array calibration message received once per second.
+The panel summarizes the selected face's array-calibration instance. Each of
+the four face instances publishes once per second and promptly on changes.
 
 | Readout | Meaning |
 |---|---|
@@ -321,9 +352,12 @@ that average rise sharply.
 
 ## Array Face
 
-The array face is a logical 32-by-32 map of 1,024 transmit/receive elements.
-The heavier boundaries divide it into 16 Radar Modular Assemblies (RMAs).
-Each RMA is an 8-by-8 block containing 64 elements.
+The selector at the top chooses one of four independent physical faces: FS,
+AS, AP, or FP. The selected face is a logical 32-by-32 map of 1,024
+transmit/receive elements. The heavier boundaries divide it into 16 Radar
+Modular Assemblies (RMAs). Each RMA is an 8-by-8 block containing 64
+elements. The A-scope, B-scope, beam timeline, health panel, and
+face-addressed scenario controls follow the same selection.
 
 RMA numbering is row-major:
 
@@ -358,9 +392,11 @@ Negative dB means less gain than the nominal reference:
 - approximately -6 dB is the injected hard-failure state;
 - -60 dB is effectively dark/offline.
 
-Clicking an RMA toggles the entire block offline or online. Its outline reacts
-immediately; the 64 heatmap cells normally follow within about 20 ms, with a
-1 Hz heartbeat. `ALL ONLINE` clears every RMA-offline bit.
+Clicking an RMA toggles that block only on the selected face. Its outline
+reacts immediately; the 64 heatmap cells normally follow within about 20 ms,
+with a 1 Hz heartbeat. The whole-face button reads `ALL OFFLINE` until every
+RMA on that face is dark, then changes to `ALL ONLINE`. Neither action
+changes another face.
 
 Taking RMAs offline reduces simulated target return gain monotonically. It
 also changes the calculated azimuth width, pointing error, and sidelobes
@@ -396,18 +432,19 @@ commands do not remain highlighted.
 
 | Control | What it does | What to expect |
 |---|---|---|
-| `SEARCH MODE` | Selects full-volume search | 0-360-degree relative scan; beam priority 3 |
-| `SECTOR SCAN` | Selects center 90 degrees, width 60 degrees | Beam bounces from 60 to 120 degrees relative; priority 2 |
-| `DEGRADE ARRAY` | Injects a stable sparse failure pattern | 128 red elements, degraded health, RMA mask unchanged |
-| `RESTORE ARRAY` | Clears sparse injected element failures | Does not return manually disabled RMAs online |
+| `SEARCH MODE` | Selects full-volume search on the selected face | That face resumes its 90-degree field of regard; beam priority 3 |
+| `SECTOR SCAN` | Selects a 30-degree sector centered on the selected face boresight | Thirteen centers span boresight ±13.5 degrees; priority 2 |
+| `DEGRADE ARRAY` | Injects a stable sparse failure pattern on the selected face | About 12% red elements, degraded health, RMA mask unchanged |
+| `RESTORE ARRAY` | Clears selected-face sparse failures | Does not return manually disabled RMAs online |
 | `SELF TEST` | Sends the self-test command | No component currently consumes it and no result is displayed |
-| `RESET TRACKS` | Disposes current tracks and returns to Search Mode | Detections continue; tracks automatically reacquire over later revisits |
-| Click an RMA | Toggles that 64-element block offline/online | Outline changes immediately; face/health normally follow within about 20 ms |
-| `ALL ONLINE` | Returns all RMAs online | Does not clear the separate `DEGRADE ARRAY` state |
+| `RESET TRACKS` | Disposes current tracks and returns all faces to Search Mode | Detections continue; tracks automatically reacquire over later revisits |
+| Click an RMA | Toggles that selected-face 64-element block offline/online | Outline changes immediately; face/health normally follow within about 20 ms |
+| `ALL OFFLINE / ALL ONLINE` | Toggles every selected-face RMA | Does not clear the separate `DEGRADE ARRAY` state |
 
 `DEGRADE ARRAY` changes calibration and health data only. In the current
-model, its 128 isolated red elements do not reduce detection gain. Manual
-whole-RMA removal is the array action that affects the simulated signal path.
+model, its approximately 12% isolated red elements do not reduce detection
+gain. Manual whole-RMA removal is the array action that affects the simulated
+signal path.
 
 ## Common questions and short answers
 
@@ -420,8 +457,10 @@ No. Red is a weak-SNR detection. Classification and hostility are different
 questions; hostility is not modeled.
 
 **Why is there a dot but no track?**  
-One threshold crossing creates a detection. The tracker needs repeated,
-spatially consistent detections before publishing a track.
+One integrated dwell can create a detection plot. The tracker requires three
+spatially consistent visits from independent face scans within its five-scan
+initiation window before publishing a track. Overlapping beams from the same
+visit do not count more than once.
 
 **Why is there a track but no fresh dot?**  
 Tracks coast between beam revisits, while individual detections fade.
@@ -478,8 +517,9 @@ calibration values normally follow within about 20 ms; a 1 Hz heartbeat keeps
 the state fresh even when it does not change.
 
 **Why did RESTORE ARRAY leave a dark block?**  
-Restore clears the sparse degradation scenario. Use `ALL ONLINE` for
-manually disabled RMAs.
+Restore clears the selected face's sparse degradation scenario. If every RMA
+is offline, use the now-visible `ALL ONLINE` action; otherwise toggle the
+manually disabled blocks individually.
 
 **Why did tracks reappear after RESET TRACKS?**  
 Reset removes existing tracker instances; it does not stop beam scanning or

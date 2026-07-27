@@ -183,7 +183,7 @@ The demo launcher also supports `-Headless`, `-RunSeconds N`, and
 ## Optional: Portable Tests Without Connext
 
 This is not part of the clean-machine demo path above. On a machine without
-Connext, the six portable regressions can be built and run from the
+Connext, the ten portable regressions can be built and run from the
 repository root with:
 
 ```bat
@@ -198,7 +198,8 @@ Perform this manual check at 100%, 125%, 150%, and 200% display scaling:
 
 1. Confirm the PPI, A-scope, B-scope, six lower panels, and all text render.
 2. Resize, minimize, restore, and move the window between monitors.
-3. Exercise all six scenario buttons, every RMA block, and ALL ONLINE.
+3. Select every face, exercise all six scenario buttons and RMA blocks, then
+   verify the dynamic ALL OFFLINE / ALL ONLINE action.
 4. Confirm the B-scope texture continues updating without OpenGL errors.
 5. Run windowed with 32 targets for one hour and watch process memory.
 

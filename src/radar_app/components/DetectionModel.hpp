@@ -14,6 +14,9 @@ inline constexpr double kRangeMinM      = rf_model::kMinimumReceiveRangeM;
 inline constexpr double kRangeMaxM      = rf_model::kInstrumentedRangeM;
 inline constexpr double kRangeResolutionM = rf_model::kRangeResolutionM;
 inline constexpr double kNoiseSigma     = 0.05;
+// RMS magnitude of complex noise whose I and Q axes each have kNoiseSigma.
+inline constexpr double kNoiseMagnitudeRms =
+    kNoiseSigma * 1.4142135623730950488;
 inline constexpr double kCfarThreshold  = 0.26;
 
 // The original demo sensitivity was calibrated at a nominal 10 cm

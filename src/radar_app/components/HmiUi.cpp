@@ -10,6 +10,7 @@
 
 #include "Log.hpp"
 #include "PeriodicDeadline.hpp"
+#include "RadarFaces.hpp"
 #include "SimClock.hpp"
 
 namespace radar::app {
@@ -154,8 +155,10 @@ void HmiUi::on_track_dropped(
 }
 
 void HmiUi::on_detection(const types::DetectionEvent& d) {
+    if (!faces::valid(d.sensor_id))
+        return;
     bus_.detection_blips.push_overwrite(BlipView{
-        d.range_m, d.azimuth_deg, d.elevation_deg,
+        d.sensor_id, d.range_m, d.azimuth_deg, d.elevation_deg,
         d.amplitude, d.snr_db, d.timestamp.sim_millis});
 }
 
@@ -168,12 +171,15 @@ void HmiUi::on_ship(const types::ShipPosition& s) {
 }
 
 void HmiUi::on_calibration(const types::CalibrationStatus& c) {
+    if (!faces::valid(c.array_id))
+        return;
     double drift_sum = 0.0;
     const int n = static_cast<int>(c.element_drift_db.size());
     for (int i = 0; i < n; ++i)
         drift_sum += std::fabs(static_cast<double>(c.element_drift_db[i]));
 
     bus_.update_health(HealthView{
+        c.array_id,
         static_cast<int32_t>(c.overall_status),
         c.failed_element_count,
         n > 0 ? n : types::MAX_ARRAY_ELEMENTS,
@@ -185,15 +191,21 @@ void HmiUi::on_calibration(const types::CalibrationStatus& c) {
     // ARRAY FACE pane: full drift vector + RMA mask (1 Hz, cheap copy;
     // bounded_sequence is not std::vector, so copy element-wise).
     bus_.update_array_grid(
+        c.array_id,
         std::vector<float>(c.element_drift_db.begin(), c.element_drift_db.end()),
         static_cast<uint32_t>(c.rma_offline_mask),
         c.timestamp.sim_millis);
 }
 
 void HmiUi::on_beam_pattern(const types::BeamPatternStatus& p) {
+    if (!faces::valid(p.array_id))
+        return;
     const uint32_t mask = static_cast<uint32_t>(p.rma_offline_mask);
-    if (last_pattern_mask_.exchange(mask) != mask) {
-        RADAR_LOG << "[HmiUi] beam overlay mask=" << mask
+    const auto face_index = static_cast<std::size_t>(p.array_id);
+    if (last_pattern_masks_[face_index].exchange(mask) != mask) {
+        RADAR_LOG << "[HmiUi] face="
+                  << faces::kDefinitions[face_index].short_name
+                  << " beam overlay mask=" << mask
                   << " loss_db=" << p.gain_loss_db
                   << " bw_deg=" << p.beamwidth_3db_deg
                   << " psl_db=" << p.peak_sidelobe_level_db
@@ -201,6 +213,7 @@ void HmiUi::on_beam_pattern(const types::BeamPatternStatus& p) {
                   << "\n";
     }
     bus_.update_beam_pattern(BeamPatternView{
+        p.array_id,
         p.beam_id,
         mask,
         p.commanded_azimuth_deg,

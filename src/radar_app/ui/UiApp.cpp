@@ -1,6 +1,7 @@
 #include "UiApp.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <iostream>
 
@@ -158,7 +159,7 @@ int UiApp::run() {
             bscope_.splat(b);
         });
         bus_.beam_commands.drain([&](const app::BeamView& b) {
-            if (beam_history_.size() >= 240) beam_history_.pop_front();
+            if (beam_history_.size() >= 960) beam_history_.pop_front();
             beam_history_.push_back(b);
         });
 
@@ -167,10 +168,18 @@ int UiApp::run() {
             ppi_.update_track_trail(t.track_id, t.x_m, t.y_m);
         ppi_.prune_tracks(tracks);
 
-        const auto ship   = bus_.ship_display(); // via HMI-UI's DDS reader
-        const auto health = bus_.health();
-        const auto trace  = bus_.trace();
-        const auto beam_pattern = bus_.beam_pattern();
+        const auto selected_index =
+            static_cast<std::size_t>(selected_face_id_);
+        const auto ship = bus_.ship_display(); // via HMI-UI's DDS reader
+        const auto health = bus_.health(selected_face_id_);
+        const auto trace = bus_.trace(selected_face_id_);
+        const auto beam_pattern =
+            bus_.beam_pattern(selected_face_id_);
+        const auto array_grid = bus_.array_grid(selected_face_id_);
+        const auto beam_azimuths = bus_.beam_azimuths();
+        std::array<uint32_t, faces::kFaceCount> rma_masks{};
+        for (std::size_t i = 0; i < rma_masks.size(); ++i)
+            rma_masks[i] = bus_.rma_offline_mask[i].load();
 
         // ---- render ----
 #if defined(__APPLE__)
@@ -198,7 +207,8 @@ int UiApp::run() {
 
         ppi_.render("PPI - PLAN POSITION INDICATOR",
                     ImVec2(0, 0), ImVec2(ppi_w, scope_h),
-                    tracks, ship, bus_.current_beam_az_deg.load(), now_ms, dt);
+                    tracks, ship, beam_azimuths, rma_masks,
+                    selected_face_id_, now_ms, dt);
 
         // The comparison view needs enough vertical room for its status,
         // legend, and rotating plots.  On a Retina Mac the 2x UI scale made
@@ -217,10 +227,10 @@ int UiApp::run() {
                        ImVec2(ppi_w, ascope_h),
                        ImVec2(right_w, bscope_h),
                        tracks, ship,
-                       bus_.radar_mode.load() == 1,
-                       bus_.sector_center_deg.load(),
-                       bus_.sector_width_deg.load(),
-                       bus_.current_beam_az_deg.load(),
+                       bus_.radar_mode[selected_index].load() == 1,
+                       bus_.sector_center_deg[selected_index].load(),
+                       bus_.sector_width_deg[selected_index].load(),
+                       bus_.current_beam_az_deg[selected_index].load(),
                        show_beam_formation_, beam_pattern, dt);
 
         // bottom strip: 6 panes. Widths tuned so text fits at 2x UI scale
@@ -232,17 +242,22 @@ int UiApp::run() {
         render_track_list("TARGET TRACKS", ImVec2(0, y0), ImVec2(w1, panel_h),
                           tracks, ship);
         render_beam_timeline("BEAM SCHEDULE", ImVec2(w1, y0), ImVec2(w2, panel_h),
-                             beam_history_);
+                             beam_history_, selected_face_id_);
         render_health_panel("SYSTEM HEALTH", ImVec2(w1 + w2, y0),
                             ImVec2(w3, panel_h), health);
         render_ship_panel("SHIP POSITION", ImVec2(w1 + w2 + w3, y0),
                           ImVec2(w4, panel_h), ship);
         render_array_panel("ARRAY FACE", ImVec2(w1 + w2 + w3 + w4, y0),
-                           ImVec2(w5, panel_h), bus_.array_grid(),
-                           bus_.rma_offline_mask.load(), console_);
+                           ImVec2(w5, panel_h), array_grid,
+                           rma_masks[selected_index], selected_face_id_,
+                           console_);
+        const auto scenario_index =
+            static_cast<std::size_t>(selected_face_id_);
         render_scenario_bar("SCENARIOS", ImVec2(w1 + w2 + w3 + w4 + w5, y0),
                             ImVec2(w6, panel_h), console_,
-                            bus_.radar_mode.load(), bus_.degrade_array.load(),
+                            bus_.radar_mode[scenario_index].load(),
+                            bus_.degrade_array[scenario_index].load(),
+                            selected_face_id_,
                             show_beam_formation_);
 
         ImGui::Render();

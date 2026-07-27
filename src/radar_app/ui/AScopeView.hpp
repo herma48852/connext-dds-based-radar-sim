@@ -24,6 +24,7 @@ private:
     static constexpr float kDetectThreshold  = 0.26f;  // mirrors CFAR
 
     std::vector<float> phosphor_;   // persistence buffer, same size as trace
+    int32_t face_id_ = -1;
     double range_max_m_ = 100000.0;
     double az_deg_ = 0.0, el_deg_ = 0.0;
 };

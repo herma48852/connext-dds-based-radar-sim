@@ -14,6 +14,13 @@
 
 namespace radar::ui {
 
+BScopeView::BScopeView() {
+    for (auto& face_heat : heat_) {
+        face_heat =
+            std::vector<float>(size_t(kAzBins) * kRangeBins, 0.0f);
+    }
+}
+
 BScopeView::~BScopeView() {
     // GPU context may already be gone; release_*() handles the normal path.
 }
@@ -80,9 +87,11 @@ void BScopeView::init_gl() {
 
 void BScopeView::splat(const app::BlipView& b) {
     // Reject NaN/Inf blips outright: casting them to int is UB.
-    if (!std::isfinite(b.azimuth_deg) || !std::isfinite(b.range_m) ||
+    if (!faces::valid(b.face_id) ||
+        !std::isfinite(b.azimuth_deg) || !std::isfinite(b.range_m) ||
         !std::isfinite(b.snr_db))
         return;
+    auto& heat = heat_[static_cast<std::size_t>(b.face_id)];
     // Mod in long arithmetic (no narrowing cast of a huge double), then
     // clamp in double before converting — indices stay in range for any
     // finite input, however extreme.
@@ -99,7 +108,7 @@ void BScopeView::splat(const app::BlipView& b) {
             const int r = rb + dr;
             if (r < 0 || r >= kRangeBins) continue;
             const float w = (da == 0 && dr == 0) ? 1.0f : 0.4f;
-            float& cell = heat_[size_t(r) * kAzBins + a];
+            float& cell = heat[size_t(r) * kAzBins + a];
             cell = std::min(1.0f, cell + amp * w);
         }
     }
@@ -113,9 +122,18 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
                         bool show_beam_formation,
                         const app::BeamPatternView& beam_pattern,
                         float dt) {
+    const auto face_index = static_cast<std::size_t>(
+        faces::valid(beam_pattern.face_id)
+            ? beam_pattern.face_id : faces::kForwardStarboard);
+    const auto* face = faces::find(static_cast<int32_t>(face_index));
+    char heading[96];
+    std::snprintf(
+        heading, sizeof heading, "%s  FACE %s###B_SCOPE", title,
+        face ? face->short_name.data() : "??");
+
     ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
     ImGui::SetNextWindowSize(size, ImGuiCond_Always);
-    ImGui::Begin(title, nullptr,
+    ImGui::Begin(heading, nullptr,
                  ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove |
                  ImGuiWindowFlags_NoResize);
 
@@ -123,6 +141,7 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
     const ImVec2 wp = ImGui::GetCursorScreenPos();
     const float w = ImGui::GetContentRegionAvail().x;
     const float h = ImGui::GetContentRegionAvail().y - 4.0f;
+    auto& heat = heat_[face_index];
 
     dl->AddRectFilled(wp, ImVec2(wp.x + w, wp.y + h), theme::col_bg());
     dl->AddRect(wp, ImVec2(wp.x + w, wp.y + h), theme::col_border());
@@ -130,9 +149,9 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
     if (tex_ != 0) {
         // decay heat, then convert through the LUT and upload
         const float decay = std::pow(0.5f, dt / 4.0f);   // 4 s half-life
-        for (size_t i = 0; i < heat_.size(); ++i) {
-            heat_[i] *= decay;
-            const unsigned char v = (unsigned char)std::clamp(heat_[i] * 255.0f, 0.0f, 255.0f);
+        for (size_t i = 0; i < heat.size(); ++i) {
+            heat[i] *= decay;
+            const unsigned char v = (unsigned char)std::clamp(heat[i] * 255.0f, 0.0f, 255.0f);
             const auto* c = lut_[v];
             // row 0 of the texture = far range (top of display)
             rgba_[i*4+0] = c[0]; rgba_[i*4+1] = c[1];

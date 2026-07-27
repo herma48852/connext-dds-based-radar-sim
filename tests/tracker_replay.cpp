@@ -1,18 +1,22 @@
 // Offline replay of the detection -> tracking chain. NO DDS / Connext:
-// replicates BeamScheduler (3-bar elevation raster, 2.25 deg per 10 ms
-// dwell), the DetectionProcessor implant gates + noise + CFAR peak-pick,
-// and drives the production TrackerCore. Prints track lifecycle so tracker
-// changes can be verified without running the full app.
+// replicates the four concurrent BeamScheduler face rasters (three elevation
+// bars, 2.25 deg per 10 ms dwell), the DetectionProcessor implant gates +
+// noise + CFAR peak-pick, cross-face seam fusion, and the production
+// TrackerCore. Prints track lifecycle so tracker changes can be verified
+// without running the full app.
 //
 // Build (no Connext needed):  cmake --build build --target tracker_replay
 // Run:                        ./build/tracker_replay [seconds]
-// Regression:                 ./build/tracker_replay 300 --self-test --quiet
+// Regression:                 ./build/tracker_replay 60 --self-test --quiet
 
 #include "BeamPatternModel.hpp"
+#include "DwellPowerAccumulator.hpp"
+#include "FaceDetectionFusion.hpp"
 #include "TrackerCore.hpp"
 #include "DetectionModel.hpp"
 #include "SearchRaster.hpp"
 
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -119,9 +123,13 @@ int main(int argc, char** argv) {
     const double own_vy = kOwnSpeed * std::cos(kOwnHdgDeg * kDeg2Rad);
 
     TrackerCore core;
-    std::vector<CoreDetection> pending;
-    double az = 0.0;
-    int el_bar = 0;
+    std::vector<radar::app::FaceDetection> pending;
+    std::array<
+        radar::app::search_raster::FaceRasterState,
+        radar::faces::kFaceCount> raster_states{};
+    std::array<
+        radar::app::DwellPowerAccumulator,
+        radar::faces::kFaceCount> dwell_integrators{};
     int64_t now_ms = 0;
     int64_t next_report_ms = 2000;
     int det_count = 0, births = 0, deaths = 0;
@@ -132,78 +140,102 @@ int main(int argc, char** argv) {
 
     const int64_t total_dwells = (int64_t)(sim_s / kDwellSec);
     for (int64_t dwell = 0; dwell < total_dwells; ++dwell, now_ms += 10) {
-        // --- BeamScheduler replica: advance bar per revolution ---
-        const auto pointing =
-            radar::app::search_raster::advance(az, el_bar);
-        az = pointing.azimuth_deg;
-        const double el_deg = pointing.elevation_deg;
-
         // --- own ship + fleet motion ---
         own_x += own_vx * kDwellSec; own_y += own_vy * kDwellSec;
         for (auto& t : fleet) { t.x += t.vx * kDwellSec; t.y += t.vy * kDwellSec; }
 
-        // --- DetectionProcessor replica: PRF-rate pulses per search dwell ---
-        for (int pulse = 0; pulse < kPulsesPerDwell; ++pulse) {
-            for (auto& v : iq) v = noise.next();
-            for (size_t ti = 0; ti < fleet.size(); ++ti) {
-                const auto& t = fleet[ti];
-                const double pulse_age =
-                    pulse / radar::app::rf_model::kPulseRepetitionFrequencyHz;
-                const double rx =
-                    t.x - own_x + (t.vx - own_vx) * pulse_age;
-                const double ry =
-                    t.y - own_y + (t.vy - own_vy) * pulse_age;
-                const double rz = t.z + t.vz * pulse_age;
-                const double rxy = std::hypot(rx, ry);
-                const double range =
-                    std::sqrt(rx*rx + ry*ry + rz*rz);
-                if (!radar::app::detection_model::
-                        within_instrumented_range(range))
-                    continue;
-                const double az_world = std::atan2(rx, ry) / kDeg2Rad;
-                const double az_ship  = wrap180(az_world - kOwnHdgDeg);
-                const double beam_offset = wrap180(az_ship - az);
-                if (std::fabs(beam_offset)
-                    > nominal_pattern.beamwidth_3db_deg * 0.5)
-                    continue;
-                const double pattern_response =
-                    nominal_pattern.relative_amplitude(beam_offset);
-                const double el_t = std::atan2(rz, rxy) / kDeg2Rad;
-                if (std::fabs(el_t - el_deg) > kElGateDeg) continue;
-                ++illum[ti];
-                const double amp =
-                    radar::app::detection_model::target_voltage_amplitude(
-                        t.rcs_dbsm, range, 1.0, pattern_response);
-                const double phase =
-                    radar::app::detection_model::
-                        two_way_carrier_phase_rad(range);
-                const double in_phase = std::cos(phase);
-                const double quadrature = std::sin(phase);
-                const int b0 =
-                    radar::app::detection_model::range_bin_for(range);
-                for (int db = -1; db <= 1; ++db) {
-                    const int b = b0 + db;
-                    if (b < 0 || b >= kRangeBins) continue;
-                    const double w =
+        // --- Four concurrent face schedulers and post-beamforming streams ---
+        for (const auto& face : radar::faces::kDefinitions) {
+            const auto face_index = static_cast<std::size_t>(face.id);
+            const auto pointing =
+                radar::app::search_raster::advance_face(
+                    face.id, raster_states[face_index]);
+            const double az = pointing.azimuth_deg;
+            const double el_deg = pointing.elevation_deg;
+            auto& dwell_integrator =
+                dwell_integrators[face_index];
+            dwell_integrator.begin(
+                dwell, az, el_deg, kRangeBins);
+
+            for (int pulse = 0; pulse < kPulsesPerDwell; ++pulse) {
+                for (auto& v : iq) v = noise.next();
+                for (size_t ti = 0; ti < fleet.size(); ++ti) {
+                    const auto& t = fleet[ti];
+                    const double pulse_age =
+                        pulse
+                        / radar::app::rf_model::
+                            kPulseRepetitionFrequencyHz;
+                    const double rx =
+                        t.x - own_x + (t.vx - own_vx) * pulse_age;
+                    const double ry =
+                        t.y - own_y + (t.vy - own_vy) * pulse_age;
+                    const double rz = t.z + t.vz * pulse_age;
+                    const double rxy = std::hypot(rx, ry);
+                    const double range =
+                        std::sqrt(rx*rx + ry*ry + rz*rz);
+                    if (!radar::app::detection_model::
+                            within_instrumented_range(range))
+                        continue;
+                    const double az_world =
+                        std::atan2(rx, ry) / kDeg2Rad;
+                    const double az_ship =
+                        wrap180(az_world - kOwnHdgDeg);
+                    const double beam_offset =
+                        wrap180(az_ship - az);
+                    if (std::fabs(beam_offset)
+                        > nominal_pattern.beamwidth_3db_deg * 0.5)
+                        continue;
+                    const double pattern_response =
+                        nominal_pattern.relative_amplitude(beam_offset);
+                    const double el_t =
+                        std::atan2(rz, rxy) / kDeg2Rad;
+                    if (std::fabs(el_t - el_deg) > kElGateDeg)
+                        continue;
+                    ++illum[ti];
+                    const double amp =
                         radar::app::detection_model::
-                            compressed_pulse_weight(db);
-                    iq[2*b] +=
-                        static_cast<float>(amp * w * in_phase);
-                    iq[2*b+1] +=
-                        static_cast<float>(amp * w * quadrature);
+                            target_voltage_amplitude(
+                                t.rcs_dbsm, range, 1.0,
+                                pattern_response);
+                    const double phase =
+                        radar::app::detection_model::
+                            two_way_carrier_phase_rad(range);
+                    const double in_phase = std::cos(phase);
+                    const double quadrature = std::sin(phase);
+                    const int b0 =
+                        radar::app::detection_model::
+                            range_bin_for(range);
+                    for (int db = -1; db <= 1; ++db) {
+                        const int b = b0 + db;
+                        if (b < 0 || b >= kRangeBins) continue;
+                        const double w =
+                            radar::app::detection_model::
+                                compressed_pulse_weight(db);
+                        iq[2*b] +=
+                            static_cast<float>(amp * w * in_phase);
+                        iq[2*b+1] +=
+                            static_cast<float>(
+                                amp * w * quadrature);
+                    }
                 }
-                (void)ti;
+                dwell_integrator.accumulate(iq);
             }
 
-            // --- CFAR peak-pick replica ---
-            for (int i = 0; i < kRangeBins; ++i)
-                mag[i] = std::sqrt(iq[2*i]*iq[2*i] + iq[2*i+1]*iq[2*i+1]);
+            // --- One integrated plot extraction pass per 10-pulse dwell ---
+            dwell_integrator.complete(mag);
             for (int i = 1; i < kRangeBins - 1; ++i) {
-                if (mag[i] > kCfarThreshold && mag[i] >= mag[i-1] && mag[i] > mag[i+1]) {
-                    pending.push_back(CoreDetection{
-                        radar::app::detection_model::range_m_for_bin(i),
-                        az,
-                        el_deg});
+                if (mag[i] > kCfarThreshold &&
+                    mag[i] >= mag[i-1] &&
+                    mag[i] > mag[i+1]) {
+                    pending.push_back(radar::app::FaceDetection{
+                        face.id, now_ms + kPulsesPerDwell - 1,
+                        radar::app::detection_model::
+                            range_m_for_bin(i),
+                        az, el_deg,
+                        20.0 * std::log10(
+                            mag[i]
+                            / radar::app::detection_model::
+                                kNoiseMagnitudeRms)});
                     ++det_count;
                 }
             }
@@ -211,8 +243,20 @@ int main(int argc, char** argv) {
 
         // --- 10 Hz tracker update ---
         if (dwell % 10 == 9) {
+            const auto fused =
+                radar::app::fuse_resolution_cell_detections(
+                    pending);
+            std::vector<CoreDetection> core_pending;
+            core_pending.reserve(fused.size());
+            for (const auto& detection : fused) {
+                core_pending.push_back(CoreDetection{
+                    detection.range_m,
+                    detection.azimuth_deg,
+                    detection.elevation_deg});
+            }
             const size_t before = core.tracks().size();
-            const auto dropped = core.update(pending, kOwnHdgDeg, now_ms);
+            const auto dropped =
+                core.update(core_pending, kOwnHdgDeg, now_ms);
             pending.clear();
             deaths += (int)dropped.size();
             if (core.tracks().size() > before)
@@ -267,32 +311,84 @@ int main(int argc, char** argv) {
                 ok = false;
             }
         };
-        check(std::fabs(sim_s - 300.0) < 1e-9,
-              "tracker golden regression requires a 300 second replay");
-        check(det_count == 2553, "expected 2553 deterministic detections");
-        check(births == 29, "expected 29 deterministic track births");
-        check(deaths == 106, "expected 106 deterministic track removals");
+        check(std::fabs(sim_s - 60.0) < 1e-9,
+              "tracker golden regression requires a 60 second replay");
+        check(det_count == 294, "expected 294 integrated dwell plots");
+        check(births == 5, "expected 5 deterministic track births");
+        check(deaths == 1, "expected 1 duplicate-fragment disposal");
         check(max_tracks <= static_cast<size_t>(TrackerCore::kMaxTracks),
               "track count exceeded the bounded instance pool");
         check(id_pool_valid, "a track ID escaped the bounded 1000..1255 pool");
 
-        TrackerCore coast_core;
-        const auto coast_birth = coast_core.update(
-            std::vector<CoreDetection>{{20000.0, 45.0, 3.0}}, 0.0, 0);
-        check(coast_birth.empty() && coast_core.tracks().size() == 1,
-              "coast boundary setup creates one live track");
+        const CoreDetection center_plot{
+            20000.0, 45.0, 3.0};
+        TrackerCore confirmation_core;
+        std::vector<CoreDetection> one_dwell_burst(
+            10, center_plot);
+        confirmation_core.update(
+            one_dwell_burst, 0.0, 0);
+        check(confirmation_core.tracks().size() == 1 &&
+                  !confirmation_core.tracks().front().confirmed,
+              "ten reports from one dwell cannot confirm a track");
+        confirmation_core.update(
+            std::vector<CoreDetection>{center_plot},
+            0.0, 1200);
+        check(!confirmation_core.tracks().front().confirmed,
+              "two independent scan visits remain tentative");
+        confirmation_core.update(
+            std::vector<CoreDetection>{center_plot},
+            0.0, 2400);
+        check(confirmation_core.tracks().front().confirmed,
+              "three independent scan visits confirm the track");
+
+        TrackerCore coast_core = confirmation_core;
         const auto at_boundary =
-            coast_core.update({}, 0.0, TrackerCore::kCoastMs);
+            coast_core.update(
+                {}, 0.0, 2400 + TrackerCore::kCoastMs);
         check(at_boundary.empty() && coast_core.tracks().size() == 1,
               "track remains alive at the exact 12 second coast boundary");
         const auto after_boundary =
-            coast_core.update({}, 0.0, TrackerCore::kCoastMs + 1);
+            coast_core.update(
+                {}, 0.0, 2400 + TrackerCore::kCoastMs + 1);
         check(after_boundary.size() == 1 && coast_core.tracks().empty(),
               "track drops immediately after the 12 second coast boundary");
 
+        TrackerCore cell_transition_core;
+        const CoreDetection beam_cell_a{
+            50000.0, 0.0, 3.0};
+        const CoreDetection beam_cell_b{
+            50000.0, 3.2, 3.0};
+        cell_transition_core.update(
+            std::vector<CoreDetection>{beam_cell_a},
+            0.0, 0);
+        cell_transition_core.update(
+            std::vector<CoreDetection>{beam_cell_a},
+            0.0, 1200);
+        cell_transition_core.update(
+            std::vector<CoreDetection>{beam_cell_a},
+            0.0, 2400);
+        const int64_t established_id =
+            cell_transition_core.tracks().front().id;
+        const auto fused_fragment = cell_transition_core.update(
+            std::vector<CoreDetection>{beam_cell_b},
+            0.0, 3600);
+        check(cell_transition_core.tracks().size() == 1 &&
+                  cell_transition_core.tracks().front().id
+                      == established_id,
+              "a beam-cell transition preserves the established track id");
+        check(fused_fragment.size() == 1 &&
+                  cell_transition_core.tracks().front().last_update_ms
+                      == 3600,
+              "duplicate fusion transfers the fragment update timestamp");
+        const auto fused_at_coast = cell_transition_core.update(
+            {}, 0.0, 3600 + TrackerCore::kCoastMs);
+        check(fused_at_coast.empty() &&
+                  cell_transition_core.tracks().size() == 1,
+              "state-preserving fusion restarts the coast interval");
+
         if (!ok) return 1;
         std::printf("PASS: deterministic detection/tracker replay golden counts "
-                    "and ID bounds\n");
+                    "plus scan confirmation and cell-transition continuity\n");
     }
     return 0;
 }

@@ -30,6 +30,24 @@ module types {
     const long COVARIANCE_SIZE     = 9;     // 3x3 position covariance, row-major
     const long MAX_PARAMS_LEN      = 128;   // free-form command parameter string
 
+    // Four fixed ship-relative array faces, numbered clockwise from the
+    // forward-starboard quadrant. Face-local topics keep their existing
+    // signed-long key fields for wire compatibility; these constants define
+    // the bounded key space used by those fields.
+    const long FACE_FORWARD_STARBOARD = 0;  // boresight 045 deg, covers 000..090
+    const long FACE_AFT_STARBOARD     = 1;  // boresight 135 deg, covers 090..180
+    const long FACE_AFT_PORT          = 2;  // boresight 225 deg, covers 180..270
+    const long FACE_FORWARD_PORT      = 3;  // boresight 315 deg, covers 270..360
+    const long FACE_COUNT             = 4;
+
+    // SystemCommand.target_face_mask bits. A zero mask is reserved as the
+    // legacy/default encoding for the forward-starboard face.
+    const long FACE_MASK_FORWARD_STARBOARD = 1;
+    const long FACE_MASK_AFT_STARBOARD     = 2;
+    const long FACE_MASK_AFT_PORT          = 4;
+    const long FACE_MASK_FORWARD_PORT      = 8;
+    const long FACE_MASK_ALL               = 15;
+
     // ---- Common primitives -------------------------------------------------
 
     // Dual time base: wall clock for correlation with external tools,
@@ -118,12 +136,12 @@ module types {
         double      roll_deg;       // INS attitude, roll  [deg]
     };
 
-    // Beam steering request issued by the BeamScheduler.
-    // Keyed by a CONSTANT scheduler id: keying by the incrementing beam_id
-    // would register a new DDS instance per sample (unbounded growth).
+    // Beam steering request issued by the BeamScheduler. One bounded keyed
+    // instance exists per array face; scheduler_id uses FACE_* (0..3).
+    // Keying by incrementing beam_id would create unbounded DDS instances.
     @appendable
     struct BeamCommand {
-        @key long   scheduler_id;   // always 0: single instance
+        @key long   scheduler_id;   // FACE_*: array face / scheduler instance
         long        beam_id;        // monotonically increasing dwell id
         TimeStamp   timestamp;
         double      azimuth_deg;    // commanded azimuth, ship-relative [deg]
@@ -133,13 +151,14 @@ module types {
         long        priority;       // 1 = highest
     };
 
-    // Current outage-aware azimuth response of the array. Published at 20 Hz
-    // by Beamformer and consumed by DetectionProcessor and HMI-UI.
+    // Current outage-aware azimuth response of the array. Published at
+    // 20 Hz per face (80 Hz aggregate) by Beamformer and consumed by
+    // DetectionProcessor and HMI-UI.
     // The bounded sequence is a normalized dB cut relative to the active
     // aperture's peak; scalar fields make Studio time charts inexpensive.
     @appendable
     struct BeamPatternStatus {
-        @key long   array_id;       // always 0: forward array face
+        @key long   array_id;       // FACE_*: one instance per array face
         TimeStamp   timestamp;
         long        beam_id;
         long        rma_offline_mask;
@@ -165,13 +184,14 @@ module types {
     };
 
     // Simulated raw receiver output for one beam dwell.
-    // High-rate (1 kHz), best-effort: the "wire" between receiver and
-    // signal processor, exposed as a topic for monitoring purposes.
-    // Keyed by a CONSTANT array id: keying by the incrementing beam_id
+    // High-rate (1 kHz per face, 4 kHz aggregate), best-effort: four
+    // post-beamforming "wires" between receiver and signal processor,
+    // exposed as one keyed topic for monitoring purposes.
+    // Keyed by the bounded FACE_* array id. Keying by incrementing beam_id
     // would register a new DDS instance per sample (unbounded growth).
     @appendable
     struct RawReturn {
-        @key long             array_id;      // always 0: single instance
+        @key long             array_id;      // FACE_*: post-beamforming I/Q stream
         long                  beam_id;       // dwell this return belongs to
         TimeStamp             timestamp;
         double                azimuth_deg;   // beam pointing direction [deg]
@@ -181,11 +201,11 @@ module types {
     };
 
     // Single threshold-crossing detection report (a "blip").
-    // Keyed by a CONSTANT sensor id: an incrementing detection key would
+    // Keyed by bounded FACE_* sensor id: an incrementing detection key would
     // leak one DDS instance per blip.
     @appendable
     struct DetectionEvent {
-        @key long     sensor_id;      // always 0: single instance
+        @key long     sensor_id;      // FACE_*: detecting array face
         long          detection_id;   // unique detection number
         TimeStamp     timestamp;
         GeoPosition   ship_position;  // own-ship GPS/INS at detection time
@@ -209,10 +229,10 @@ module types {
         long                    quality;       // track quality score 0..100
     };
 
-    // Phased-array health and calibration report (1 Hz).
+    // Phased-array health and calibration report (1 Hz per face + changes).
     @appendable
     struct CalibrationStatus {
-        @key long   array_id;       // array face identifier (0 = forward face)
+        @key long   array_id;       // FACE_*: one instance per array face
         TimeStamp   timestamp;
         double      temperature_c;  // array face temperature [deg C]
         sequence<float, MAX_ARRAY_ELEMENTS> element_drift_db; // per-element gain drift
@@ -231,6 +251,7 @@ module types {
         double      sector_width_deg;  // sector width [deg]
         long        priority;          // 1 = highest
         string<MAX_PARAMS_LEN> parameters; // self-test / mode parameters
+        long        target_face_mask;  // FACE_MASK_* bits; 0 = legacy forward-starboard
     };
 
     // Ground-truth target state published by the target generator.

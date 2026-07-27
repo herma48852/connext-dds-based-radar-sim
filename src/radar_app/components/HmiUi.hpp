@@ -15,10 +15,12 @@
 // The render thread itself still never touches DDS.
 //
 // Deliberately NOT subscribed: Radar/RawReturn (the A-scope trace mirrors
-// the 1 kHz stream in-process; a second 1 kHz reader would just burn CPU)
+// the four 1 kHz streams in-process; a second 4 kHz aggregate reader would
+// just burn CPU)
 // and Radar/BeamCommand (already consumed by DetectionProcessor; the beam
 // timeline mirrors it in-process).
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -26,6 +28,7 @@
 #include <mutex>
 
 #include "ComponentBase.hpp"
+#include "RadarFaces.hpp"
 #include "../DataBus.hpp"
 
 namespace radar::app {
@@ -69,7 +72,8 @@ private:
     dds::sub::DataReader<types::ShipPosition>      ship_reader_{dds::core::null};
     dds::sub::DataReader<types::CalibrationStatus> cal_reader_{dds::core::null};
     dds::sub::DataReader<types::BeamPatternStatus> pattern_reader_{dds::core::null};
-    std::atomic<uint32_t> last_pattern_mask_{0xFFFFFFFFu};
+    std::array<std::atomic<uint32_t>, faces::kFaceCount>
+        last_pattern_masks_{};
 
     mutable std::mutex tracks_mutex_;
     std::map<int64_t, TrackEntry> tracks_; // keyed by track_id

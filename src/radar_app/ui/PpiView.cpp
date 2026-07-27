@@ -51,7 +51,9 @@ void PpiView::prune_tracks(const std::vector<app::TrackView>& live) {
 void PpiView::render(const char* title, ImVec2 pos, ImVec2 size,
                      const std::vector<app::TrackView>& tracks,
                      const app::ShipView& ship,
-                     double sweep_az_deg,
+                     const std::array<double, faces::kFaceCount>& sweep_az_deg,
+                     const std::array<uint32_t, faces::kFaceCount>& rma_masks,
+                     int32_t selected_face_id,
                      int64_t now_ms, float dt) {
     ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
     ImGui::SetNextWindowSize(size, ImGuiCond_Always);
@@ -92,6 +94,57 @@ void PpiView::render(const char* title, ImVec2 pos, ImVec2 size,
                     theme::col_text_dim(), lbl);
     }
 
+    // --- four physical face sectors (ship-relative, rotating with heading) ---
+    for (const auto& face : faces::kDefinitions) {
+        const auto face_index = static_cast<std::size_t>(face.id);
+        const bool selected = face.id == selected_face_id;
+        const bool offline =
+            (rma_masks[face_index] & 0xFFFFu) == 0xFFFFu;
+        const ImU32 face_color = offline
+            ? theme::col_led_fault() : theme::col_sweep();
+
+        if (selected || offline) {
+            dl->PathClear();
+            dl->PathLineTo(ImVec2((float)cx, (float)cy));
+            constexpr int kSegments = 18;
+            for (int segment = 0; segment <= kSegments; ++segment) {
+                const double fraction =
+                    static_cast<double>(segment) / kSegments;
+                const double azimuth =
+                    face.coverage_start_deg
+                    + fraction
+                        * (face.coverage_end_deg
+                           - face.coverage_start_deg)
+                    + ship.heading_deg;
+                const double angle = azimuth * kDeg2Rad;
+                dl->PathLineTo(ImVec2(
+                    (float)(cx + R * std::sin(angle)),
+                    (float)(cy - R * std::cos(angle))));
+            }
+            dl->PathFillConvex(
+                with_alpha(face_color, offline ? 28 : 16));
+        }
+
+        const double start_angle =
+            (face.coverage_start_deg + ship.heading_deg) * kDeg2Rad;
+        dl->AddLine(
+            ImVec2((float)cx, (float)cy),
+            ImVec2((float)(cx + R * std::sin(start_angle)),
+                   (float)(cy - R * std::cos(start_angle))),
+            with_alpha(face_color, selected ? 150 : 75),
+            selected ? 1.6f : 1.0f);
+
+        const double label_angle =
+            (face.boresight_deg + ship.heading_deg) * kDeg2Rad;
+        dl->AddText(
+            ImVec2((float)(cx + 0.84 * R * std::sin(label_angle)) - 8.0f,
+                   (float)(cy - 0.84 * R * std::cos(label_angle)) - 6.0f),
+            with_alpha(
+                face_color,
+                selected || offline ? 235 : 130),
+            face.short_name.data());
+    }
+
     // --- azimuth spokes every 30 deg + degree labels ---
     for (int deg = 0; deg < 360; deg += 30) {
         const double a = deg * kDeg2Rad;
@@ -106,22 +159,31 @@ void PpiView::render(const char* title, ImVec2 pos, ImVec2 size,
                     theme::col_text_dim(), lbl);
     }
 
-    // --- sweep trail (motion blur): fading arc behind the beam ---
-    const double sweep_world = sweep_az_deg + ship.heading_deg;
-    for (int i = 0; i < 48; ++i) {
-        const double a1 = (sweep_world - i * 0.35) * kDeg2Rad;
-        const double a2 = (sweep_world - (i + 1) * 0.35) * kDeg2Rad;
-        const int alpha = (int)(110 * (1.0 - i / 48.0));
-        dl->AddLine(ImVec2((float)(cx + R * std::sin(a1)), (float)(cy - R * std::cos(a1))),
-                    ImVec2((float)(cx + R * std::sin(a2)), (float)(cy - R * std::cos(a2))),
-                    with_alpha(theme::col_sweep(), alpha), 3.0f);
-    }
-    // bright sweep arm
-    {
-        const double a = sweep_world * kDeg2Rad;
-        dl->AddLine(ImVec2((float)cx, (float)cy),
-                    ImVec2((float)(cx + R * std::sin(a)), (float)(cy - R * std::cos(a))),
-                    theme::col_sweep(), 2.0f);
+    // --- four independent face sweep arms ---
+    for (const auto& face : faces::kDefinitions) {
+        const auto face_index = static_cast<std::size_t>(face.id);
+        const bool selected = face.id == selected_face_id;
+        const bool offline =
+            (rma_masks[face_index] & 0xFFFFu) == 0xFFFFu;
+        const ImU32 sweep_color = offline
+            ? theme::col_led_fault() : theme::col_sweep();
+        const double angle =
+            (sweep_az_deg[face_index] + ship.heading_deg) * kDeg2Rad;
+        const ImVec2 end(
+            (float)(cx + R * std::sin(angle)),
+            (float)(cy - R * std::cos(angle)));
+        if (selected) {
+            dl->AddLine(
+                ImVec2((float)cx, (float)cy), end,
+                with_alpha(sweep_color, 45), 6.0f);
+        }
+        dl->AddLine(
+            ImVec2((float)cx, (float)cy), end,
+            with_alpha(sweep_color, selected ? 255 : 145),
+            selected ? 2.4f : 1.4f);
+        dl->AddCircleFilled(
+            end, selected ? 3.5f : 2.3f,
+            with_alpha(sweep_color, selected ? 255 : 180));
     }
 
     // --- detection blips (glow halo, SNR color, age fade) ---
@@ -194,8 +256,13 @@ void PpiView::render(const char* title, ImVec2 pos, ImVec2 size,
 
     // --- readouts (top-left, above the scope) ---
     char buf[96];
-    std::snprintf(buf, sizeof buf, "HDG %05.1f  SPD %04.1f kn  RNG %.0f km",
-                  ship.heading_deg, ship.speed_mps * 1.94384, range_m_smooth_ / 1000.0);
+    const auto* selected_face = faces::find(selected_face_id);
+    std::snprintf(
+        buf, sizeof buf,
+        "HDG %05.1f  SPD %04.1f kn  RNG %.0f km  FACE %s",
+        ship.heading_deg, ship.speed_mps * 1.94384,
+        range_m_smooth_ / 1000.0,
+        selected_face ? selected_face->short_name.data() : "??");
     dl->AddText(ImVec2(wp.x + 4, wp.y), theme::col_text(), buf);
 
     // --- cursor range/bearing readout (mouse over the scope) ---

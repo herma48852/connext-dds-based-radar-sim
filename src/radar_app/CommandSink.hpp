@@ -5,6 +5,8 @@
 
 #include <cstdint>
 
+#include "RadarFaces.hpp"
+
 namespace radar::app {
 
 class CommandSink {
@@ -12,7 +14,9 @@ public:
     virtual ~CommandSink() = default;
 
     virtual void send(int32_t type, double center = 0.0, double width = 0.0,
-                      const char* params = "", int32_t priority = 3) = 0;
+                      const char* params = "", int32_t priority = 3,
+                      uint32_t target_face_mask =
+                          faces::kForwardStarboardMask) = 0;
 };
 
 } // namespace radar::app

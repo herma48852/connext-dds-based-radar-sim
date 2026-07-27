@@ -77,8 +77,8 @@
          TOPIC / ENDPOINT PROFILES
          ================================================================== -->
 
-    <!-- DetectionEvent: 100 Hz blips. Low latency beats perfect delivery;
-         a lost blip is corrected by the next dwell. -->
+    <!-- DetectionEvent: data-dependent face-keyed CFAR blips. Low latency
+         beats perfect delivery; a lost blip is corrected by the next dwell. -->
     <qos_profile name="DetectionEventProfile">
       <datawriter_qos>
         <reliability><kind>BEST_EFFORT_RELIABILITY_QOS</kind></reliability>
@@ -111,8 +111,9 @@
       </datareader_qos>
     </qos_profile>
 
-    <!-- BeamCommand: 100 Hz steering commands. Reliable, single-slot:
-         only the newest command matters. -->
+    <!-- BeamCommand: 100 Hz steering commands per face (400 Hz aggregate).
+         Reliable, single-slot per keyed face: only the newest command
+         matters. -->
     <qos_profile name="BeamCommandProfile">
       <datawriter_qos>
         <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
@@ -128,9 +129,10 @@
       </datareader_qos>
     </qos_profile>
 
-    <!-- BeamPatternStatus: 20 Hz outage-aware array response. Reliable and
-         transient-local so a late-joining HMI or Studio session immediately
-         receives the current mask, scalar beam metrics, and azimuth cut. -->
+    <!-- BeamPatternStatus: 20 Hz outage-aware response per face (80 Hz
+         aggregate). Reliable and transient-local so a late-joining HMI or
+         Studio session immediately receives each face's current metrics and
+         azimuth cut. -->
     <qos_profile name="BeamPatternStatusProfile">
       <datawriter_qos>
         <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
@@ -146,9 +148,9 @@
       </datareader_qos>
     </qos_profile>
 
-    <!-- CalibrationStatus: 1 Hz health heartbeat plus immediate state-change
-         updates. Transient-local so a late-joining Beamformer, HMI, or Studio
-         session immediately sees array state. -->
+    <!-- CalibrationStatus: 1 Hz health heartbeat per face plus immediate
+         state-change updates. Transient-local so a late-joining Beamformer,
+         HMI, or Studio session immediately sees every face's array state. -->
     <qos_profile name="CalibrationStatusProfile">
       <datawriter_qos>
         <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
@@ -213,8 +215,9 @@
       </datareader_qos>
     </qos_profile>
 
-    <!-- RawReturn: 1 kHz receiver wire data. Best effort, tightest
-         latency budget in the system. -->
+    <!-- RawReturn: 1 kHz post-beamforming receiver wire per face (4 kHz
+         aggregate). Best effort, with the tightest latency budget in the
+         system. -->
     <qos_profile name="RawReturnProfile">
       <datawriter_qos>
         <reliability><kind>BEST_EFFORT_RELIABILITY_QOS</kind></reliability>

@@ -10,6 +10,7 @@
 
 #include "CommandSink.hpp"
 #include "DdsSupport.hpp"
+#include "RadarFaces.hpp"
 #include "SimClock.hpp"
 #include "SpscQueue.hpp"
 #include "TopicNames.hpp"
@@ -49,6 +50,8 @@ public:
                         cmd.sector_width_deg  = req.width;
                         cmd.priority          = req.priority;
                         cmd.parameters        = req.params;
+                        cmd.target_face_mask  =
+                            static_cast<int32_t>(req.target_face_mask);
                         writer_.write(cmd);
                     }
                     if (!any)
@@ -65,12 +68,16 @@ public:
 
     // Render-thread safe: never touches DDS.
     void send(int32_t type, double center = 0.0, double width = 0.0,
-              const char* params = "", int32_t priority = 3) override {
+              const char* params = "", int32_t priority = 3,
+              uint32_t target_face_mask =
+                  faces::kForwardStarboardMask) override {
         CmdReq req{};
         req.type = type;
         req.center = center;
         req.width = width;
         req.priority = priority;
+        req.target_face_mask =
+            faces::normalize_target_mask(target_face_mask);
         std::strncpy(req.params, params, sizeof(req.params) - 1);
         queue_.push_overwrite(req);
     }
@@ -81,6 +88,7 @@ private:
         double   center;
         double   width;
         int32_t  priority;
+        uint32_t target_face_mask;
         char     params[128];
     };
 

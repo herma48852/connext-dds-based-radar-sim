@@ -24,6 +24,8 @@ enum class UiControl {
     SelfTest,
     ResetTracks,
     AllOnline,
+    AllOffline,
+    FaceSelect,
     RmaBlock
 };
 
@@ -39,7 +41,8 @@ void render_track_list(const char* title, ImVec2 pos, ImVec2 size,
                        const app::ShipView& ship);
 
 void render_beam_timeline(const char* title, ImVec2 pos, ImVec2 size,
-                          const std::deque<app::BeamView>& history);
+                          const std::deque<app::BeamView>& history,
+                          int32_t selected_face_id);
 
 void render_health_panel(const char* title, ImVec2 pos, ImVec2 size,
                          const app::HealthView& health);
@@ -53,12 +56,14 @@ void render_ship_panel(const char* title, ImVec2 pos, ImVec2 size,
 // drift heatmap itself stays DDS-fed via CalibrationStatus).
 void render_array_panel(const char* title, ImVec2 pos, ImVec2 size,
                         const app::ArrayGridView& grid, uint32_t live_mask,
+                        int32_t& selected_face_id,
                         app::CommandSink& commands,
                         UiControlObserver* observer = nullptr);
 
 void render_scenario_bar(const char* title, ImVec2 pos, ImVec2 size,
                          app::CommandSink& commands,
                          int32_t radar_mode, bool degraded,
+                         int32_t selected_face_id,
                          bool& beam_formation_overlay,
                          UiControlObserver* observer = nullptr);
 

@@ -1,0 +1,195 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 860"
+     font-family="Helvetica, Arial, sans-serif">
+  <title>Three-bar elevation search geometry</title>
+  <desc>
+    Side-view engineering diagram of the three elevation bars centered at
+    3, 14, and 25 degrees, each using a plus or minus 5.5-degree gate, with
+    exact tiling boundaries and example heights at 50 kilometers.
+  </desc>
+  <defs>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="5" refY="5"
+            markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#7be3a1"/>
+    </marker>
+  </defs>
+
+  <rect width="1400" height="860" fill="#0a0a0f"/>
+  <text x="700" y="42" text-anchor="middle" font-size="25"
+        font-weight="bold" fill="#e8f2ea">
+    Three-Bar Elevation Search Geometry
+  </text>
+  <text x="700" y="68" text-anchor="middle" font-size="13" fill="#9aaba0">
+    Elevation centers 3° / 14° / 25° · acceptance tiles ±5.5° · shared edges with no modeled gaps
+  </text>
+
+  <!-- Plot background -->
+  <rect x="88" y="104" width="1000" height="650" rx="8"
+        fill="#0d1219" stroke="#3a4350"/>
+
+  <!-- Elevation coverage wedges, 50 km reference plane at x=980 -->
+  <path d="M160 680 L980 680 L980 557.5 Z"
+        fill="#4fc3f7" fill-opacity="0.24"/>
+  <path d="M160 680 L980 557.5 L980 389.5 Z"
+        fill="#7be3a1" fill-opacity="0.21"/>
+  <path d="M160 680 L980 389.5 L980 197.0 Z"
+        fill="#ffbf4d" fill-opacity="0.22"/>
+  <path d="M160 680 L980 197 L980 122 L160 122 Z"
+        fill="#ff5d57" fill-opacity="0.07"/>
+
+  <!-- Horizon and range scale -->
+  <line x1="120" y1="680" x2="1045" y2="680"
+        stroke="#d7e2dc" stroke-width="2"/>
+  <text x="1060" y="671" text-anchor="end" font-size="12"
+        fill="#dfe9e2">0° horizon</text>
+  <line x1="160" y1="680" x2="160" y2="696" stroke="#718092"/>
+  <line x1="570" y1="680" x2="570" y2="696" stroke="#718092"/>
+  <line x1="980" y1="680" x2="980" y2="696" stroke="#718092"/>
+  <text x="160" y="718" text-anchor="middle" font-size="11" fill="#aebbb3">0 km</text>
+  <text x="570" y="718" text-anchor="middle" font-size="11" fill="#aebbb3">25 km</text>
+  <text x="980" y="718" text-anchor="middle" font-size="11" fill="#aebbb3">50 km ground range</text>
+
+  <!-- Exact gate boundaries -->
+  <line x1="160" y1="680" x2="980" y2="715.8"
+        stroke="#718092" stroke-width="1.3" stroke-dasharray="6 5"/>
+  <!-- The two internal shared edges are deliberately prominent: each is
+       simultaneously the upper edge of one tile and lower edge of the next. -->
+  <line x1="160" y1="680" x2="980" y2="557.5"
+        stroke="#071018" stroke-width="6"/>
+  <line x1="160" y1="680" x2="980" y2="557.5"
+        stroke="#d18cff" stroke-width="3"/>
+  <line x1="160" y1="680" x2="980" y2="389.5"
+        stroke="#071018" stroke-width="6"/>
+  <line x1="160" y1="680" x2="980" y2="389.5"
+        stroke="#d18cff" stroke-width="3"/>
+  <line x1="160" y1="680" x2="980" y2="197.0"
+        stroke="#9fb0a6" stroke-width="1.5"/>
+
+  <!-- Beam center rays -->
+  <line x1="160" y1="680" x2="980" y2="637.0"
+        stroke="#4fc3f7" stroke-width="3"/>
+  <line x1="160" y1="680" x2="980" y2="475.5"
+        stroke="#7be3a1" stroke-width="3"/>
+  <line x1="160" y1="680" x2="980" y2="297.6"
+        stroke="#ffbf4d" stroke-width="3"/>
+
+  <!-- Array/ship symbol -->
+  <path d="M128 680 L148 643 L172 643 L192 680 Z"
+        fill="#d7e2dc" stroke="#ffffff"/>
+  <rect x="151" y="625" width="18" height="22" rx="2"
+        fill="#4fc3f7" stroke="#dff5ff"/>
+  <text x="160" y="739" text-anchor="middle" font-size="12" fill="#dfe9e2">
+    array phase center
+  </text>
+
+  <!-- Center labels -->
+  <rect x="332" y="628" width="146" height="29" rx="4"
+        fill="#111923" stroke="#4fc3f7"/>
+  <text x="405" y="647" text-anchor="middle" font-size="12"
+        font-weight="bold" fill="#dfe9e2">LOW BAR · 3°</text>
+  <rect x="424" y="511" width="160" height="29" rx="4"
+        fill="#111923" stroke="#7be3a1"/>
+  <text x="504" y="530" text-anchor="middle" font-size="12"
+        font-weight="bold" fill="#dfe9e2">MID BAR · 14°</text>
+  <rect x="529" y="365" width="165" height="29" rx="4"
+        fill="#111923" stroke="#ffbf4d"/>
+  <text x="611" y="384" text-anchor="middle" font-size="12"
+        font-weight="bold" fill="#dfe9e2">HIGH BAR · 25°</text>
+
+  <!-- Shared-edge callouts make the exact edge-to-edge tiling explicit. -->
+  <g font-size="10.5" fill="#d7e2dc">
+    <rect x="690" y="510" width="240" height="39" rx="4"
+          fill="#17111d" stroke="#d18cff" stroke-width="1.5"/>
+    <text x="810" y="526" text-anchor="middle" font-weight="bold"
+          fill="#e6c8ff">EXACT TILE · shared edge at 8.5°</text>
+    <text x="810" y="541" text-anchor="middle">
+      LOW +5.5° = MID −5.5°
+    </text>
+    <line x1="930" y1="539" x2="962" y2="555"
+          stroke="#d18cff" stroke-width="1.5"/>
+
+    <rect x="690" y="342" width="240" height="39" rx="4"
+          fill="#17111d" stroke="#d18cff" stroke-width="1.5"/>
+    <text x="810" y="358" text-anchor="middle" font-weight="bold"
+          fill="#e6c8ff">EXACT TILE · shared edge at 19.5°</text>
+    <text x="810" y="373" text-anchor="middle">
+      MID +5.5° = HIGH −5.5°
+    </text>
+    <line x1="930" y1="371" x2="962" y2="386"
+          stroke="#d18cff" stroke-width="1.5"/>
+
+    <rect x="690" y="171" width="210" height="23" rx="3"
+          fill="#111923" stroke="#526071"/>
+    <text x="890" y="187" text-anchor="end">30.5° upper boundary</text>
+    <line x1="900" y1="183" x2="962" y2="197"
+          stroke="#526071" stroke-width="1"/>
+    <rect x="650" y="726" width="222" height="23" rx="3"
+          fill="#111923" stroke="#526071"/>
+    <text x="863" y="742" text-anchor="end">−2.5° gate below horizon</text>
+  </g>
+  <text x="777" y="145" font-size="12" font-weight="bold" fill="#ff8b86">
+    cone of silence / outside modeled elevation coverage
+  </text>
+
+  <!-- 50 km altitude scale -->
+  <line x1="980" y1="680" x2="980" y2="122"
+        stroke="#718092" stroke-width="1" stroke-dasharray="3 4"/>
+  <g font-size="10.5" fill="#8fa398">
+    <line x1="972" y1="516" x2="988" y2="516" stroke="#718092"/>
+    <text x="965" y="520" text-anchor="end">10 km</text>
+    <line x1="972" y1="352" x2="988" y2="352" stroke="#718092"/>
+    <text x="965" y="356" text-anchor="end">20 km</text>
+    <line x1="972" y1="188" x2="988" y2="188" stroke="#718092"/>
+    <text x="965" y="192" text-anchor="end">30 km</text>
+  </g>
+
+  <!-- Tiling callout -->
+  <path d="M 241 663 A 82 82 0 0 0 239 660"
+        fill="none" stroke="#7be3a1" stroke-width="2"/>
+  <line x1="246" y1="625" x2="344" y2="573"
+        stroke="#7be3a1" stroke-width="1.5"/>
+  <text x="354" y="570" font-size="12" font-weight="bold" fill="#9cf2b9">
+    Each bar accepts center ±5.5°
+  </text>
+  <text x="354" y="588" font-size="11" fill="#aebbb3">
+    Adjacent gates meet exactly: 3 + 5.5 = 14 − 5.5 = 8.5°
+  </text>
+
+  <!-- Notes panel -->
+  <rect x="1115" y="104" width="250" height="650" rx="8"
+        fill="#10141c" stroke="#3a4350"/>
+  <text x="1140" y="138" font-size="15" font-weight="bold" fill="#e8f2ea">
+    Interpretation
+  </text>
+  <text x="1140" y="173" font-size="12" fill="#c9d8ce">
+    <tspan x="1140" dy="0">LOW: −2.5° to 8.5°</tspan>
+    <tspan x="1140" dy="22">MID: 8.5° to 19.5°</tspan>
+    <tspan x="1140" dy="22">HIGH: 19.5° to 30.5°</tspan>
+  </text>
+  <line x1="1140" y1="246" x2="1340" y2="246" stroke="#3a4350"/>
+  <text x="1140" y="278" font-size="12" fill="#c9d8ce">
+    <tspan x="1140" dy="0">At 50 km horizontal range:</tspan>
+    <tspan x="1140" dy="24">8.5° ≈ 7.5 km altitude</tspan>
+    <tspan x="1140" dy="22">19.5° ≈ 17.7 km</tspan>
+    <tspan x="1140" dy="22">30.5° ≈ 29.5 km</tspan>
+  </text>
+  <line x1="1140" y1="374" x2="1340" y2="374" stroke="#3a4350"/>
+  <text x="1140" y="406" font-size="12" fill="#c9d8ce">
+    <tspan x="1140" dy="0">The ±5.5° acceptance gates</tspan>
+    <tspan x="1140" dy="20">meet exactly at shared edges.</tspan>
+    <tspan x="1140" dy="20">They are a simulation detection</tspan>
+    <tspan x="1140" dy="20">partition—not physical HPBW.</tspan>
+    <tspan x="1140" dy="20">Real beams normally overlap.</tspan>
+  </text>
+  <line x1="1140" y1="508" x2="1340" y2="508" stroke="#3a4350"/>
+  <text x="1140" y="540" font-size="12" fill="#c9d8ce">
+    <tspan x="1140" dy="0">All four azimuth faces use the</tspan>
+    <tspan x="1140" dy="20">same three elevation bars and</tspan>
+    <tspan x="1140" dy="20">advance them independently.</tspan>
+  </text>
+  <line x1="1140" y1="622" x2="1340" y2="622" stroke="#3a4350"/>
+  <text x="1140" y="654" font-size="11" fill="#8fa398">
+    <tspan x="1140" dy="0">Side view is angular and</tspan>
+    <tspan x="1140" dy="18">schematic. Height annotations</tspan>
+    <tspan x="1140" dy="18">use tan(elevation) × 50 km.</tspan>
+  </text>
+</svg>

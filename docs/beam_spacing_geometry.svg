@@ -1,0 +1,289 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1080"
+     font-family="Helvetica, Arial, sans-serif">
+  <title>Four-face azimuth beam spacing and half-power overlap</title>
+  <desc>
+    Engineering diagram of one 90-degree radar face with forty beam centers
+    spaced 2.25 degrees apart, the 3.1719-degree half-power beamwidth, adjacent
+    overlap, and the four face boresights around the ship.
+  </desc>
+  <defs>
+    <marker id="arrow-cyan" viewBox="0 0 10 10" refX="5" refY="5"
+            markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4fc3f7"/>
+    </marker>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="5" refY="5"
+            markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#ffbf4d"/>
+    </marker>
+    <marker id="arrow-purple" viewBox="0 0 10 10" refX="5" refY="5"
+            markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#d18cff"/>
+    </marker>
+    <line id="beam-ray" x1="430" y1="748" x2="430" y2="272"
+          stroke="#566171" stroke-width="1"/>
+    <path id="hpbw-wedge"
+          d="M 430 748 L 418.93 348.15
+             A 400 400 0 0 1 441.07 348.15 Z"/>
+  </defs>
+
+  <rect width="1400" height="1080" fill="#0a0a0f"/>
+  <text x="700" y="42" text-anchor="middle" font-size="25"
+        font-weight="bold" fill="#e8f2ea">
+    Four-Face Azimuth Search Geometry
+  </text>
+  <text x="700" y="68" text-anchor="middle" font-size="13" fill="#9aaba0">
+    3.0 GHz · λ = 99.93 mm · 50 mm pitch · 32 columns · measured HPBW = 3.1719°
+  </text>
+
+  <!-- Main selected-face field of regard -->
+  <path d="M 430 748 L 83.5 401.5 A 490 490 0 0 1 776.5 401.5 Z"
+        fill="#14202a" stroke="#718092" stroke-width="1.5"/>
+  <line x1="430" y1="748" x2="83.5" y2="401.5"
+        stroke="#dbe5df" stroke-width="2"/>
+  <line x1="430" y1="748" x2="776.5" y2="401.5"
+        stroke="#dbe5df" stroke-width="2"/>
+  <path d="M 83.5 401.5 A 490 490 0 0 1 776.5 401.5"
+        fill="none" stroke="#718092" stroke-width="1.5"/>
+
+  <!-- Forty 2.25-degree beam centers, half-step inset at each edge -->
+  <g opacity="0.82">
+    <use href="#beam-ray" transform="rotate(-43.875 430 748)"/>
+    <use href="#beam-ray" transform="rotate(-41.625 430 748)"/>
+    <use href="#beam-ray" transform="rotate(-39.375 430 748)"/>
+    <use href="#beam-ray" transform="rotate(-37.125 430 748)"/>
+    <use href="#beam-ray" transform="rotate(-34.875 430 748)"/>
+    <use href="#beam-ray" transform="rotate(-32.625 430 748)"/>
+    <use href="#beam-ray" transform="rotate(-30.375 430 748)"/>
+    <use href="#beam-ray" transform="rotate(-28.125 430 748)"/>
+    <use href="#beam-ray" transform="rotate(-25.875 430 748)"/>
+    <use href="#beam-ray" transform="rotate(-23.625 430 748)"/>
+    <use href="#beam-ray" transform="rotate(-21.375 430 748)"/>
+    <use href="#beam-ray" transform="rotate(-19.125 430 748)"/>
+    <use href="#beam-ray" transform="rotate(-16.875 430 748)"/>
+    <use href="#beam-ray" transform="rotate(-14.625 430 748)"/>
+    <use href="#beam-ray" transform="rotate(-12.375 430 748)"/>
+    <use href="#beam-ray" transform="rotate(-10.125 430 748)"/>
+    <use href="#beam-ray" transform="rotate(-7.875 430 748)"/>
+    <use href="#beam-ray" transform="rotate(-5.625 430 748)"/>
+    <use href="#beam-ray" transform="rotate(-3.375 430 748)"/>
+    <use href="#beam-ray" transform="rotate(-1.125 430 748)"
+         stroke="#4fc3f7" stroke-width="2.5"/>
+    <use href="#beam-ray" transform="rotate(1.125 430 748)"
+         stroke="#4fc3f7" stroke-width="2.5"/>
+    <use href="#beam-ray" transform="rotate(3.375 430 748)"/>
+    <use href="#beam-ray" transform="rotate(5.625 430 748)"/>
+    <use href="#beam-ray" transform="rotate(7.875 430 748)"/>
+    <use href="#beam-ray" transform="rotate(10.125 430 748)"/>
+    <use href="#beam-ray" transform="rotate(12.375 430 748)"/>
+    <use href="#beam-ray" transform="rotate(14.625 430 748)"/>
+    <use href="#beam-ray" transform="rotate(16.875 430 748)"/>
+    <use href="#beam-ray" transform="rotate(19.125 430 748)"/>
+    <use href="#beam-ray" transform="rotate(21.375 430 748)"/>
+    <use href="#beam-ray" transform="rotate(23.625 430 748)"/>
+    <use href="#beam-ray" transform="rotate(25.875 430 748)"/>
+    <use href="#beam-ray" transform="rotate(28.125 430 748)"/>
+    <use href="#beam-ray" transform="rotate(30.375 430 748)"/>
+    <use href="#beam-ray" transform="rotate(32.625 430 748)"/>
+    <use href="#beam-ray" transform="rotate(34.875 430 748)"/>
+    <use href="#beam-ray" transform="rotate(37.125 430 748)"/>
+    <use href="#beam-ray" transform="rotate(39.375 430 748)"/>
+    <use href="#beam-ray" transform="rotate(41.625 430 748)"/>
+    <use href="#beam-ray" transform="rotate(43.875 430 748)"/>
+  </g>
+
+  <!-- Highlight adjacent half-power footprints -->
+  <use href="#hpbw-wedge" transform="rotate(-1.125 430 748)"
+       fill="#4fc3f7" fill-opacity="0.24" stroke="#4fc3f7"
+       stroke-width="1.5"/>
+  <use href="#hpbw-wedge" transform="rotate(1.125 430 748)"
+       fill="#ffbf4d" fill-opacity="0.21" stroke="#ffbf4d"
+       stroke-width="1.5"/>
+
+  <!-- Beam spacing dimension -->
+  <path d="M 426.66 578.03 A 170 170 0 0 1 433.34 578.03"
+        fill="none" stroke="#4fc3f7" stroke-width="2"
+        marker-start="url(#arrow-cyan)" marker-end="url(#arrow-cyan)"/>
+  <text x="430" y="561" text-anchor="middle" font-size="12"
+        font-weight="bold" fill="#dfe9e2">2.25° center spacing</text>
+
+  <!-- HPBW dimension around the right highlighted beam -->
+  <path d="M 427.68 458.01 A 290 290 0 0 1 443.73 458.33"
+        fill="none" stroke="#ffbf4d" stroke-width="2"
+        marker-start="url(#arrow-amber)" marker-end="url(#arrow-amber)"/>
+  <text x="510" y="473" font-size="12" font-weight="bold" fill="#ffcf78">
+    3.1719° HPBW
+  </text>
+  <text x="510" y="490" font-size="11" fill="#aebbb3">
+    −3 dB crossings at center ±1.586°
+  </text>
+
+  <!-- Overlap dimension -->
+  <path d="M 428.11 513.01 A 235 235 0 0 1 431.89 513.01"
+        fill="none" stroke="#7be3a1" stroke-width="4"/>
+  <line x1="430" y1="513" x2="604" y2="533"
+        stroke="#7be3a1" stroke-width="1.5"/>
+  <text x="614" y="530" font-size="12" font-weight="bold" fill="#9cf2b9">
+    0.9219° adjacent overlap
+  </text>
+  <text x="614" y="547" font-size="11" fill="#aebbb3">
+    HPBW − center spacing
+  </text>
+  <text x="614" y="563" font-size="11" fill="#aebbb3">
+    both beams exceed half power at the midpoint
+  </text>
+
+  <!-- Face limits and labels -->
+  <text x="72" y="389" text-anchor="middle" font-size="12" fill="#dfe9e2">−45° face edge</text>
+  <text x="788" y="389" text-anchor="middle" font-size="12" fill="#dfe9e2">+45° face edge</text>
+  <text x="430" y="252" text-anchor="middle" font-size="12" fill="#dfe9e2">face boresight</text>
+  <text x="430" y="788" text-anchor="middle" font-size="12" fill="#dfe9e2">array phase center</text>
+  <text x="430" y="811" text-anchor="middle" font-size="11" fill="#8fa398">
+    40 azimuth centers × 3 elevation bars = 120 pointings per face
+  </text>
+
+  <!-- Dashed annular detail region around the two central beam footprints. -->
+  <path d="M408.02 328.58
+           A420 420 0 0 1 451.98 328.58
+           L438.37 588.22
+           A160 160 0 0 0 421.63 588.22 Z"
+        fill="none" stroke="#d18cff" stroke-width="2"
+        stroke-dasharray="1 7" stroke-linecap="round"/>
+  <rect x="365" y="310" width="73" height="23" rx="3"
+        fill="#17111d" stroke="#d18cff"/>
+  <text x="401.5" y="326" text-anchor="middle" font-size="11"
+        font-weight="bold" fill="#e6c8ff">DETAIL A</text>
+
+  <!-- Four-face ship-relative inset -->
+  <rect x="900" y="106" width="440" height="490" rx="8"
+        fill="#10141c" stroke="#3a4350"/>
+  <text x="1120" y="138" text-anchor="middle" font-size="17"
+        font-weight="bold" fill="#e8f2ea">Ship-relative face placement</text>
+  <circle cx="1120" cy="353" r="174" fill="#0c1118"
+          stroke="#526071" stroke-width="1.5"/>
+  <path d="M1120 353 L1120 179 A174 174 0 0 1 1294 353 Z"
+        fill="#4fc3f7" fill-opacity="0.18" stroke="#4fc3f7"/>
+  <path d="M1120 353 L1294 353 A174 174 0 0 1 1120 527 Z"
+        fill="#7be3a1" fill-opacity="0.10" stroke="#526071"/>
+  <path d="M1120 353 L1120 527 A174 174 0 0 1 946 353 Z"
+        fill="#7be3a1" fill-opacity="0.10" stroke="#526071"/>
+  <path d="M1120 353 L946 353 A174 174 0 0 1 1120 179 Z"
+        fill="#7be3a1" fill-opacity="0.10" stroke="#526071"/>
+  <line x1="1120" y1="179" x2="1120" y2="527" stroke="#718092"/>
+  <line x1="946" y1="353" x2="1294" y2="353" stroke="#718092"/>
+
+  <!-- Ship silhouette -->
+  <path d="M1120 264 L1151 337 L1140 421 L1120 445
+           L1100 421 L1089 337 Z"
+        fill="#d7e2dc" stroke="#ffffff" stroke-width="1.2"/>
+  <path d="M1120 276 L1120 430" stroke="#74827a" stroke-width="1"/>
+  <text x="1120" y="238" text-anchor="middle" font-size="12" fill="#dfe9e2">BOW · 000°</text>
+  <text x="1313" y="357" font-size="12" fill="#dfe9e2">STBD · 090°</text>
+  <text x="1120" y="555" text-anchor="middle" font-size="12" fill="#dfe9e2">STERN · 180°</text>
+  <text x="928" y="357" text-anchor="end" font-size="12" fill="#dfe9e2">PORT · 270°</text>
+
+  <!-- Face boresights -->
+  <g stroke-width="3">
+    <line x1="1120" y1="353" x2="1225" y2="248" stroke="#4fc3f7"/>
+    <line x1="1120" y1="353" x2="1225" y2="458" stroke="#7be3a1"/>
+    <line x1="1120" y1="353" x2="1015" y2="458" stroke="#7be3a1"/>
+    <line x1="1120" y1="353" x2="1015" y2="248" stroke="#7be3a1"/>
+  </g>
+  <text x="1240" y="234" font-size="12" font-weight="bold" fill="#dfe9e2">FS · 045°</text>
+  <text x="1240" y="478" font-size="12" font-weight="bold" fill="#dfe9e2">AS · 135°</text>
+  <text x="1000" y="478" text-anchor="end" font-size="12" font-weight="bold" fill="#dfe9e2">AP · 225°</text>
+  <text x="1000" y="234" text-anchor="end" font-size="12" font-weight="bold" fill="#dfe9e2">FP · 315°</text>
+  <text x="1120" y="581" text-anchor="middle" font-size="11" fill="#8fa398">
+    Each face owns a 90° field of regard; adjacent half-power footprints meet at the seams.
+  </text>
+
+  <!-- Linearized angular blowup of the dashed annular detail region. -->
+  <rect x="855" y="620" width="510" height="245" rx="8"
+        fill="#10141c" stroke="#3a4350"/>
+  <text x="1110" y="647" text-anchor="middle" font-size="14"
+        font-weight="bold" fill="#e8f2ea">
+    Detail A · adjacent beams at a fixed range
+  </text>
+
+  <!-- Common angular axis: −3° ... +3°. -->
+  <line x1="900" y1="837" x2="1320" y2="837"
+        stroke="#9aaba0" stroke-width="1.5"/>
+  <g font-size="10.5" fill="#aebbb3" text-anchor="middle">
+    <line x1="900" y1="831" x2="900" y2="843" stroke="#718092"/>
+    <text x="900" y="860">−3°</text>
+    <line x1="970" y1="831" x2="970" y2="843" stroke="#718092"/>
+    <text x="970" y="860">−2°</text>
+    <line x1="1040" y1="831" x2="1040" y2="843" stroke="#718092"/>
+    <text x="1040" y="860">−1°</text>
+    <line x1="1110" y1="829" x2="1110" y2="845" stroke="#d7e2dc"/>
+    <text x="1110" y="860">0°</text>
+    <line x1="1180" y1="831" x2="1180" y2="843" stroke="#718092"/>
+    <text x="1180" y="860">+1°</text>
+    <line x1="1250" y1="831" x2="1250" y2="843" stroke="#718092"/>
+    <text x="1250" y="860">+2°</text>
+    <line x1="1320" y1="831" x2="1320" y2="843" stroke="#718092"/>
+    <text x="1320" y="860">+3°</text>
+  </g>
+
+  <!-- Left beam: center −1.125°, half-power span −2.711° ... +0.461°. -->
+  <rect x="920.2" y="708" width="222.1" height="30" rx="4"
+        fill="#4fc3f7" fill-opacity="0.25" stroke="#4fc3f7"/>
+  <line x1="1031.3" y1="704" x2="1031.3" y2="744"
+        stroke="#4fc3f7" stroke-width="3"/>
+  <text x="1031.3" y="701" text-anchor="middle" font-size="11"
+        font-weight="bold" fill="#dfe9e2">center −1.125°</text>
+  <text x="926" y="728" font-size="10.5" fill="#dfe9e2">−3 dB</text>
+  <text x="1135" y="728" text-anchor="end" font-size="10.5" fill="#dfe9e2">−3 dB</text>
+
+  <!-- Right beam: center +1.125°, half-power span −0.461° ... +2.711°. -->
+  <rect x="1077.7" y="764" width="222.1" height="30" rx="4"
+        fill="#ffbf4d" fill-opacity="0.24" stroke="#ffbf4d"/>
+  <line x1="1188.8" y1="760" x2="1188.8" y2="800"
+        stroke="#ffbf4d" stroke-width="3"/>
+  <text x="1188.8" y="757" text-anchor="middle" font-size="11"
+        font-weight="bold" fill="#dfe9e2">center +1.125°</text>
+  <text x="1084" y="784" font-size="10.5" fill="#dfe9e2">−3 dB</text>
+  <text x="1293" y="784" text-anchor="end" font-size="10.5" fill="#dfe9e2">−3 dB</text>
+
+  <!-- Exact common half-power interval. -->
+  <rect x="1077.7" y="690" width="64.6" height="116"
+        fill="#7be3a1" fill-opacity="0.20" stroke="#7be3a1"
+        stroke-width="2" stroke-dasharray="5 4"/>
+  <text x="1110" y="822" text-anchor="middle" font-size="11"
+        font-weight="bold" fill="#9cf2b9">0.9219° common overlap</text>
+
+  <!-- Center-to-center dimension. -->
+  <line x1="1031.3" y1="666" x2="1188.8" y2="666"
+        stroke="#d18cff" stroke-width="1.7"
+        marker-start="url(#arrow-purple)" marker-end="url(#arrow-purple)"/>
+  <text x="1110" y="682" text-anchor="middle" font-size="10.5"
+        fill="#e6c8ff">2.25° center-to-center</text>
+
+  <!-- Leader from annular selection to its blowup. -->
+  <path d="M452 458 C650 500, 730 605, 855 650"
+        fill="none" stroke="#d18cff" stroke-width="1.5"
+        stroke-dasharray="6 5"/>
+
+  <!-- Engineering notes moved below the graphics. -->
+  <rect x="65" y="892" width="1300" height="130" rx="8"
+        fill="#10141c" stroke="#3a4350"/>
+  <text x="90" y="922" font-size="14" font-weight="bold"
+        fill="#e8f2ea">Raster conventions</text>
+  <text x="90" y="950" font-size="12" fill="#c9d8ce">
+    • First/last centers are 1.125° inside each face edge.
+  </text>
+  <text x="90" y="976" font-size="12" fill="#c9d8ce">
+    • Four faces run concurrently at 100 dwells/s per face.
+  </text>
+  <text x="90" y="1002" font-size="12" fill="#c9d8ce">
+    • Full volume: 4 × 40 × 3 = 480 pointings in 1.2 s.
+  </text>
+  <text x="700" y="950" font-size="12" fill="#c9d8ce">
+    • Face-local azimuth increases clockwise in ship coordinates.
+  </text>
+  <text x="700" y="976" font-size="12" fill="#c9d8ce">
+    • A 30° priority sector uses 13 centers from −13.5° to +13.5°.
+  </text>
+  <text x="700" y="1002" font-size="12" fill="#8fa398">
+    • Angles are schematic; radial distance is not a range scale.
+  </text>
+</svg>

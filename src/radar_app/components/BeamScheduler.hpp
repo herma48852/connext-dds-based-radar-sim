@@ -1,7 +1,8 @@
 #pragma once
-// BeamScheduler: publishes BeamCommand at 100 Hz.
-//  - Search mode: continuous 360 deg rotation (full revolution ~1.6 s)
-//  - Sector mode: back-and-forth scan inside the commanded sector
+// BeamScheduler: publishes one keyed BeamCommand per face every 10 ms
+// (100 Hz/face, 400 Hz aggregate).
+//  - Search mode: forty half-step-inset centers across each 90-degree face
+//  - Sector mode: thirteen centers across the selected 30-degree sector
 // Sector/mode changes arrive via SystemCommand -> CommandHandler -> DataBus.
 
 #include "ComponentBase.hpp"

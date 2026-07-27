@@ -1,9 +1,10 @@
 #pragma once
 // TrackerCore: DDS-free track-correlation core.
 //
-//   - nearest-neighbour association in ship-relative ENU
+//   - range/angle nearest-neighbour association with range-scaled cross gate
 //   - alpha-beta position/velocity filter per track
-//   - two-stage velocity initiation (cross-sweep endpoint seed)
+//   - three-of-five scan confirmation and endpoint velocity initiation
+//   - state-preserving duplicate fusion at resolution-cell boundaries
 //   - coast/drop with bounded id pool
 //
 // TrackManager (the DDS adapter) and tests/tracker_replay (offline harness,
@@ -32,9 +33,11 @@ struct CoreTrack {
     double bx, by;           // birth position (endpoint velocity seed)
     int64_t birth_ms;
     int    hits;
+    bool   confirmed;
     int    classification;   // matches types::TrackClassification ordinals
     int    quality;
     int64_t last_update_ms;
+    std::deque<int64_t> scan_hit_times;
     std::deque<std::array<double,3>> history; // display trail (max 10)
 };
 
@@ -56,19 +59,34 @@ public:
     static constexpr int CLASS_SURFACE        = 3;
     static constexpr int CLASS_CLUTTER        = 4;
 
-    static constexpr double kGateM        = 750.0;
+    // Range/angle measurement gate. The beam reports an SNR-weighted raster
+    // bearing, not an exact monopulse angle, so the physical cross-range
+    // allowance grows with target range.
+    static constexpr double kRangeGateM         = 375.0;
+    static constexpr double kAzimuthGateDeg     = 2.6;
+    static constexpr double kCrossRangeFloorM   = 150.0;
     static constexpr double kInitSpeedMps = 350.0; // capture-gate velocity uncertainty
     static constexpr double kAlpha        = 0.55;
     static constexpr double kBeta         = 0.20;
-    // Must survive two fully missed full-volume revisits:
-    // 3 bars x 1.6 s = 4.8 s, so 12 s leaves margin for scheduler jitter.
+
+    // A "hit" for confirmation must come from another scan visit, not another
+    // pulse or overlapping adjacent beam. Three visits inside five nominal
+    // 1.2-second face volumes confirm the track.
+    static constexpr int64_t kIndependentScanMs = 600;
+    static constexpr int64_t kConfirmationWindowMs = 6000;
+    static constexpr int     kConfirmationHits = 3;
+    static constexpr int64_t kTentativeCoastMs = 6000;
+
+    // Four faces revisit a full three-bar volume every 1.2 s. The 12-second
+    // coast deliberately survives many missed volumes during an outage.
     static constexpr int64_t kCoastMs     = 12000;
     static constexpr int    kMaxTracks    = 256;
-    // Merge radius for az-cell split duplicates: 2.25 deg dwell cells are
-    // ~1.9 km at 50 km; 4 km covers second-adjacent splits. Velocity must
-    // match only when both tracks have it seeded (kMergeDvMps).
-    static constexpr double kMergeM     = 4000.0;
-    static constexpr double kMergeDvMps = 30.0;
+    // Duplicate fragments must occupy the same range/angle resolution cell.
+    // If one fragment is newer, its measurement is absorbed into the
+    // survivor so merging cannot starve an established track of updates.
+    static constexpr double kMergeRangeM       = 300.0;
+    static constexpr double kMergeAzimuthDeg   = 3.3;
+    static constexpr double kMergeDvMps        = 80.0;
 
 private:
     std::vector<CoreTrack> tracks_;

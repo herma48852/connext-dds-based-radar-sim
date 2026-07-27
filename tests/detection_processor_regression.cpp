@@ -1,11 +1,14 @@
 #include "BeamPatternModel.hpp"
 #include "DetectionModel.hpp"
 #include "DetectionSignalProcessing.hpp"
+#include "DwellPowerAccumulator.hpp"
 
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <unordered_map>
+#include <vector>
 
 namespace {
 int failures = 0;
@@ -45,6 +48,35 @@ int main() {
           "all-offline mask produces a zero-element aperture");
     check(detection_count(all_offline) == 0,
           "all-offline aperture suppresses above-threshold noise detections");
+
+    radar::app::DwellPowerAccumulator dwell;
+    dwell.begin(42, 45.0, 14.0, 5);
+    std::array<float, 10> iq{};
+    for (int pulse = 0; pulse < 10; ++pulse) {
+        // Alternate carrier phase to prove that noncoherent power integration
+        // preserves a moving target without requiring Doppler compensation.
+        iq[4] = pulse % 2 == 0 ? 0.30f : -0.30f;
+        iq[5] = 0.0f;
+        dwell.accumulate(iq);
+    }
+    check(dwell.pulse_count() == 10,
+          "one search dwell accumulates all ten PRF samples");
+    std::vector<float> integrated;
+    check(dwell.complete(integrated),
+          "a populated dwell produces one integrated range trace");
+    check(!dwell.active() && integrated.size() == 5,
+          "completing a dwell resets it for the next beam");
+    check(std::fabs(integrated[2] - 0.30f) < 1.0e-6f,
+          "noncoherent integration retains RMS target magnitude");
+    int integrated_plots = 0;
+    radar::app::for_each_cfar_detection(
+        integrated,
+        true,
+        static_cast<float>(
+            radar::app::detection_model::kCfarThreshold),
+        [&integrated_plots](int, float) { ++integrated_plots; });
+    check(integrated_plots == 1,
+          "ten pulse returns produce one dwell-level plot");
 
     using Clock = std::chrono::steady_clock;
     const Clock::time_point received{};

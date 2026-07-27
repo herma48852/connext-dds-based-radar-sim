@@ -1,48 +1,114 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
+
+#include "RadarFaces.hpp"
 
 namespace radar::app::search_raster {
 
-inline constexpr double kDwellPeriodSec = 0.01; // 100 Hz
+// Each face advances independently at 100 dwells/s. The scheduler publishes
+// all four face-keyed commands every 10 ms, for an aggregate 400 commands/s.
+inline constexpr double kDwellPeriodSec = 0.01;
 inline constexpr double kAzimuthStepDeg = 2.25;
-inline constexpr int kAzimuthDwellsPerRevolution = 160;
+inline constexpr int kAzimuthDwellsPerFace = 40;
 inline constexpr std::array<double, 3> kElevationBarsDeg{
     3.0, 14.0, 25.0};
-inline constexpr int kFullVolumeDwells =
-    kAzimuthDwellsPerRevolution
+inline constexpr int kPointingsPerFace =
+    kAzimuthDwellsPerFace
     * static_cast<int>(kElevationBarsDeg.size());
-inline constexpr double kFullVolumePeriodSec =
-    kFullVolumeDwells * kDwellPeriodSec;
+inline constexpr int kPointingsAllFaces =
+    kPointingsPerFace * faces::kFaceCount;
+inline constexpr double kFaceVolumePeriodSec =
+    kPointingsPerFace * kDwellPeriodSec;
+inline constexpr double kAggregateCommandRateHz =
+    faces::kFaceCount / kDwellPeriodSec;
 
-static_assert(
-    kAzimuthStepDeg * kAzimuthDwellsPerRevolution == 360.0);
-static_assert(kFullVolumeDwells == 480);
-static_assert(kFullVolumePeriodSec == 4.8);
+// A 30-degree priority sector uses thirteen 2.25-degree centers from
+// center-13.5 through center+13.5. The physical 3.1719-degree HPBW extends
+// beyond the first/last center while retaining adjacent overlap.
+inline constexpr double kSectorWidthDeg = 30.0;
+inline constexpr int kSectorAzimuthDwells = 13;
+inline constexpr double kSectorCenterHalfSpanDeg =
+    (kSectorAzimuthDwells - 1) * kAzimuthStepDeg * 0.5;
 
-inline double wrap360(double angle_deg) noexcept {
-    while (angle_deg >= 360.0) angle_deg -= 360.0;
-    while (angle_deg < 0.0) angle_deg += 360.0;
-    return angle_deg;
-}
+static_assert(kAzimuthStepDeg * kAzimuthDwellsPerFace == 90.0);
+static_assert(kPointingsPerFace == 120);
+static_assert(kPointingsAllFaces == 480);
+static_assert(kFaceVolumePeriodSec == 1.2);
+static_assert(kAggregateCommandRateHz == 400.0);
+static_assert(kSectorCenterHalfSpanDeg == 13.5);
 
 struct Pointing {
     double azimuth_deg;
     double elevation_deg;
 };
 
-// Advance one dwell in the repeating 160-azimuth x 3-elevation search
-// raster. After exactly 480 calls, azimuth and elevation_bar return to their
-// initial state.
-inline Pointing advance(double& azimuth_deg, int& elevation_bar) noexcept {
-    if (azimuth_deg + kAzimuthStepDeg >= 360.0)
-        elevation_bar =
-            (elevation_bar + 1)
+struct FaceRasterState {
+    int azimuth_index = 0;
+    int elevation_bar = 0;
+};
+
+struct SectorRasterState {
+    int azimuth_index = 0;
+    int direction = 1;
+    int elevation_bar = 0;
+};
+
+inline Pointing advance_face(
+        faces::FaceId face_id, FaceRasterState& state) noexcept {
+    const auto* face = faces::find(face_id);
+    if (face == nullptr)
+        face = &faces::kDefinitions.front();
+
+    const double azimuth_deg =
+        face->coverage_start_deg
+        + 0.5 * kAzimuthStepDeg
+        + state.azimuth_index * kAzimuthStepDeg;
+    const double elevation_deg =
+        kElevationBarsDeg[static_cast<std::size_t>(state.elevation_bar)];
+
+    ++state.azimuth_index;
+    if (state.azimuth_index == kAzimuthDwellsPerFace) {
+        state.azimuth_index = 0;
+        state.elevation_bar =
+            (state.elevation_bar + 1)
             % static_cast<int>(kElevationBarsDeg.size());
-    azimuth_deg = wrap360(azimuth_deg + kAzimuthStepDeg);
-    return Pointing{
-        azimuth_deg,
-        kElevationBarsDeg[static_cast<std::size_t>(elevation_bar)]};
+    }
+    return Pointing{faces::wrap360(azimuth_deg), elevation_deg};
+}
+
+inline Pointing advance_sector(
+        double center_deg, SectorRasterState& state) noexcept {
+    const double offset_deg =
+        -kSectorCenterHalfSpanDeg
+        + state.azimuth_index * kAzimuthStepDeg;
+    const Pointing result{
+        faces::wrap360(center_deg + offset_deg),
+        kElevationBarsDeg[static_cast<std::size_t>(state.elevation_bar)]};
+
+    if (state.direction > 0) {
+        if (state.azimuth_index + 1 == kSectorAzimuthDwells) {
+            state.direction = -1;
+            state.elevation_bar =
+                (state.elevation_bar + 1)
+                % static_cast<int>(kElevationBarsDeg.size());
+            --state.azimuth_index;
+        } else {
+            ++state.azimuth_index;
+        }
+    } else {
+        if (state.azimuth_index == 0) {
+            state.direction = 1;
+            state.elevation_bar =
+                (state.elevation_bar + 1)
+                % static_cast<int>(kElevationBarsDeg.size());
+            ++state.azimuth_index;
+        } else {
+            --state.azimuth_index;
+        }
+    }
+    return result;
 }
 
 } // namespace radar::app::search_raster

@@ -97,9 +97,10 @@ In the Studio View workspace:
 
 ### 2.4 Establish the steady-state baseline
 
-In the Radar Display workspace, press:
+In the Radar Display workspace, select **FS**, then:
 
-1. **ALL ONLINE**
+1. If needed, toggle any dark RMA blocks online. To force a known whole-face
+   state, press **ALL OFFLINE**, then **ALL ONLINE**.
 2. **RESTORE ARRAY**
 3. **SEARCH MODE**
 
@@ -111,7 +112,8 @@ baseline should read approximately:
 | `Radar/CalibrationStatus.overall_status` | `ARRAY_NOMINAL` |
 | `Radar/CalibrationStatus.failed_element_count` | `0` |
 | `Radar/CalibrationStatus.rma_offline_mask` | `0` / `0x0000` |
-| `Radar/BeamCommand.azimuth_deg` | repeating 0–360° sawtooth |
+| `Radar/BeamCommand.scheduler_id` | four bounded instances, `0..3` |
+| `Radar/BeamCommand.azimuth_deg` for FS | repeating 1.125°–88.875° face-local sawtooth |
 | `Radar/BeamCommand.priority` | `3` |
 | `Radar/TargetTrack` | several live keyed instances |
 
@@ -151,7 +153,7 @@ Open or generate:
 - A sample log for `Radar/SystemCommand`.
 - A time chart for `Radar/BeamCommand.azimuth_deg`.
 - Optional traces for `elevation_deg` and `priority`.
-- Filter `Radar/BeamCommand` to `scheduler_id = 0`.
+- Filter `Radar/BeamCommand` to `scheduler_id = 0` (FS).
 
 Suggested AI prompt:
 
@@ -160,8 +162,10 @@ Suggested AI prompt:
 > elevation, put priority in a second panel, and mark each SystemCommand on
 > the common time axis. Use a 15-second window.
 
-In steady search, `azimuth_deg` repeatedly sweeps through 0–360°,
-`elevation_deg` cycles among 3°, 14°, and 25°, and priority is 3.
+In steady FS search, `azimuth_deg` repeatedly sweeps through its forty
+half-step-inset centers from 1.125° to 88.875°, `elevation_deg` cycles among
+3°, 14°, and 25°, and priority is 3. The other three keyed instances sweep
+their own 90-degree fields concurrently.
 
 ### Activate
 
@@ -172,8 +176,11 @@ Switch to the Radar Display workspace and press **SECTOR SCAN**.
 Return to Studio and show:
 
 1. `Radar/SystemCommand.command_type = CMD_SET_SECTOR`.
-2. `sector_center_deg = 90` and `sector_width_deg = 60`.
-3. `Radar/BeamCommand.azimuth_deg` now bounces between 60° and 120°.
+2. `target_face_mask = 0x1`, `sector_center_deg = 45`, and
+   `sector_width_deg = 30`.
+3. FS `Radar/BeamCommand.azimuth_deg` now bounces across thirteen centers
+   from 31.5° through 58.5°. The displayed nominal sector limits are
+   30° and 60°.
 4. `Radar/BeamCommand.priority` changes from 3 to 2.
 
 Do not use `BeamCommand.mode` to distinguish these two views; both are emitted
@@ -184,25 +191,26 @@ are the observable downstream evidence of sector operation.
 
 Follow-up prompts:
 
-> Shade the commanded 60–120 degree sector and highlight each reversal of
+> Shade the commanded 30–60 degree FS sector and highlight each reversal of
 > scan direction.
 
 > Add a calculated indicator that reads FULL SEARCH when the azimuth span is
-> approximately 360 degrees and SECTOR when it remains between 60 and 120.
+> approximately 90 degrees and SECTOR when it remains between 30 and 60.
 
 ### Restore
 
 Press **SEARCH MODE**. Studio should show `CMD_SET_MODE` with parameters
-`"search"`, followed by a return to the 0–360° sweep and priority 3.
+`"search"`, followed by a return to the 1.125°–88.875° FS sweep and
+priority 3.
 
 ## 5. Scenario 2 — degrade and restore the array
 
 ### Prepare the Studio View
 
-Subscribe to the single keyed instance `array_id = 0` on
-`Radar/CalibrationStatus`. This topic publishes on each state change plus a
-1 Hz heartbeat and contains both the scalar health summary and the full face
-data:
+Keep **FS** selected and subscribe to keyed instance `array_id = 0` on
+`Radar/CalibrationStatus`. The topic carries four face instances; each
+publishes on state change plus a 1 Hz heartbeat and contains both the scalar
+health summary and the full face data:
 
 - `overall_status`
 - `failed_element_count`
@@ -232,10 +240,10 @@ Return to Studio and show the two-stage data flow:
 1. `Radar/SystemCommand.command_type = CMD_DEGRADE_ARRAY`.
 2. On the prompt calibration update, `overall_status` changes from
    `ARRAY_NOMINAL` to `ARRAY_DEGRADED`.
-3. `failed_element_count` jumps from 0 to 128 in the current deterministic
-   pattern.
-4. The same 128 positions in `element_drift_db` become hard failures around
-   -6 dB or below.
+3. `failed_element_count` jumps to approximately 12% of the 1,024-element
+   face in the current deterministic pattern.
+4. The corresponding positions in `element_drift_db` become hard failures
+   around -6 dB or below.
 5. `rma_offline_mask` remains `0x0000` because no complete RMA was taken out
    of service.
 
@@ -262,10 +270,11 @@ Follow-up prompts:
 Press **RESTORE ARRAY**. Show `CMD_RESTORE_ARRAY`, then the next calibration
 sample returning to `ARRAY_NOMINAL` and zero failed elements.
 
-RESTORE ARRAY clears the sparse degraded-element scenario. It does not clear
-whole RMAs that were separately taken offline; use **ALL ONLINE** for those.
+RESTORE ARRAY clears the selected face's sparse degraded-element scenario. It
+does not clear whole RMAs that were separately taken offline; toggle those
+blocks individually, or use the whole-face OFFLINE/ONLINE cycle.
 
-## 6. Scenario 3 — RMA offline and ALL ONLINE
+## 6. Scenario 3 — face-local RMA outage
 
 ### Prepare the Studio View
 
@@ -295,14 +304,15 @@ Suggested AI prompt:
 
 ### Activate
 
-In the Radar Display workspace, click RMA 3—the top-right block when numbered
-row-major from 0—to take it offline.
+In the Radar Display workspace, confirm **FS** is selected, then click RMA
+3—the top-right block when numbered row-major from 0—to take it offline.
 
 ### Observe
 
 Return to Studio and show:
 
-1. `Radar/SystemCommand.command_type = CMD_RMA_OFFLINE` with parameters `"3"`.
+1. `Radar/SystemCommand.command_type = CMD_RMA_OFFLINE`, parameters `"3"`,
+   and `target_face_mask = 0x1`.
 2. On the prompt calibration sample, `rma_offline_mask` changes from `0x0000`
    to `0x0008`.
 3. `failed_element_count` increases by 64.
@@ -342,10 +352,15 @@ Follow-up prompts:
 
 ### Restore
 
-Press **ALL ONLINE**. Studio should show `CMD_RMA_ONLINE` with parameters
-`"all"`, followed by mask `0x0000`, the failed count dropping by 64 per RMA
-that was offline, the pattern metrics returning to nominal, the B-scope
-overlay disappearing, and the dark blocks returning to nominal drift.
+Click RMA 3 and any other dark blocks again to restore them individually.
+Studio should show `CMD_RMA_ONLINE` with the RMA index and
+`target_face_mask = 0x1`, followed by mask `0x0000`, the failed count
+dropping by 64 per restored RMA, the pattern metrics returning to nominal,
+the B-scope overlay disappearing, and the blocks returning to nominal drift.
+
+To demonstrate the whole-face control instead, press **ALL OFFLINE**: all
+sixteen FS bits become `0xFFFF` while the AS/AP/FP instances remain unchanged,
+and the button changes to **ALL ONLINE**. Press it again to restore FS.
 
 ## 7. Scenario 4 — reset and reacquire tracks
 
@@ -377,8 +392,9 @@ Return to Studio and show:
    tracker cycle.
 3. The old live-instance count drops; depending on view sampling, zero may be
    brief because detection processing continues during reset.
-4. New track instances appear as detections are correlated over subsequent
-   beam revisits.
+4. New track instances appear after three spatially consistent independent
+   scan visits; pulse returns and overlapping adjacent beams from one visit
+   cannot satisfy confirmation by themselves.
 
 This is a strong DDS lifecycle demonstration: reset does not merely clear a
 local table; the writer disposes each keyed instance so remote subscribers can
@@ -457,12 +473,12 @@ beam priority, and live `TargetTrack` instance count.
 
 | Radar control | Command | Primary downstream topic | Fields to watch | Restore |
 |---|---|---|---|---|
-| SEARCH MODE | `CMD_SET_MODE` | `Radar/BeamCommand` | azimuth 0–360°, priority 3 | — |
-| SECTOR SCAN | `CMD_SET_SECTOR` | `Radar/BeamCommand` | azimuth 60–120°, priority 2 | SEARCH MODE |
-| DEGRADE ARRAY | `CMD_DEGRADE_ARRAY` | `Radar/CalibrationStatus` | status, failed count, drift sequence | RESTORE ARRAY |
+| SEARCH MODE | `CMD_SET_MODE` | `Radar/BeamCommand` | selected face's 90° field, priority 3 | — |
+| SECTOR SCAN | `CMD_SET_SECTOR` | `Radar/BeamCommand` | selected face's 30° sector, priority 2 | SEARCH MODE |
+| DEGRADE ARRAY | `CMD_DEGRADE_ARRAY` | `Radar/CalibrationStatus` | selected-face key, status, failed count, drift sequence | RESTORE ARRAY |
 | RESTORE ARRAY | `CMD_RESTORE_ARRAY` | `Radar/CalibrationStatus` | return to nominal sparse-element state | — |
-| RMA block click | `CMD_RMA_OFFLINE/ONLINE` | `Radar/CalibrationStatus`, `Radar/BeamPatternStatus`, `Radar/DetectionEvent` | mask, drift block, gain loss, beamwidth, sidelobes, SNR | click again or ALL ONLINE |
-| ALL ONLINE | `CMD_RMA_ONLINE`, `"all"` | `Radar/CalibrationStatus` | mask returns to zero | — |
+| RMA block click | `CMD_RMA_OFFLINE/ONLINE` | `Radar/CalibrationStatus`, `Radar/BeamPatternStatus`, `Radar/DetectionEvent` | face mask, RMA mask, drift block, gain loss, beamwidth, sidelobes, SNR | click again |
+| ALL OFFLINE / ALL ONLINE | `CMD_RMA_OFFLINE/ONLINE`, `"all"` | `Radar/CalibrationStatus` | selected-face mask toggles `0xFFFF`/`0x0000` | second press |
 | RESET TRACKS | `CMD_RESET` | `Radar/TargetTrack`, `Radar/BeamCommand` | disposals, live count, reacquisition, search scan | automatic reacquisition |
 | SELF TEST | `CMD_SELF_TEST` | command only today | `Radar/SystemCommand` event | not applicable |
 
@@ -479,13 +495,13 @@ beam priority, and live `TargetTrack` instance count.
   `Radar.HMI-UI`; state changes should publish within about 20 ms.
 - **DEGRADE does not change the RMA mask:** expected. It changes sparse
   element drift and failed count, not whole-RMA state.
-- **RESTORE leaves a dark RMA:** expected. Use ALL ONLINE to clear the RMA
-  mask.
+- **RESTORE leaves a dark RMA:** expected. Toggle the selected face's dark
+  block individually, or use its whole-face OFFLINE/ONLINE cycle.
 - **Tracks return after RESET:** expected. Reset disposes current instances;
   continuing detections initiate new tracks.
-- **A-scope still shows activity with all RMAs offline:** the current model
-  continues to display simulated receiver noise while target returns are
-  reduced to a 1% gain floor.
+- **A-scope still shows activity with all RMAs offline:** expected. The
+  selected post-beamforming stream retains thermal noise, but target gain is
+  exactly zero and it publishes no detections.
 
 For the lower-level topology, QoS, mismatch, and TypeLookup reference, see
 [`docs/CONNEXT_STUDIO.md`](docs/CONNEXT_STUDIO.md).

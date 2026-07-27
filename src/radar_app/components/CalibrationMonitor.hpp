@@ -7,8 +7,10 @@
 // fraction of elements is marked failed and overall_status drops to
 // ARRAY_DEGRADED - visible both in the health panel and in Connext Studio.
 
+#include <array>
 #include <random>
 
+#include "RadarFaces.hpp"
 #include "ComponentBase.hpp"
 #include "../DataBus.hpp"
 
@@ -28,7 +30,8 @@ private:
     dds::pub::DataWriter<types::CalibrationStatus> writer_{dds::core::null};
 
     std::mt19937 rng_{std::random_device{}()};
-    double temperature_c_{42.0};
+    std::array<double, faces::kFaceCount> temperature_c_{
+        42.0, 42.5, 41.5, 42.2};
 };
 
 } // namespace radar::app

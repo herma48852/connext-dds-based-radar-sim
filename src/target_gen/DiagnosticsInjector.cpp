@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "SimClock.hpp"
+#include "RadarFaces.hpp"
 #include "WorkerGuard.hpp"
 
 namespace target_gen {
@@ -53,7 +54,7 @@ void DiagnosticsInjector::inject_type_mismatch() {
         run_worker_guarded("TargetGen.RogueWriter", [this] {
             while (!stop_.load()) {
                 types::DetectionEvent det;
-                det.sensor_id     = 0; // constant key (matches IDL @key)
+                det.sensor_id     = radar::faces::kForwardStarboard;
                 det.detection_id  = -1;
                 det.timestamp     = SimClock::stamp();
                 det.range_m       = 0.0;
@@ -69,7 +70,8 @@ void DiagnosticsInjector::inject_type_mismatch() {
 }
 
 void DiagnosticsInjector::send_system_command(types::CommandType type,
-                                              const std::string& params) {
+                                              const std::string& params,
+                                              faces::FaceMask target_face_mask) {
     std::call_once(commander_once_, [this] {
         commander_part_ = radds::make_participant(
             domain_id_, dn::PROFILE_TARGETGEN_PARTICIPANT, "TargetGen.Commander");
@@ -90,21 +92,30 @@ void DiagnosticsInjector::send_system_command(types::CommandType type,
         cmd.command_type = type;
         cmd.priority     = 1;
         cmd.parameters   = params;
+        cmd.target_face_mask =
+            static_cast<int32_t>(
+                faces::normalize_target_mask(target_face_mask));
         writer.write(cmd);
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
 }
 
-void DiagnosticsInjector::send_degrade_command() {
-    std::cout << "[target_gen] Sending CMD_DEGRADE_ARRAY\n";
+void DiagnosticsInjector::send_degrade_command(
+        faces::FaceMask target_face_mask) {
+    std::cout << "[target_gen] Sending CMD_DEGRADE_ARRAY face_mask=0x"
+              << std::hex << target_face_mask << std::dec << "\n";
     send_system_command(types::CommandType::CMD_DEGRADE_ARRAY,
-                        "scenario=degraded_array");
+                        "scenario=degraded_array", target_face_mask);
 }
 
-void DiagnosticsInjector::send_rma_offline(const std::string& params) {
-    std::cout << "[target_gen] Sending CMD_RMA_OFFLINE \"" << params << "\"\n"
+void DiagnosticsInjector::send_rma_offline(
+        const std::string& params, faces::FaceMask target_face_mask) {
+    std::cout << "[target_gen] Sending CMD_RMA_OFFLINE \"" << params
+              << "\" face_mask=0x" << std::hex << target_face_mask
+              << std::dec << "\n"
               << std::flush;
-    send_system_command(types::CommandType::CMD_RMA_OFFLINE, params);
+    send_system_command(
+        types::CommandType::CMD_RMA_OFFLINE, params, target_face_mask);
 }
 
 void DiagnosticsInjector::stop() {

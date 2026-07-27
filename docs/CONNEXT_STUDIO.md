@@ -32,11 +32,11 @@ Every component is a named participant:
 
 | Participant name | Role |
 |---|---|
-| `Radar.BeamScheduler` | publishes `Radar/BeamCommand` (100 Hz) |
-| `Radar.Beamformer` | publishes `Radar/BeamPatternStatus` (20 Hz); subscribes `Radar/BeamCommand`, `Radar/CalibrationStatus` |
+| `Radar.BeamScheduler` | publishes four keyed `Radar/BeamCommand` instances (100 Hz/face; 400 Hz aggregate) |
+| `Radar.Beamformer` | publishes four keyed `Radar/BeamPatternStatus` instances (20 Hz/face; 80 Hz aggregate); subscribes `Radar/BeamCommand`, `Radar/CalibrationStatus` |
 | `Radar.DetectionProcessor` | pub `Radar/RawReturn` and `Radar/DetectionEvent`; sub `Radar/BeamCommand`, `Radar/BeamPatternStatus`, `Radar/RawReturn`, `TargetGen/TargetTruth` |
 | `Radar.TrackManager` | publishes `Radar/TargetTrack` (10 Hz) |
-| `Radar.CalibrationMonitor` | publishes `Radar/CalibrationStatus` (1 Hz heartbeat + state changes) |
+| `Radar.CalibrationMonitor` | publishes four keyed `Radar/CalibrationStatus` instances (1 Hz/face heartbeat + state changes) |
 | `Radar.CommandHandler` | subscribes `Radar/SystemCommand` (WaitSet) |
 | `Radar.ShipINS` | publishes `Ship/ShipPosition` (key 0) |
 | `Radar.CommandConsole` | publishes `Radar/SystemCommand` (UI buttons) |
@@ -44,7 +44,10 @@ Every component is a named participant:
 | `TargetGen.Generator` | publishes `TargetGen/TargetTruth` + `Ship/ShipPosition` (key 1) |
 
 Note the **loopback edge** inside `Radar.DetectionProcessor`
-(RawReturn out and back in) — the 1 kHz receiver wire on the bus.
+(RawReturn out and back in)—four face-keyed 1 kHz post-beamforming receiver
+streams on the bus (4 kHz aggregate). DetectionProcessor noncoherently
+integrates the ten pulses in each 10 ms dwell before publishing CFAR-like
+DetectionEvent plots; PRF samples are not independent tracker hits.
 Every topic has at least one in-system subscriber (the display topics
 terminate at `Radar.HMI-UI`), so there are no dangling publishers.
 The beam path is also explicit: scheduler intent and array health converge at
@@ -56,8 +59,9 @@ display.
 Hierarchical names render as a tree: `Radar/...`, `Ship/...`,
 `TargetGen/...`. Open live data inspection on:
 
-- `Radar/RawReturn` — watch the sample rate (~1 kHz) and the 668 complex
-  range cells in `iq_samples`
+- `Radar/RawReturn` — watch the aggregate sample rate (~4 kHz), filter by
+  `array_id` to see 1 kHz per face, and inspect the 668 complex range cells
+  in `iq_samples`
 - `Radar/BeamPatternStatus` — inspect the appended representative S-band
   carrier, wavelength, physical pitch, bandwidth, PRF, pulse width, range
   resolution, and unambiguous-range fields alongside the live array pattern
@@ -65,10 +69,10 @@ Hierarchical names render as a tree: `Radar/...`, `Ship/...`,
 - `Ship/ShipPosition` — **two instances** of the same keyed topic:
   `source_id = 0` (radar INS) and `source_id = 1` (ground truth). Show
   per-instance filtering.
-- `Radar/CalibrationStatus` — TRANSIENT_LOCAL: a freshly joined Studio
-  immediately sees the last sample (durability demo). Includes the
-  per-element drift sequence and `rma_offline_mask` (bit per RMA).
-- `Radar/BeamPatternStatus` — 20 Hz RELIABLE + TRANSIENT_LOCAL beam
+- `Radar/CalibrationStatus` — four TRANSIENT_LOCAL keyed instances: a freshly
+  joined Studio immediately sees the latest state for every face (durability
+  demo). Each includes a per-element drift sequence and `rma_offline_mask`.
+- `Radar/BeamPatternStatus` — 20 Hz per-face RELIABLE + TRANSIENT_LOCAL beam
   telemetry published by `Radar.Beamformer`. Chart gain loss, 3 dB width,
   boresight error, and peak sidelobe level; reshape the 181-value azimuth cut
   into a line plot.
@@ -110,7 +114,7 @@ duplicate target/truth publisher.
 3. **Degraded array** — either press **DEGRADE ARRAY** in the radar UI's
    SCENARIOS panel, or:
    ```bash
-   ./build/target_gen --domain 92 --targets 32 --degrade-array
+   ./build/target_gen --domain 92 --targets 32 --degrade-array --face fs
    ```
    Watch `Radar/CalibrationStatus`: `overall_status` goes
    `ARRAY_NOMINAL -> ARRAY_DEGRADED`, `failed_element_count` jumps to
@@ -120,7 +124,7 @@ duplicate target/truth publisher.
 4. **RMA offline** — click a block in the radar UI's **ARRAY FACE** pane
    (each block = one Radar Modular Assembly, 64 T/R elements), or:
    ```bash
-   ./build/target_gen --domain 92 --targets 32 --rma-offline 3  # or "all"
+   ./build/target_gen --domain 92 --targets 32 --rma-offline 3 --face fs
    ```
    Watch `Radar/CalibrationStatus`: `rma_offline_mask` gains the bit,
    `failed_element_count` jumps by 64 per offline RMA, and the drift
@@ -131,13 +135,17 @@ duplicate target/truth publisher.
    `Radar/DetectionEvent` SNR distribution as RMAs go offline; a strong
    target can occasionally appear through a dominant sidelobe at a displaced
    dwell azimuth. With all 16 RMAs offline, `DetectionEvent` publication
-   stops. Existing confirmed tracks coast for up to 12 seconds before their
-   instances are disposed. Restore with **ALL ONLINE**.
+   stops for that face. The other three keyed I/Q streams continue. Existing
+   confirmed tracks coast for up to 12 seconds if no other face observes
+   them. When the whole selected face is dark, use **ALL ONLINE**; otherwise
+   click individual offline blocks. The CLI accepts
+   `--face fs|as|ap|fp|all`.
 
-5. **Sector scan** — press **SECTOR SCAN** in the UI and watch
-   `Radar/BeamCommand`: azimuth values bounce between 60 and 120 deg
-   instead of wrapping 0..360. The B-scope shows dashed sector boundary
-   lines.
+5. **Sector scan** — select FS, press **SECTOR SCAN**, and filter
+   `Radar/BeamCommand` to `scheduler_id = 0`: the thirteen commanded centers
+   bounce from 31.5 to 58.5 degrees instead of sweeping the full 0..90 face
+   field. The B-scope shows the nominal 30 and 60 degree sector boundaries.
+   Other faces continue their independent schedules.
 
 ## 3. Compatibility notes for Studio
 

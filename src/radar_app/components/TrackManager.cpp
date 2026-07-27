@@ -7,7 +7,9 @@
 #include <memory>
 
 #include "Log.hpp"
+#include "FaceDetectionFusion.hpp"
 #include "PeriodicDeadline.hpp"
+#include "RadarFaces.hpp"
 #include "SimClock.hpp"
 
 namespace radar::app {
@@ -70,6 +72,8 @@ void TrackManager::stop() {
 }
 
 void TrackManager::on_detection(const types::DetectionEvent& det) {
+    if (!faces::valid(det.sensor_id))
+        return;
     std::lock_guard lk(pending_mutex_);
     pending_.push_back(det); // batched; consumed at 10 Hz by update_loop
 }
@@ -106,10 +110,23 @@ void TrackManager::update_loop() {
         }
         dets_in += batch.size();
 
+        std::vector<FaceDetection> face_detections;
+        face_detections.reserve(batch.size());
+        for (const auto& d : batch) {
+            face_detections.push_back(FaceDetection{
+                d.sensor_id, d.timestamp.sim_millis,
+                d.range_m, d.azimuth_deg, d.elevation_deg, d.snr_db});
+        }
+        const auto fused_detections =
+            fuse_resolution_cell_detections(face_detections);
+
         std::vector<CoreDetection> dets;
-        dets.reserve(batch.size());
-        for (const auto& d : batch)
-            dets.push_back(CoreDetection{d.range_m, d.azimuth_deg, d.elevation_deg});
+        dets.reserve(fused_detections.size());
+        for (const auto& d : fused_detections) {
+            dets.push_back(
+                CoreDetection{
+                    d.range_m, d.azimuth_deg, d.elevation_deg});
+        }
 
         const auto ship = bus_.ship();
         const int64_t now_ms = SimClock::sim_millis();
@@ -127,10 +144,10 @@ void TrackManager::update_loop() {
 
         int published = 0;
         for (const auto& t : core_.tracks()) {
-            // Publish at hits>=3 (was 2): aligns with the classification
-            // gate so every published row is classifiable on appearance —
-            // hits=2 noise fragments used to flood the table as UNK.
-            if (t.hits < 3) continue;
+            // A confirmed track has three independent scan visits inside the
+            // five-volume initiation window. Multiple pulse or adjacent-beam
+            // plots from one illumination can never satisfy this gate.
+            if (!t.confirmed) continue;
             ++published;
             auto hit = handles_.find(t.id);
             if (hit == handles_.end()) {

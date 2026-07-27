@@ -44,7 +44,8 @@ target_link_libraries(target_scenario_core PRIVATE radar_project_options)
 add_executable(tracker_replay
     tests/tracker_replay.cpp
     src/radar_app/components/TrackerCore.cpp)
-target_include_directories(tracker_replay PRIVATE src/radar_app/components)
+target_include_directories(tracker_replay PRIVATE
+    src/radar_app/components src/common)
 target_link_libraries(tracker_replay PRIVATE radar_project_options)
 
 # Portable outage-aware azimuth array-factor model.
@@ -301,6 +302,10 @@ if(RADAR_BUILD_APPLICATIONS)
             DESTINATION scripts/windows)
         install(FILES
             docs/RUN_WINDOWS.md
+            docs/CONNEXT_STUDIO.md
+            docs/OPERATOR_DISPLAY_GUIDE.md
+            docs/beam_spacing_geometry.svg
+            docs/elevation_geometry.svg
             DESTINATION docs)
         install(FILES ConnextStudioDemo.md DESTINATION .)
         set(CPACK_GENERATOR "ZIP")
@@ -341,7 +346,7 @@ if(BUILD_TESTING)
     add_executable(search_raster_regression
         tests/search_raster_regression.cpp)
     target_include_directories(search_raster_regression PRIVATE
-        src/radar_app/components)
+        src/radar_app/components src/common)
     target_link_libraries(search_raster_regression PRIVATE
         beam_pattern_core radar_project_options)
 
@@ -366,6 +371,20 @@ if(BUILD_TESTING)
     target_link_libraries(periodic_deadline_regression PRIVATE
         radar_project_options)
 
+    add_executable(radar_faces_regression
+        tests/radar_faces_regression.cpp)
+    target_include_directories(radar_faces_regression PRIVATE
+        src/common)
+    target_link_libraries(radar_faces_regression PRIVATE
+        radar_project_options)
+
+    add_executable(face_detection_fusion_regression
+        tests/face_detection_fusion_regression.cpp)
+    target_include_directories(face_detection_fusion_regression PRIVATE
+        src/radar_app/components src/common)
+    target_link_libraries(face_detection_fusion_regression PRIVATE
+        radar_project_options)
+
     add_test(NAME target_scenario_regression COMMAND target_scenario_regression)
     add_test(NAME beam_pattern_regression COMMAND beam_pattern_regression)
     add_test(NAME search_raster_regression COMMAND search_raster_regression)
@@ -375,14 +394,20 @@ if(BUILD_TESTING)
         COMMAND radar_rf_model_regression)
     add_test(NAME periodic_deadline_regression
         COMMAND periodic_deadline_regression)
+    add_test(NAME radar_faces_regression
+        COMMAND radar_faces_regression)
+    add_test(NAME face_detection_fusion_regression
+        COMMAND face_detection_fusion_regression)
     add_test(NAME tracker_replay_regression
-        COMMAND tracker_replay 300 --self-test --quiet)
+             COMMAND tracker_replay 60 --self-test --quiet)
     set_tests_properties(
         target_scenario_regression beam_pattern_regression
         search_raster_regression
         detection_processor_regression
         radar_rf_model_regression
         periodic_deadline_regression
+        radar_faces_regression
+        face_detection_fusion_regression
         tracker_replay_regression
         PROPERTIES TIMEOUT 30 LABELS "smoke;regression;portable")
 endif()

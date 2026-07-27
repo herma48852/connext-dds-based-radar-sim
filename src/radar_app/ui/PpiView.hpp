@@ -7,6 +7,7 @@
 //  - own-ship crosshair + heading marker + course/speed readout
 //  - mouse-wheel zoom with smooth interpolation
 
+#include <array>
 #include <deque>
 #include <unordered_map>
 #include <vector>
@@ -14,6 +15,7 @@
 #include <imgui.h>
 
 #include "../DataBus.hpp"
+#include "RadarFaces.hpp"
 
 namespace radar::ui {
 
@@ -26,7 +28,9 @@ public:
     void render(const char* title, ImVec2 pos, ImVec2 size,
                 const std::vector<app::TrackView>& tracks,
                 const app::ShipView& ship,
-                double sweep_az_deg,
+                const std::array<double, faces::kFaceCount>& sweep_az_deg,
+                const std::array<uint32_t, faces::kFaceCount>& rma_masks,
+                int32_t selected_face_id,
                 int64_t now_ms, float dt);
 
     double display_range_m() const { return range_m_smooth_; }

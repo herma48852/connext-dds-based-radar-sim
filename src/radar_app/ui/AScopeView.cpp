@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 
+#include "RadarFaces.hpp"
 #include "Theme.hpp"
 
 namespace radar::ui {
@@ -15,6 +16,10 @@ void AScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
 
     char heading[96];
     if (!trace.magnitude.empty()) {
+        if (trace.face_id != face_id_) {
+            phosphor_.clear();
+            face_id_ = trace.face_id;
+        }
         az_deg_ = trace.azimuth_deg;
         el_deg_ = trace.elevation_deg;
         range_max_m_ = trace.range_max_m;
@@ -23,9 +28,11 @@ void AScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
     // window identity. Without the ### suffix, every az/el change creates a
     // newly appearing window; focusing it clears ActiveID held by buttons in
     // the SCENARIOS and ARRAY FACE windows before mouse release.
-    std::snprintf(heading, sizeof heading,
-                  "%s  AZ %05.1f  EL %04.1f###A_SCOPE", title,
-                  az_deg_, el_deg_);
+    const auto* face = faces::find(face_id_);
+    std::snprintf(
+        heading, sizeof heading,
+        "%s  FACE %s  AZ %05.1f  EL %04.1f###A_SCOPE", title,
+        face ? face->short_name.data() : "??", az_deg_, el_deg_);
 
     ImGui::Begin(heading, nullptr,
                  ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove |

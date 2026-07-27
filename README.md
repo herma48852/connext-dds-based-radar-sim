@@ -68,7 +68,7 @@ The QoS file is copied next to the binaries automatically
 
 ## Regression tests
 
-The default build registers six fast, headless CTest regressions:
+The default build registers ten fast, headless CTest regressions:
 
 ```bash
 cmake --build build -j
@@ -78,29 +78,39 @@ ctest --test-dir build --output-on-failure
 - `ui_controls_smoke` renders the production ImGui A-scope and panels in
   memory, performs real mouse press/hold/release frames, and verifies all
   scenario controls (including the local **BEAM FORMATION** toggle), manual
-  RMA offline/online, and **ALL ONLINE**. The A-scope
+  per-face selection, RMA offline/online, and the dynamic
+  **ALL OFFLINE / ALL ONLINE** control. The A-scope
   azimuth/elevation changes throughout to cover the focus-loss regression.
 - `target_scenario_regression` accelerates 30 minutes of a deterministic
   16-target two-repeat scenario and checks stable IDs/profile mix, bounded motion,
   deterministic seeded behavior, the missile altitude floor, and periodic
   120 km respawns.
-- `tracker_replay_regression` converts the existing deterministic detection →
-  tracker replay into a failing test using golden event counts and track-ID
-  pool bounds. Running `./build/tracker_replay [seconds]` directly retains its
-  original periodic diagnostic output; assertions are enabled only by CTest's
-  `--self-test` flag.
+- `tracker_replay_regression` runs the four concurrent face rasters, independent
+  post-beamforming streams, ten-pulse dwell integration, resolution-cell plot
+  fusion, and production tracker against deterministic golden event counts
+  and track-ID pool bounds. It also verifies three-scan confirmation,
+  beam-cell transition continuity, state-preserving duplicate fusion, and the
+  exact 12-second confirmed-track coast/drop boundary. Running
+  `./build/tracker_replay [seconds]` directly retains periodic diagnostics;
+  assertions are enabled only by CTest's `--self-test` flag.
 - `beam_pattern_regression` verifies nominal beamwidth, outage gain loss,
   symmetric-error cancellation, mask-position sensitivity, and safe
   all-offline behavior without DDS or a display.
 - `search_raster_regression` enumerates the 480-point full-volume raster and
-  verifies its 4.8-second period plus nominal half-power overlap between
-  adjacent azimuth pointings.
-- `detection_processor_regression` forces an above-threshold noise peak through
-  the production CFAR peak picker and verifies that a nominal aperture reports
-  it while an all-offline aperture suppresses it.
+  verifies the 1.2-second concurrent four-face period, face-edge inset,
+  30-degree sector behavior, and nominal half-power overlap between adjacent
+  azimuth pointings.
+- `detection_processor_regression` verifies ten-pulse noncoherent dwell
+  integration, one-plot extraction, the production CFAR-like peak picker, and
+  all-offline suppression.
 - `periodic_deadline_regression` simulates an eight-hour machine sleep and
   verifies that fixed-rate simulation loops resume at their normal cadence
   without replaying millions of missed ticks.
+- `radar_faces_regression` verifies the bounded DDS keys, masks, boresights,
+  shared boundaries, and gap-free 360-degree four-face geometry.
+- `face_detection_fusion_regression` verifies that unresolved adjacent-dwell
+  and cross-face reports fuse across 0/360 and 90-degree boundaries into an
+  SNR-weighted bearing while range-resolvable targets remain distinct.
 
 These tests create no DDS participants, graphics window, or renderer, so they
 do not alter or compete with a live webinar run.
@@ -158,7 +168,8 @@ source $CONNEXTDDS_DIR/resource/scripts/rtisetenv_arm64Darwin23clang16.0.bash
 ./build/target_gen --degrade-array           # sends CMD_DEGRADE_ARRAY at t+5s
 ./build/target_gen --rma-offline 3           # sends CMD_RMA_OFFLINE (RMA 3) at t+5s
                                              # ("all" = whole face; restore via the
-                                             # ARRAY FACE pane's ALL ONLINE button)
+                                             # ARRAY FACE pane's dynamic button)
+./build/target_gen --degrade-array --face fp # target FP; fs/as/ap/fp/all accepted
 ```
 
 > On macOS, Connext shared libraries are resolved via `@rpath`; sourcing
@@ -173,9 +184,11 @@ an animated, rotating 3D comparison: nominal first moves into the left half
 when an outage occurs, the full-size degraded pattern then appears in the
 right half, both rotate together for direct shape comparison, and nominal
 recenters on recovery.
-The **ARRAY FACE** panel issues `CMD_RMA_OFFLINE`/`CMD_RMA_ONLINE`:
-click an RMA block (16 blocks of 64 T/R elements) to toggle it, or
-**ALL ONLINE** to restore. Offline RMAs darken the block, set the bit
+The **ARRAY FACE** panel selects FS, AS, AP, or FP and issues face-addressed
+`CMD_RMA_OFFLINE`/`CMD_RMA_ONLINE`: click an RMA block (16 blocks of 64 T/R
+elements) to toggle it. The whole-face button reads **ALL OFFLINE** unless
+that face is already dark, when it changes to **ALL ONLINE**. Offline RMAs
+darken the block and set the selected face instance's bit
 in `CalibrationStatus.rma_offline_mask`. `Radar.Beamformer` combines that
 health state with `BeamCommand`, publishes the effective response as
 `BeamPatternStatus`, and thereby reduces implant gain, reshapes the beam
@@ -204,7 +217,7 @@ all setup, build, test, and launch commands in that directory.
 
 - Connext target: `x64Win64VS2017` (binary-compatible with VS2022).
 - The UI embeds Per-Monitor V2 DPI awareness and uses GLFW/OpenGL 3.3.
-- `windows-portable` builds all seven regressions without Connext.
+- `windows-portable` builds all ten display-free regressions without Connext.
 - FetchContent supplies pinned GLFW, ImGui, and ImPlot sources.
 - Put the Connext target DLL directory on `PATH` before running.
 
@@ -236,24 +249,53 @@ separate workspace and can read every topic shown; see
 on-demand diagnostic endpoints `target_gen` creates with
 `--inject-qos-mismatch`, `--inject-type-mismatch` and `--degrade-array`.)
 
+### Four-face architecture
+
+The DDS schema reserves exactly four face keys, clockwise in ship-relative
+azimuth. The same bounded values key `BeamCommand`, `BeamPatternStatus`,
+`RawReturn`, `DetectionEvent`, and `CalibrationStatus`; one topic therefore
+carries four face instances instead of requiring four duplicate topic names.
+
+| Key | Code | Face | Boresight | Field of regard |
+|---:|---|---|---:|---:|
+| 0 | FS | Forward Starboard | 045° | 000°–090° |
+| 1 | AS | Aft Starboard | 135° | 090°–180° |
+| 2 | AP | Aft Port | 225° | 180°–270° |
+| 3 | FP | Forward Port | 315° | 270°–360° |
+
+`SystemCommand.target_face_mask` selects one or more of those instances; zero
+is the mixed-version legacy encoding for Forward Starboard. One scheduler
+thread advances four independent 100 Hz face rasters. Calibration,
+beamforming, raw I/Q, A/B-scope state, and aperture commands remain isolated
+per key. The PPI combines all four views. Near shared face seams, physically
+overlapping apertures can both report the same target. Adjacent beams on one
+face can do the same because their half-power footprints overlap. Tracker
+input therefore fuses reports that occupy one modeled time/range/angle
+resolution cell and uses SNR-derived power weighting to estimate a bearing
+between beam centers. Resolvable contacts remain separate.
+
+![Four-face azimuth beam spacing, half-power overlap, and face placement](docs/beam_spacing_geometry.svg)
+
+![Three-bar elevation gate tiling](docs/elevation_geometry.svg)
+
 ### DDS topics
 
 | Topic | Type | Rate | Profile | Notes |
 |---|---|---|---|---|
-| `Radar/RawReturn` | RawReturn | 1 kHz | RawReturnProfile | BEST_EFFORT, 500us latency budget. The "receiver wire": 668 complex range cells looped back inside DetectionProcessor |
-| `Radar/DetectionEvent` | DetectionEvent | ~100 Hz | DetectionEventProfile | BEST_EFFORT CFAR blips; consumed by TrackManager and HMI-UI (PPI) |
-| `Radar/BeamCommand` | BeamCommand | 100 Hz | BeamCommandProfile | RELIABLE dwell schedule; consumed by Beamformer and DetectionProcessor |
-| `Radar/BeamPatternStatus` | BeamPatternStatus | 20 Hz | BeamPatternStatusProfile | Beamformer-owned RELIABLE + TRANSIENT_LOCAL outage metrics and 181-sample azimuth cut; consumed by DetectionProcessor (return synthesis) and HMI-UI (B-scope overlay) |
+| `Radar/RawReturn` | RawReturn | 1 kHz/face; 4 kHz aggregate | RawReturnProfile | BEST_EFFORT, four face-keyed post-beamforming I/Q streams; 500us latency budget. Each sample contains 668 complex range cells and loops back inside DetectionProcessor |
+| `Radar/DetectionEvent` | DetectionEvent | data-dependent, all faces | DetectionEventProfile | BEST_EFFORT, face-keyed dwell-integrated CFAR-like plots; consumed by resolution-cell fusion/TrackManager and HMI-UI (PPI) |
+| `Radar/BeamCommand` | BeamCommand | 100 Hz/face; 400 Hz aggregate | BeamCommandProfile | RELIABLE face-keyed dwell schedule; consumed by Beamformer and DetectionProcessor |
+| `Radar/BeamPatternStatus` | BeamPatternStatus | 20 Hz/face; 80 Hz aggregate | BeamPatternStatusProfile | Face-keyed Beamformer-owned RELIABLE + TRANSIENT_LOCAL outage metrics and 181-sample azimuth cut; consumed by DetectionProcessor (return synthesis) and HMI-UI (B-scope overlay) |
 | `Radar/TargetTrack` | TargetTrack | 10 Hz | TargetTrackProfile | RELIABLE + TRANSIENT_LOCAL + 200 ms deadline; consumed by HMI-UI (track list) |
-| `Radar/CalibrationStatus` | CalibrationStatus | 1 Hz + changes | CalibrationStatusProfile | array health: 1024-element drift + `rma_offline_mask`; consumed by Beamformer and HMI-UI (health + ARRAY FACE panels) |
-| `Radar/SystemCommand` | SystemCommand | bursty | SystemCommandProfile | RELIABLE, WaitSet-handled |
+| `Radar/CalibrationStatus` | CalibrationStatus | 1 Hz/face + changes | CalibrationStatusProfile | Face-keyed array health: 1024-element drift + `rma_offline_mask`; consumed by Beamformer and HMI-UI (health + ARRAY FACE panels) |
+| `Radar/SystemCommand` | SystemCommand | bursty | SystemCommandProfile | RELIABLE, WaitSet-handled; `target_face_mask` addresses one or more faces |
 | `Ship/ShipPosition` | ShipPosition | 10 Hz | ShipPositionProfile | keyed: 0 = INS, 1 = truth; key 0 consumed by HMI-UI (ship panel) |
 | `TargetGen/TargetTruth` | TargetTruth | 50 Hz/target | TargetTruthProfile | keyed per target |
 
-All keyed topics have a **bounded key space** (constant source ids, a
-recycled track-id pool, a modulo command-id range): an ever-incrementing
-key would register a new DDS instance per sample and grow writer/reader
-memory without bound.
+All keyed topics have a **bounded key space** (four face ids, constant source
+ids, a recycled track-id pool, and a modulo command-id range): an
+ever-incrementing key would register a new DDS instance per sample and grow
+writer/reader memory without bound.
 
 ### DetectionProcessor loopback simplification
 
@@ -263,10 +305,10 @@ the T/R modules fire a pulse, switch to receive microseconds later, and the digi
 beamformer aggregates returns from all elements before handing them to the CFAR engine.
 
 For this simulation, `DetectionProcessor` **both publishes and subscribes** to
-`Radar/RawReturn` (the 1 kHz loopback shown in the diagram). The participant
-**produces** the synthetic I/Q data — modeling the pulse-repetition-rate stream
-that would come from the radar face — and then **consumes it back** to run CFAR
-detection processing.
+`Radar/RawReturn` (four keyed 1 kHz loopbacks). The participant **produces**
+four independent synthetic post-beamforming I/Q streams—one for each radar
+face—and then **consumes them back** to run dwell integration and CFAR-like
+plot extraction.
 
 The realism is baked in via the `TargetGen/TargetTruth` subscription:
 DetectionProcessor reads the ground-truth target positions, extrapolates each
@@ -275,8 +317,17 @@ I/Q with two-way carrier phase, RCS-based amplitude, 1/r^4 received-power
 attenuation, and a Rayleigh noise floor. It applies the effective gain, width,
 pointing error, and sidelobes received from `Radar.Beamformer` over
 `Radar/BeamPatternStatus`, then spreads each return over a short compressed-pulse
-response. The 1 kHz `RawReturn` stream therefore behaves like radar data rather
+response. Each 1 kHz face instance therefore behaves like radar data rather
 than random numbers.
+
+For each 10 ms pointing, the receiver noncoherently averages I/Q power from
+the ten 1 kHz pulses and performs peak extraction once on the resulting RMS
+range trace. Thus a target produces a dwell plot, not ten independent tracker
+hits. Before association, unresolved reports from overlapping adjacent beams
+or face seams are combined into one SNR-weighted range/bearing plot. The
+tracker uses separate range and cross-range gates (the latter grows with
+range), confirms only after three independent scan visits within five nominal
+face volumes, and then permits a confirmed track to coast for 12 seconds.
 
 ### Representative RF and waveform model
 
@@ -300,20 +351,33 @@ sets minimum receive range; PRF schedules raw returns; and propagated
 two-way carrier phase is written into I/Q. The same metadata is appended to
 `Radar/BeamPatternStatus` so it is visible in Connext Studio.
 
-The full-volume search raster contains 160 azimuth positions at 2.25-degree
-spacing on each of three elevation bars: 480 unique pointings at 100 Hz, or a
-4.8-second revisit. The nominal azimuth pattern is calculated from the
+Each face uses 40 half-step-inset azimuth centers at 2.25-degree spacing on
+each of three elevation bars: 120 pointings per face. All four faces advance
+concurrently at 100 Hz, so the radar publishes 480 face-keyed pointings per
+1.2-second full volume. The nominal azimuth pattern is calculated from the
 32-column aperture with 50 mm physical spacing at the representative 3 GHz
 carrier and has an approximately 3.2-degree 3 dB beamwidth. Adjacent
 half-power footprints therefore overlap by about 0.9 degree; the raster has
 no nominal azimuth dead stripes.
 
-> **Production note:** a real system would not put raw I/Q on DDS at 1 kHz × 668
-> complex cells (~5.3 MB/s). The loopback exists here to stress-test the middleware and to make the
-> full data flow visible in Connext Studio. A deployed architecture would use separate
-> `Radar.Transmitter` and `Radar.Receiver` participants, with the raw data staying on
-> a high-bandwidth internal fabric (PCIe, RDMA, or shared memory) rather than the
-> DDS data bus.
+> **Production note:** a real system would not put four raw-I/Q streams on DDS
+> at 1 kHz × 668 complex cells (about 5.3 MB/s per face, 21.4 MB/s aggregate
+> before DDS overhead). The loopback exists to stress-test the middleware and
+> make the full data flow visible in Connext Studio. A deployed architecture
+> would keep raw data on a high-bandwidth internal fabric (PCIe, RDMA, or
+> shared memory) rather than the DDS data bus.
+
+### Signal-processing pipeline and data-rate reduction
+
+The physical reference path and the implemented simplification are aligned
+below. The upper rate is calculated from the same four 1,024-element faces,
+668-cell receive window, and 1 kHz PRF used by the simulator; it is not a claim
+about operational SPY-6 throughput. The comparison separates complex-sample
+workload from payload byte rate and shows exactly where the implementation
+removes the element-channel dimension, integrates pulses, and converts dense
+range arrays into sparse plots and tracks.
+
+![Physical radar versus implemented simulation signal-processing pipeline and data rates](docs/signal_processing_pipeline.svg)
 
 ### WaitSet vs. listener split
 
@@ -343,7 +407,8 @@ ship-relative polar for detections, ship-relative ENU for tracks/truth.
   Studio's topology map shows `Radar.BeamScheduler`, `Radar.TrackManager`,
   etc. as individual nodes. A production system would use one participant
   with several publishers/subscribers.
-- `RawReturn` at 1 kHz x 668 complex cells (~5.3 MB/s) exercises the bus for the demo;
+- four keyed `RawReturn` instances at 1 kHz × 668 complex cells
+  (~21.4 MB/s aggregate) exercise the bus for the demo;
   a real system would not put raw I/Q on DDS at this rate.
 - QoS **variety is intentional** (BEST_EFFORT sensor paths vs RELIABLE
   command/track paths) so Studio's match analysis has something to show.

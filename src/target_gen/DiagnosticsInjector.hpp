@@ -18,6 +18,7 @@
 #include <thread>
 
 #include "DdsSupport.hpp"
+#include "RadarFaces.hpp"
 #include "TopicNames.hpp"
 
 namespace target_gen {
@@ -29,15 +30,19 @@ public:
 
     void inject_qos_mismatch();
     void inject_type_mismatch();
-    void send_degrade_command();
+    void send_degrade_command(
+        radar::faces::FaceMask target_face_mask);
     // One-shot SystemCommand(CMD_RMA_OFFLINE, params) — params is the RMA
     // index "0".."15" or "all". Scripted counterpart of the pane click.
-    void send_rma_offline(const std::string& params);
+    void send_rma_offline(
+        const std::string& params,
+        radar::faces::FaceMask target_face_mask);
     void stop();
 
 private:
     void send_system_command(radar::types::CommandType type,
-                             const std::string& params);
+                             const std::string& params,
+                             radar::faces::FaceMask target_face_mask);
 
     int32_t domain_id_;
     std::atomic<bool> stop_{false};
