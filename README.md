@@ -82,7 +82,8 @@ ctest --test-dir build --output-on-failure
   **ALL OFFLINE / ALL ONLINE** control. The A-scope
   azimuth/elevation changes throughout to cover the focus-loss regression.
 - `target_scenario_regression` accelerates 30 minutes of a deterministic
-  16-target two-repeat scenario and checks stable IDs/profile mix, bounded motion,
+  16-target scenario containing the fixed 12 km baseline orbit and 15
+  randomized targets, and checks stable IDs/profile mix, bounded motion,
   deterministic seeded behavior, the missile altitude floor, and periodic
   120 km respawns.
 - `tracker_replay_regression` runs the four concurrent face rasters, independent
@@ -139,7 +140,7 @@ Launcher options:
 | `--build-dir PATH` | Auto-detect | Use a specific CMake build directory instead of searching `build/macos-arm64`, `build`, and the repository installation layout. |
 | `--connext-dir PATH` | Environment/auto-detect | Use a specific RTI Connext installation instead of `CONNEXTDDS_DIR`, `NDDSHOME`, or the default macOS installation. |
 | `--domain N` | `92` | Select DDS domain `0..232`. |
-| `--targets N` | `32` | Launch `target_gen` with `1..256` targets. |
+| `--targets N` | `32` | Launch `target_gen` with `1..256` total targets: one fixed 12 km baseline orbit plus `N-1` randomized inbound targets. With `N=1`, only the baseline is generated. |
 | `--run-seconds N` | `0` | Stop automatically after `N` seconds (`0..604800`); zero runs until window close or Ctrl-C. |
 | `--headless` | Off | Run `radar_app` without the graphics window. |
 | `-h`, `--help` | — | Print launcher usage and exit. |
@@ -156,9 +157,10 @@ source $CONNEXTDDS_DIR/resource/scripts/rtisetenv_arm64Darwin23clang16.0.bash
 ./build/radar_app.app/Contents/MacOS/radar_app
 
 # Terminal 2 — the target generator
-# Live webinars use 32 targets (four repeats of the eight-profile mix).
-# Targets fly inbound and are recycled past 120 km so the picture stays busy;
-# tune with --respawn-range KM, 0 disables.
+# Live webinars use 32 total targets: one deterministic fighter circling the
+# ship at 12 km slant range plus 31 randomized inbound targets. Randomized
+# targets are recycled past 120 km so the picture stays busy; tune with
+# --respawn-range KM, 0 disables.
 source $CONNEXTDDS_DIR/resource/scripts/rtisetenv_arm64Darwin23clang16.0.bash
 ./build/target_gen --targets 32
 

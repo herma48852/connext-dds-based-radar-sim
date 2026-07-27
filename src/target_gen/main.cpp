@@ -142,7 +142,9 @@ int run_target_gen(int argc, char** argv) {
                 "           [--degrade-array] [--rma-offline N|all]\n"
                 "           [--face fs|as|ap|fp|all]\n"
                 "           [--run-seconds N] [--stop-file PATH]\n"
-                "  --respawn-range  targets past this ship-relative range are\n"
+                "  --targets        total targets: one deterministic 12 km\n"
+                "                   baseline orbit plus N-1 randomized inbound\n"
+                "  --respawn-range  randomized targets past this ship-relative range are\n"
                 "                   recycled inbound (default 120 km, 0 disables);\n"
                 "                   keeps the demo picture busy indefinitely\n"
                 "  --rma-offline    send CMD_RMA_OFFLINE at t+5s (RMA index\n"
@@ -175,7 +177,8 @@ int run_target_gen(int argc, char** argv) {
     std::signal(SIGINT, on_sigint);
 
     std::cout << "[target_gen] starting on DDS domain " << domain
-              << " with " << num_targets << " targets\n";
+              << " with " << num_targets << " targets (1 baseline + "
+              << (num_targets - 1) << " randomized)\n";
 
     target_gen::TargetFleet fleet(domain, num_targets);
     fleet.set_respawn_range_km(respawn_km);

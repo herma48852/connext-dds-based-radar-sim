@@ -31,7 +31,7 @@ Options:
   --build-dir PATH    CMake build directory (auto-detected by default)
   --connext-dir PATH  RTI Connext DDS installation (uses CONNEXTDDS_DIR/NDDSHOME)
   --domain N          DDS domain, 0..232 (default: 92)
-  --targets N         Number of targets, 1..256 (default: 32)
+  --targets N         Total targets: baseline plus N-1 randomized (default: 32)
   --run-seconds N     Stop after N seconds; 0 runs until window close/Ctrl-C
   --headless          Run radar_app without a window
   -h, --help          Show this help

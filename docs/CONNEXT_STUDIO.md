@@ -76,7 +76,9 @@ Hierarchical names render as a tree: `Radar/...`, `Ship/...`,
   telemetry published by `Radar.Beamformer`. Chart gain loss, 3 dB width,
   boresight error, and peak sidelobe level; reshape the 181-value azimuth cut
   into a line plot.
-- `TargetGen/TargetTruth` — one instance per `target_id`.
+- `TargetGen/TargetTruth` — one instance per `target_id`, including the
+  deterministic baseline fighter (`target_id = 1`) circling the ship at a
+  constant 12 km slant range.
 
 ### 2.3 QoS inspection
 

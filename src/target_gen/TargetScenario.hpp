@@ -20,6 +20,7 @@ enum class ScenarioTargetType : int32_t {
 struct TargetState {
     int32_t id = 0;
     ScenarioTargetType type = ScenarioTargetType::Fighter;
+    bool baseline_orbit = false;
     double x = 0.0;
     double y = 0.0;
     double z = 0.0;
@@ -39,7 +40,13 @@ public:
     static constexpr double kShipSpeedMps   = 10.3;
     static constexpr double kShipStartLat   = 36.90;
     static constexpr double kShipStartLon   = -75.90;
+    static constexpr int32_t kBaselineTargetId = 1;
+    static constexpr double kBaselineRangeM = 12000.0;
+    static constexpr double kBaselineElevationDeg = 14.0;
+    static constexpr double kBaselineSpeedMps = 250.0;
 
+    // num_targets is the total fleet: one deterministic baseline orbit plus
+    // num_targets - 1 randomized inbound targets.
     explicit TargetScenario(int num_targets, uint64_t seed = 20260719);
 
     void set_respawn_range_km(double km) { respawn_range_m_ = km * 1000.0; }
