@@ -186,8 +186,15 @@ int UiApp::run() {
         const auto array_grid = bus_.array_grid(selected_face_id_);
         const auto beam_azimuths = bus_.beam_azimuths();
         std::array<uint32_t, faces::kFaceCount> rma_masks{};
-        for (std::size_t i = 0; i < rma_masks.size(); ++i)
+        std::array<int32_t, faces::kFaceCount> radar_modes{};
+        std::array<double, faces::kFaceCount> sector_centers_deg{};
+        std::array<double, faces::kFaceCount> sector_widths_deg{};
+        for (std::size_t i = 0; i < rma_masks.size(); ++i) {
             rma_masks[i] = bus_.rma_offline_mask[i].load();
+            radar_modes[i] = bus_.radar_mode[i].load();
+            sector_centers_deg[i] = bus_.sector_center_deg[i].load();
+            sector_widths_deg[i] = bus_.sector_width_deg[i].load();
+        }
 
         // ---- render ----
 #if defined(__APPLE__)
@@ -216,6 +223,7 @@ int UiApp::run() {
         ppi_.render("PPI - PLAN POSITION INDICATOR",
                     ImVec2(0, 0), ImVec2(ppi_w, scope_h),
                     tracks, ship, beam_azimuths, rma_masks,
+                    radar_modes, sector_centers_deg, sector_widths_deg,
                     selected_face_id_, now_ms, dt);
 
         // The comparison view needs enough vertical room for its status,

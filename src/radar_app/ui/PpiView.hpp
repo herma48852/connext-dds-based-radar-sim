@@ -30,6 +30,11 @@ public:
                 const app::ShipView& ship,
                 const std::array<double, faces::kFaceCount>& sweep_az_deg,
                 const std::array<uint32_t, faces::kFaceCount>& rma_masks,
+                const std::array<int32_t, faces::kFaceCount>& radar_modes,
+                const std::array<double, faces::kFaceCount>&
+                    sector_centers_deg,
+                const std::array<double, faces::kFaceCount>&
+                    sector_widths_deg,
                 int32_t selected_face_id,
                 int64_t now_ms, float dt);
 

@@ -53,6 +53,11 @@ void PpiView::render(const char* title, ImVec2 pos, ImVec2 size,
                      const app::ShipView& ship,
                      const std::array<double, faces::kFaceCount>& sweep_az_deg,
                      const std::array<uint32_t, faces::kFaceCount>& rma_masks,
+                     const std::array<int32_t, faces::kFaceCount>& radar_modes,
+                     const std::array<double, faces::kFaceCount>&
+                         sector_centers_deg,
+                     const std::array<double, faces::kFaceCount>&
+                         sector_widths_deg,
                      int32_t selected_face_id,
                      int64_t now_ms, float dt) {
     ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
@@ -100,8 +105,11 @@ void PpiView::render(const char* title, ImVec2 pos, ImVec2 size,
         const bool selected = face.id == selected_face_id;
         const bool offline =
             (rma_masks[face_index] & 0xFFFFu) == 0xFFFFu;
+        const bool sector_mode = radar_modes[face_index] == 1;
         const ImU32 face_color = offline
             ? theme::col_led_fault() : theme::col_sweep();
+        const ImU32 mode_color = sector_mode
+            ? theme::col_led_warn() : face_color;
 
         if (selected || offline) {
             dl->PathClear();
@@ -134,15 +142,76 @@ void PpiView::render(const char* title, ImVec2 pos, ImVec2 size,
             with_alpha(face_color, selected ? 150 : 75),
             selected ? 1.6f : 1.0f);
 
+        // Sector Scan is persistent per face, independent of which face is
+        // selected in the controls. Show every active sector as a face-local
+        // amber wedge with boundary rays so the PPI reflects that retained
+        // scheduler state instead of implying that only the selected face is
+        // in Sector Scan.
+        if (sector_mode) {
+            const double half_width = sector_widths_deg[face_index] * 0.5;
+            const double sector_start =
+                sector_centers_deg[face_index] - half_width;
+            const double sector_end =
+                sector_centers_deg[face_index] + half_width;
+
+            dl->PathClear();
+            dl->PathLineTo(ImVec2((float)cx, (float)cy));
+            constexpr int kSectorSegments = 12;
+            for (int segment = 0; segment <= kSectorSegments; ++segment) {
+                const double fraction =
+                    static_cast<double>(segment) / kSectorSegments;
+                const double azimuth =
+                    sector_start
+                    + fraction * (sector_end - sector_start)
+                    + ship.heading_deg;
+                const double angle = azimuth * kDeg2Rad;
+                dl->PathLineTo(ImVec2(
+                    (float)(cx + R * std::sin(angle)),
+                    (float)(cy - R * std::cos(angle))));
+            }
+            dl->PathFillConvex(
+                with_alpha(mode_color, selected ? 30 : 18));
+
+            for (const double edge : {sector_start, sector_end}) {
+                const double angle =
+                    (edge + ship.heading_deg) * kDeg2Rad;
+                const ImVec2 end(
+                    (float)(cx + R * std::sin(angle)),
+                    (float)(cy - R * std::cos(angle)));
+                constexpr int kDashCount = 18;
+                for (int dash = 0; dash < kDashCount; dash += 2) {
+                    const float t0 =
+                        static_cast<float>(dash) / kDashCount;
+                    const float t1 =
+                        static_cast<float>(dash + 1) / kDashCount;
+                    dl->AddLine(
+                        ImVec2(
+                            (float)cx + (end.x - (float)cx) * t0,
+                            (float)cy + (end.y - (float)cy) * t0),
+                        ImVec2(
+                            (float)cx + (end.x - (float)cx) * t1,
+                            (float)cy + (end.y - (float)cy) * t1),
+                        with_alpha(mode_color, selected ? 230 : 175),
+                        selected ? 1.5f : 1.0f);
+                }
+            }
+        }
+
         const double label_angle =
             (face.boresight_deg + ship.heading_deg) * kDeg2Rad;
+        char face_label[16];
+        std::snprintf(
+            face_label, sizeof face_label, "%s %s",
+            face.short_name.data(), sector_mode ? "SEC" : "SRCH");
+        const ImVec2 face_label_size = ImGui::CalcTextSize(face_label);
         dl->AddText(
-            ImVec2((float)(cx + 0.84 * R * std::sin(label_angle)) - 8.0f,
+            ImVec2((float)(cx + 0.84 * R * std::sin(label_angle))
+                       - face_label_size.x * 0.5f,
                    (float)(cy - 0.84 * R * std::cos(label_angle)) - 6.0f),
             with_alpha(
-                face_color,
+                mode_color,
                 selected || offline ? 235 : 130),
-            face.short_name.data());
+            face_label);
     }
 
     // --- azimuth spokes every 30 deg + degree labels ---
