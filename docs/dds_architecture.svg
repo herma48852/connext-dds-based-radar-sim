@@ -1,4 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1480 940" font-family="Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="1480" height="940"
+     viewBox="0 0 1480 940" font-family="Helvetica, Arial, sans-serif">
 
   <!-- background -->
   <rect x="0" y="0" width="1480" height="940" fill="#0a0a0f"/>

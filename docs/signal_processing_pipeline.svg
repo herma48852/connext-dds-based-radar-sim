@@ -1,4 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1800 1280"
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1280"
+     viewBox="0 0 1800 1280"
      font-family="Helvetica, Arial, sans-serif">
   <title>Physical radar and implemented simulation signal-processing pipelines</title>
   <desc>
