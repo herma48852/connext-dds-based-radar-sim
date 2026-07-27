@@ -219,6 +219,11 @@ if(RADAR_BUILD_APPLICATIONS)
 
     if(APPLE)
         target_sources(radar_app PRIVATE src/radar_app/ui/MetalContext.mm)
+        # UiApp's render loop owns the per-frame @autoreleasepool. Compile
+        # this otherwise-portable source as Objective-C++ on macOS so every
+        # autoreleased CAMetalDrawable/command object is drained each frame.
+        set_source_files_properties(src/radar_app/ui/UiApp.cpp
+            PROPERTIES LANGUAGE OBJCXX COMPILE_OPTIONS "-fobjc-arc")
         set_source_files_properties(src/radar_app/ui/MetalContext.mm
             PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
         set_target_properties(radar_app PROPERTIES

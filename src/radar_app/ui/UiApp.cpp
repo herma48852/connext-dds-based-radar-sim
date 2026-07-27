@@ -142,6 +142,14 @@ int UiApp::run() {
     if (!init()) return 1;
 
     while (!glfwWindowShouldClose(window_)) {
+#if defined(__APPLE__)
+        // Metal, QuartzCore, and the ImGui Metal backend return autoreleased
+        // objects throughout a frame (notably CAMetalDrawable and command
+        // encoding helpers). This executable has a C++ main and therefore no
+        // AppKit-managed per-event pool. Without this scope, one drawable and
+        // its Foundation bookkeeping remain live for every rendered frame.
+        @autoreleasepool {
+#endif
         glfwPollEvents();
         if (stop_requested_ && stop_requested_()) {
             glfwSetWindowShouldClose(window_, GLFW_TRUE);
@@ -271,6 +279,9 @@ int UiApp::run() {
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         glfwSwapBuffers(window_);
+#endif
+#if defined(__APPLE__)
+        }
 #endif
     }
     return 0;
