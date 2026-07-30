@@ -447,8 +447,12 @@ two-way carrier phase is written into I/Q. The same metadata is appended to
 Each face uses 40 half-step-inset azimuth centers at 2.25-degree spacing on
 each of three elevation bars: 120 pointings per face. All four faces advance
 concurrently at 100 Hz, so the radar publishes 480 face-keyed pointings per
-1.2-second full volume. The nominal azimuth pattern is calculated from the
-32-column aperture with 50 mm physical spacing at the representative 3 GHz
+1.2-second full volume. Each face contains 16 Radar Modular Assemblies (RMAs)
+arranged in a 4-by-4 square. Each RMA contains an 8-by-8 grid of transmit/
+receive (T/R) elements, so the complete face is a 32-by-32-element array
+(4 RMAs × 8 elements in each dimension), totaling 1,024 T/R elements. The
+nominal azimuth pattern is therefore calculated from the face's 32-column
+aperture with 50 mm physical element spacing at the representative 3 GHz
 carrier and has an approximately 3.2-degree 3 dB beamwidth. Adjacent
 half-power footprints therefore overlap by about 0.9 degree; the raster has
 no nominal azimuth dead stripes.
