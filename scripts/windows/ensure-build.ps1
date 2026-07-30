@@ -36,8 +36,10 @@ function Resolve-RadarWindowsBuild {
         foreach ($candidateDir in $candidateDirs) {
             $candidateRadar = Join-Path $candidateDir "radar_app.exe"
             $candidateTarget = Join-Path $candidateDir "target_gen.exe"
+            $candidateControl = Join-Path $candidateDir "target_control.exe"
             if ((Test-Path -LiteralPath $candidateRadar) -and
-                (Test-Path -LiteralPath $candidateTarget)) {
+                (Test-Path -LiteralPath $candidateTarget) -and
+                (Test-Path -LiteralPath $candidateControl)) {
                 return [pscustomobject]@{
                     BuildDir = if ($candidateDir -eq (Join-Path $RepoRoot "bin")) {
                         $RepoRoot
@@ -47,6 +49,7 @@ function Resolve-RadarWindowsBuild {
                     ConfigDir = $candidateDir
                     RadarExe = $candidateRadar
                     TargetExe = $candidateTarget
+                    ControlExe = $candidateControl
                 }
             }
         }
@@ -90,7 +93,7 @@ function Resolve-RadarWindowsBuild {
 
     $binaries = Find-RadarWindowsBinaries
     if (-not $binaries) {
-        throw "CMake completed, but radar_app.exe and target_gen.exe were not found in '$BuildDir'."
+        throw "CMake completed, but radar_app.exe, target_gen.exe, and target_control.exe were not found in '$BuildDir'."
     }
     return $binaries
 }

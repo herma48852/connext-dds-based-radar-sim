@@ -15,20 +15,26 @@ separate workspace.
 > **[Radar Display Operator Guide](docs/OPERATOR_DISPLAY_GUIDE.md)** for panel
 > meanings, coordinate frames, colors, controls, and common audience
 > questions.
+>
+> **Target scenario authors:** Use the
+> **[Target Control Guide](docs/TARGET_CONTROL.md)** for the separate control
+> domain, additive scenario lifecycle, and target-removal controls.
 
-Two applications, one CMake monorepo, one DDS domain (default: domain 0):
+Three applications in one CMake monorepo. Radar data stays on the simulation
+DDS domain; the optional target-management UI uses a separate control domain:
 
 | App          | Purpose |
 |--------------|---------|
 | `radar_app`  | Simulated radar on a moving ship. Internal components (BeamScheduler, Beamformer, DetectionProcessor, TrackManager, CalibrationMonitor, CommandHandler, CommandConsole, HMI-UI) communicate **exclusively via DDS topics**. ImGui UI (native Metal on macOS, OpenGL 3.3 elsewhere) with PPI, A-scope, B-scope, track list, beam timeline, health, ship and ARRAY FACE panels (click an RMA block to take it offline). |
-| `target_gen` | Synthetic target generator (configurable trajectories, RCS, kinematics) publishing `TargetGen/TargetTruth` + ship-motion ground truth. Can inject QoS/type mismatches and the degraded-array scenario on demand. |
+| `target_gen` | Synthetic target generator publishing `TargetGen/TargetTruth` + ship-motion ground truth on the simulation domain. A second participant accepts additive scenario management on the separate control domain. |
+| `target_control` | Dedicated ImGui target-management UI. Discovers the scenario catalog, adds repeated independent instances, removes targets/groups, and clears the fleet without restarting the simulation. |
 
 ```
 AesaRadarSim/
 ├── CMakeLists.txt               # macOS-first, Windows-ready build
 ├── cmake/                       # toolchain files (arm64 macOS, MSVC x64)
 ├── idl/radar_types.idl          # @appendable types, module radar::types
-├── qos/radar_qos.xml            # single QoS file, 11 named profiles
+├── qos/radar_qos.xml            # single QoS file, 15 named profiles
 ├── src/common/                  # DDS bootstrap, SPSC queue, sim clock
 ├── src/radar_app/
 │   ├── components/              # one class per radar component, one
@@ -36,7 +42,9 @@ AesaRadarSim/
 │   ├── ui/                      # PpiView, AScopeView, BScopeView, Panels
 │   └── main.cpp
 ├── src/target_gen/              # DDS adapter + testable target scenario core
+├── src/target_control/          # separate-domain target management UI
 ├── scripts/run-demo.sh          # one-command Bash demo launcher
+├── scripts/windows/start-all.cmd # Windows launcher for all three processes
 ├── tests/                       # headless UI, target, and tracker regressions
 ├── ConnextStudioDemo.md         # live webinar workspace-switching runbook
 └── docs/CONNEXT_STUDIO.md       # monitoring / diagnostics demo guide
@@ -85,7 +93,11 @@ ctest --test-dir build --output-on-failure
   16-target scenario containing the fixed 12 km baseline orbit and 15
   randomized targets, and checks stable IDs/profile mix, bounded motion,
   deterministic seeded behavior, the missile altitude floor, and periodic
-  120 km respawns.
+  120 km respawns. It also verifies additive scenario instances,
+  deterministic separation of repeated launches, individual/group removal,
+  clear-all, the 15-second minimum-range transit, the one-shot face-seam
+  handoff, the free-bearing two-target crossing geometry, and the
+  face-boundary crossing variant.
 - `tracker_replay_regression` runs the four concurrent face rasters, independent
   post-beamforming streams, ten-pulse dwell integration, resolution-cell plot
   fusion, and production tracker against deterministic golden event counts
@@ -118,22 +130,57 @@ do not alter or compete with a live webinar run.
 
 ## Run
 
-The Bash launcher starts both applications, selects either the preset or
-legacy build automatically, configures the Connext runtime and QoS paths,
-writes separate logs, and stops both processes together:
+### Complete interactive demo on Windows
+
+The primary Windows launcher starts the radar display, target generator, and
+target-management UI together:
+
+```bat
+scripts\windows\start-all.cmd -Domain 92 -Targets 32
+```
+
+Use `start-all.cmd` for interactive development, operator demonstrations, and
+webinars where targets must be added or removed while the radar continues
+running. It puts radar traffic on simulation domain 92 and target-management
+traffic on control domain 93 by default, configures the Connext DLL and QoS
+environment, and writes separate logs for all three processes. Close the radar
+window to stop the complete demo cooperatively.
+
+The launcher uses `CONNEXTDDS_DIR` or `NDDSHOME`, falling back to the standard
+Connext 7.7.0 installation under `C:\Program Files`. The executables must
+already be built. See the
+[Windows 11 Clean-Machine Runbook](docs/RUN_WINDOWS.md) for the complete setup
+and build procedure.
+
+Common `start-all.cmd` options:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-Domain N` | `92` | Select the simulation DDS domain (`0..232`). |
+| `-ControlDomain N` | Simulation domain + 1 | Select the separate target-management domain. |
+| `-Targets N` | `32` | Start with one baseline orbit plus `N-1` randomized inbound targets. |
+| `-Configuration NAME` | `RelWithDebInfo` | Select `Debug`, `RelWithDebInfo`, or `Release`. |
+| `-BuildDir PATH` | `build\windows-x64` | Use a specific CMake build directory. |
+| `-ConnextDir PATH` | Environment/standard install | Use a specific RTI Connext installation. |
+| `-RunSeconds N` | Until the radar closes | Stop all three processes automatically after `N` seconds. |
+
+### Interactive demo on macOS
+
+The Bash launcher starts the radar display and target generator, selects the
+preset or legacy build automatically, configures the Connext runtime and QoS
+paths, writes separate logs, and stops both processes together:
 
 ```bash
 ./scripts/run-demo.sh --domain 92 --targets 32
-
-# Unattended DDS-only run:
-./scripts/run-demo.sh --domain 92 --targets 32 --headless --run-seconds 20
 ```
 
-It uses `CONNEXTDDS_DIR` or `NDDSHOME`, and on macOS also detects the default
+It uses `CONNEXTDDS_DIR` or `NDDSHOME` and also detects the default
 `/Applications/rti_connext_dds-7.7.0` installation. Close the radar window or
-press Ctrl-C in the launcher to stop both processes cooperatively.
+press Ctrl-C in the launcher to stop both processes cooperatively. The
+launcher prints the command for starting the optional `target_control` UI
+separately.
 
-Launcher options:
+Bash launcher options:
 
 | Option | Default | Description |
 |--------|---------|-------------|
@@ -144,6 +191,26 @@ Launcher options:
 | `--run-seconds N` | `0` | Stop automatically after `N` seconds (`0..604800`); zero runs until window close or Ctrl-C. |
 | `--headless` | Off | Run `radar_app` without the graphics window. |
 | `-h`, `--help` | — | Print launcher usage and exit. |
+
+### Unattended DDS-only runs
+
+Use an unattended DDS-only run for automated smoke checks, bounded soak tests,
+remote machines without a display, or Connext Studio captures that need live
+radar traffic but no operator interaction. The headless radar still creates
+its DDS participants and runs the complete processing pipeline; only the
+graphics and target-management windows are omitted. `RunSeconds` gives
+automation a deterministic stop time, and the launchers retain stdout and
+stderr logs for diagnosis.
+
+```bat
+rem Windows
+scripts\windows\run-demo.cmd -Domain 92 -Targets 32 -Headless -RunSeconds 20
+```
+
+```bash
+# macOS
+./scripts/run-demo.sh --domain 92 --targets 32 --headless --run-seconds 20
+```
 
 To run the applications manually in separate terminals:
 
@@ -162,7 +229,10 @@ source $CONNEXTDDS_DIR/resource/scripts/rtisetenv_arm64Darwin23clang16.0.bash
 # targets are recycled past 120 km so the picture stays busy; tune with
 # --respawn-range KM, 0 disables.
 source $CONNEXTDDS_DIR/resource/scripts/rtisetenv_arm64Darwin23clang16.0.bash
-./build/target_gen --targets 32
+./build/target_gen --domain 92 --control-domain 93 --targets 32
+
+# Terminal 3 — optional target scenario control UI (control domain only)
+./build/target_control --domain 93
 
 # Diagnostic scenarios (combinable):
 ./build/target_gen --inject-qos-mismatch     # RELIABLE reader vs BEST_EFFORT writer
@@ -178,7 +248,13 @@ source $CONNEXTDDS_DIR/resource/scripts/rtisetenv_arm64Darwin23clang16.0.bash
 > `rtisetenv_*.bash` (or exporting `DYLD_LIBRARY_PATH` to the target `lib`
 > directory) is required before launching.
 
-Both apps accept `--domain N` (default 0). The radar UI also has a
+`target_gen --control-domain N` defaults to the simulation domain plus one
+(wrapping after 232) and must differ from `--domain`. `target_control --domain`
+selects that control domain; it never joins the radar data domain. Scenario
+selection is additive, and **CLEAR ALL** disposes all current target instances
+without stopping `target_gen`. See [Target Control](docs/TARGET_CONTROL.md).
+
+Both simulation apps accept `--domain N` (default 0). The radar UI also has a
 **SCENARIOS** panel (bottom-right). Search/sector mode, degrade/restore array,
 self test, and track reset issue `Radar/SystemCommand`s. **BEAM FORMATION**
 is a local display toggle: it replaces the compact moving outage curtain with

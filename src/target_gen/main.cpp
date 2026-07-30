@@ -9,7 +9,7 @@
 //   --inject-type-mismatch   wrong type on the TargetGen/TargetTruth name
 //   --degrade-array          sends SystemCommand(CMD_DEGRADE_ARRAY) at +5 s
 //
-// Usage: target_gen [--domain N] [--targets N] [scenarios...]
+// Usage: target_gen [--domain N] [--control-domain N] [--targets N] [...]
 // ============================================================================
 
 #include <atomic>
@@ -41,6 +41,7 @@ void on_sigint(int) { g_running.store(false); }
 int run_target_gen(int argc, char** argv) {
     radds::disable_monitoring_lib(); // no monitoring DPs (see DdsSupport)
     int32_t domain = 0;
+    int32_t control_domain = -1;
     int num_targets = 32;
     double respawn_km = 120.0;
     bool qos_mismatch = false, type_mismatch = false, degrade = false;
@@ -56,6 +57,15 @@ int run_target_gen(int argc, char** argv) {
                 !radar::cli::parse_integer<int32_t>(
                     argv[i], 0, 232, domain)) {
                 std::cerr << "--domain must be an integer from 0 to 232\n";
+                return 2;
+            }
+        }
+        else if (std::strcmp(argv[i], "--control-domain") == 0) {
+            if (++i >= argc ||
+                !radar::cli::parse_integer<int32_t>(
+                    argv[i], 0, 232, control_domain)) {
+                std::cerr
+                    << "--control-domain must be an integer from 0 to 232\n";
                 return 2;
             }
         }
@@ -137,13 +147,16 @@ int run_target_gen(int argc, char** argv) {
         }
         else if (std::strcmp(argv[i], "--help") == 0) {
             std::cout <<
-                "target_gen [--domain N] [--targets N] [--respawn-range KM]\n"
+                "target_gen [--domain N] [--control-domain N]\n"
+                "           [--targets N] [--respawn-range KM]\n"
                 "           [--inject-qos-mismatch] [--inject-type-mismatch]\n"
                 "           [--degrade-array] [--rma-offline N|all]\n"
                 "           [--face fs|as|ap|fp|all]\n"
                 "           [--run-seconds N] [--stop-file PATH]\n"
                 "  --targets        total targets: one deterministic 12 km\n"
                 "                   baseline orbit plus N-1 randomized inbound\n"
+                "  --control-domain separate DDS domain used only by the\n"
+                "                   target_control UI (default: domain + 1)\n"
                 "  --respawn-range  randomized targets past this ship-relative range are\n"
                 "                   recycled inbound (default 120 km, 0 disables);\n"
                 "                   keeps the demo picture busy indefinitely\n"
@@ -155,6 +168,14 @@ int run_target_gen(int argc, char** argv) {
                 "  --stop-file      stop cleanly when PATH appears\n";
             return 0;
         }
+    }
+
+    if (control_domain < 0)
+        control_domain = (domain + 1) % 233;
+    if (control_domain == domain) {
+        std::cerr
+            << "--control-domain must differ from the simulation --domain\n";
+        return 2;
     }
 
     const auto process_started = std::chrono::steady_clock::now();
@@ -178,9 +199,10 @@ int run_target_gen(int argc, char** argv) {
 
     std::cout << "[target_gen] starting on DDS domain " << domain
               << " with " << num_targets << " targets (1 baseline + "
-              << (num_targets - 1) << " randomized)\n";
+              << (num_targets - 1) << " randomized); control domain "
+              << control_domain << "\n";
 
-    target_gen::TargetFleet fleet(domain, num_targets);
+    target_gen::TargetFleet fleet(domain, control_domain, num_targets);
     fleet.set_respawn_range_km(respawn_km);
     fleet.start();
 

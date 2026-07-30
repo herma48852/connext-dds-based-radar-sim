@@ -118,7 +118,7 @@ ctest --preset windows-relwithdebinfo
 ```
 
 The configure command only creates Visual Studio project files; it does not
-compile `radar_app.exe` or `target_gen.exe`. You must run the build command
+compile `radar_app.exe`, `target_gen.exe`, or `target_control.exe`. You must run the build command
 before the smoke test. The supported smoke-test and demo launchers also detect
 missing executables and run the configure/build steps automatically, so an
 accidentally omitted build cannot leave the clean-machine workflow stuck.
@@ -142,7 +142,7 @@ system, compiler, or generator.
 ## 6. Run the DDS Integration Smoke Test
 
 On their first launch, Windows Defender Firewall may ask whether
-`radar_app.exe` or `target_gen.exe` can communicate on the network. Allow each
+`radar_app.exe`, `target_gen.exe`, or `target_control.exe` can communicate on the network. Allow each
 application only on the network profile on which the demo will run. Respond
 before the timed test finishes; if the prompt delays DDS discovery and the
 test fails, resolve the prompt and rerun the command below. Do not disable the
@@ -175,9 +175,35 @@ The radar window should open and Command Prompt should report that the AESA
 radar demo is running. Leave that Command Prompt open. To stop both processes
 cleanly, press ENTER or Q in Command Prompt, or close the radar window.
 
+To launch the radar UI, target generator, and target-management UI together,
+use:
+
+```bat
+scripts\windows\start-all.cmd -Domain 92 -Targets 32
+```
+
+`start-all.cmd` is a native Command Prompt batch launcher. It does not invoke
+PowerShell. It finds the three prebuilt executables, configures the RTI DLL and
+QoS environment, and starts all three from the one Command Prompt.
+
+The target-management window is independent and can be moved to another
+Windows virtual desktop or workspace. Close the radar window to stop all three
+applications cleanly.
+
+To open the optional target-management UI in a second Command Prompt that has
+the Step 4 Connext environment, enter:
+
+```bat
+build\windows-x64\RelWithDebInfo\target_control.exe --domain 93
+```
+
+The radar data remains on domain 92. Only `target_gen` and `target_control`
+join the separate control domain 93. Scenario selection is additive; use the
+confirmed **CLEAR ALL** action to dispose every target without restarting.
+
 The `.cmd` files are the supported launch commands. They handle the bundled
 implementation automatically. Do not open or invoke a `.ps1` file directly.
-The demo launcher also supports `-Headless`, `-RunSeconds N`, and
+The demo launchers also support `-Headless`, `-RunSeconds N`, and
 `-StopExisting` when those behaviors are intentionally needed.
 
 ## Optional: Portable Tests Without Connext
@@ -209,7 +235,7 @@ when GLFW reports a monitor-scale change.
 ## DDS and Firewall
 
 The shipped QoS uses UDPv4. Validate same-host operation first. For multi-host
-operation, allow `radar_app.exe`, `target_gen.exe`, and Connext Studio through
+operation, allow `radar_app.exe`, `target_gen.exe`, `target_control.exe`, and Connext Studio through
 Windows Defender Firewall on the intended network profile. Do not disable the
 firewall globally. Use a unique DDS domain when multiple demos share a network.
 
@@ -267,7 +293,9 @@ the authorized Connext runtime or place its `x64Win64VS2017` DLL directory on
 - **The radar window reports a GLFW or OpenGL initialization failure:**
   install the current graphics driver directly from the GPU vendor and
   reboot. The Microsoft fallback OpenGL driver is insufficient.
-- **The smoke test or demo reports no DDS discovery:** confirm that both
-  applications use the same domain, close stale `radar_app.exe` and
-  `target_gen.exe` processes, disconnect unnecessary VPNs, and check the
-  per-application firewall rules. Do not disable the firewall globally.
+- **The smoke test or demo reports no DDS discovery:** confirm that
+  `radar_app` and `target_gen` share the simulation domain and that
+  `target_gen` and `target_control` share a different control domain. Close
+  stale `radar_app.exe`, `target_gen.exe`, and `target_control.exe` processes,
+  disconnect unnecessary VPNs, and check the per-application firewall rules.
+  Do not disable the firewall globally.

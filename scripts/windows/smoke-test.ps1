@@ -34,6 +34,8 @@ $BuildDir = $resolvedBuild.BuildDir
 $configDir = $resolvedBuild.ConfigDir
 $radarExe = $resolvedBuild.RadarExe
 $targetExe = $resolvedBuild.TargetExe
+$controlExe = $resolvedBuild.ControlExe
+$controlDomain = ($Domain + 1) % 233
 
 $env:PATH = "$rtiLibDir;$env:PATH"
 $qosFile = @(
@@ -65,9 +67,16 @@ try {
     $null = $radar.Handle
     Start-Sleep -Seconds 2
     $target = Start-Process -FilePath $targetExe -PassThru `
-        -ArgumentList @("--domain", $Domain, "--targets", 16, "--run-seconds", ($DurationSeconds - 2)) `
+        -ArgumentList @("--domain", $Domain, "--control-domain", $controlDomain,
+                        "--targets", 16, "--run-seconds", ($DurationSeconds - 2)) `
         -RedirectStandardOutput $targetOut -RedirectStandardError $targetErr
     $null = $target.Handle
+    Start-Sleep -Seconds 8
+    $controlOutput = & $controlExe --domain $controlDomain --smoke-test 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "target_control smoke failed: $controlOutput"
+    }
+    Write-Host $controlOutput
 
     $deadline = (Get-Date).AddSeconds($DurationSeconds + 30)
     while ((-not $radar.HasExited -or -not $target.HasExited) -and

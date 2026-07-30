@@ -17,12 +17,20 @@ inline constexpr const char* TOPIC_SYSTEM_COMMAND    = "Radar/SystemCommand";
 inline constexpr const char* TOPIC_RAW_RETURN        = "Radar/RawReturn";
 inline constexpr const char* TOPIC_SHIP_POSITION     = "Ship/ShipPosition";
 inline constexpr const char* TOPIC_TARGET_TRUTH      = "TargetGen/TargetTruth";
+inline constexpr const char* TOPIC_TARGET_CONTROL_REQUEST =
+    "TargetControl/Request";
+inline constexpr const char* TOPIC_TARGET_CONTROL_REPLY =
+    "TargetControl/Reply";
+inline constexpr const char* TOPIC_TARGET_CONTROL_SNAPSHOT =
+    "TargetControl/Snapshot";
 
 // ---- QoS library + profiles (must match qos/radar_qos.xml) ----------------
 inline constexpr const char* QOS_LIBRARY             = "RadarQosLibrary";
 
 inline constexpr const char* PROFILE_RADAR_PARTICIPANT   = "RadarQosLibrary::RadarParticipantProfile";
 inline constexpr const char* PROFILE_TARGETGEN_PARTICIPANT = "RadarQosLibrary::TargetGeneratorParticipantProfile";
+inline constexpr const char* PROFILE_TARGET_CONTROL_PARTICIPANT =
+    "RadarQosLibrary::TargetControlParticipantProfile";
 inline constexpr const char* PROFILE_DETECTION_EVENT     = "RadarQosLibrary::DetectionEventProfile";
 inline constexpr const char* PROFILE_TARGET_TRACK        = "RadarQosLibrary::TargetTrackProfile";
 inline constexpr const char* PROFILE_BEAM_COMMAND        = "RadarQosLibrary::BeamCommandProfile";
@@ -32,5 +40,11 @@ inline constexpr const char* PROFILE_SYSTEM_COMMAND      = "RadarQosLibrary::Sys
 inline constexpr const char* PROFILE_TARGET_TRUTH        = "RadarQosLibrary::TargetTruthProfile";
 inline constexpr const char* PROFILE_SHIP_POSITION       = "RadarQosLibrary::ShipPositionProfile";
 inline constexpr const char* PROFILE_RAW_RETURN          = "RadarQosLibrary::RawReturnProfile";
+inline constexpr const char* PROFILE_TARGET_CONTROL_REQUEST =
+    "RadarQosLibrary::TargetControlRequestProfile";
+inline constexpr const char* PROFILE_TARGET_CONTROL_REPLY =
+    "RadarQosLibrary::TargetControlReplyProfile";
+inline constexpr const char* PROFILE_TARGET_CONTROL_SNAPSHOT =
+    "RadarQosLibrary::TargetControlSnapshotProfile";
 
 } // namespace radar::dds_names

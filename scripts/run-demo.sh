@@ -26,6 +26,7 @@ usage() {
 Usage: scripts/run-demo.sh [options]
 
 Launch radar_app and target_gen together with cooperative shutdown and logs.
+The optional target_control UI is printed after launch and runs separately.
 
 Options:
   --build-dir PATH    CMake build directory (auto-detected by default)
@@ -158,6 +159,7 @@ require_unsigned "--run-seconds" "$run_seconds"
 domain=$((10#$domain))
 targets=$((10#$targets))
 run_seconds=$((10#$run_seconds))
+control_domain=$(((domain + 1) % 233))
 ((domain <= 232)) || die "--domain must be between 0 and 232"
 ((targets >= 1 && targets <= 256)) || die "--targets must be between 1 and 256"
 ((run_seconds <= 604800)) || die "--run-seconds must not exceed 604800"
@@ -181,10 +183,19 @@ resolve_executables() {
         target_candidate="$candidate/bin/target_gen"
     fi
 
-    if [[ -n "$radar_candidate" && -n "$target_candidate" ]]; then
+    local control_candidate=""
+    if [[ -x "$candidate/target_control" ]]; then
+        control_candidate="$candidate/target_control"
+    elif [[ -x "$candidate/bin/target_control" ]]; then
+        control_candidate="$candidate/bin/target_control"
+    fi
+
+    if [[ -n "$radar_candidate" && -n "$target_candidate" &&
+          -n "$control_candidate" ]]; then
         build_dir="$(cd "$candidate" && pwd)"
         radar_exe="$radar_candidate"
         target_exe="$target_candidate"
+        control_exe="$control_candidate"
         return 0
     fi
     return 1
@@ -192,17 +203,18 @@ resolve_executables() {
 
 radar_exe=""
 target_exe=""
+control_exe=""
 if [[ -n "$build_dir" ]]; then
     [[ -d "$build_dir" ]] || die "build directory does not exist: $build_dir"
     resolve_executables "$build_dir" ||
-        die "radar_app and target_gen were not found in: $build_dir"
+        die "radar_app, target_gen, and target_control were not found in: $build_dir"
 else
     for candidate in "$repo_root/build/macos-arm64" "$repo_root/build" "$repo_root"; do
         if [[ -d "$candidate" ]] && resolve_executables "$candidate"; then
             break
         fi
     done
-    [[ -n "$radar_exe" && -n "$target_exe" ]] ||
+    [[ -n "$radar_exe" && -n "$target_exe" && -n "$control_exe" ]] ||
         die "no complete build found; run cmake --build --preset macos-relwithdebinfo"
 fi
 
@@ -333,7 +345,8 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 radar_args=(--domain "$domain" --stop-file "$stop_file")
-target_args=(--domain "$domain" --targets "$targets" --stop-file "$stop_file")
+target_args=(--domain "$domain" --control-domain "$control_domain"
+             --targets "$targets" --stop-file "$stop_file")
 if ((headless)); then
     radar_args+=(--headless)
 fi
@@ -353,6 +366,7 @@ else
         >"$log_dir/target.stdout.log" 2>"$log_dir/target.stderr.log" &
     target_pid=$!
     echo "AESA radar demo running on DDS domain $domain (PIDs $radar_pid, $target_pid)."
+    echo "Optional target UI: $control_exe --domain $control_domain"
     echo "Close the radar window or press Ctrl-C to stop both processes."
     echo "Logs: $log_dir"
 

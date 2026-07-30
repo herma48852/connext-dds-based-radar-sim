@@ -29,6 +29,13 @@ module types {
     const long MAX_BEAM_PATTERN_SAMPLES = 181; // -45..+45 deg azimuth cut
     const long COVARIANCE_SIZE     = 9;     // 3x3 position covariance, row-major
     const long MAX_PARAMS_LEN      = 128;   // free-form command parameter string
+    const long MAX_SCENARIO_NAME_LEN = 64;
+    const long MAX_SCENARIO_LABEL_LEN = 64;
+    const long MAX_SCENARIO_DESCRIPTION_LEN = 256;
+    const long MAX_TARGET_CONTROL_MESSAGE_LEN = 256;
+    const long MAX_TARGET_SCENARIO_TEMPLATES = 32;
+    const long MAX_TARGET_SCENARIO_INSTANCES = 256;
+    const long MAX_TARGET_CONTROL_TARGETS = 256;
 
     // Four fixed ship-relative array faces, numbered clockwise from the
     // forward-starboard quadrant. Face-local topics keep their existing
@@ -115,6 +122,20 @@ module types {
         TARGET_SHIP,
         TARGET_DRONE,
         TARGET_DECOY
+    };
+
+    // Out-of-band target-generator management. These types are used only on
+    // target_gen's separate control domain, never on the radar data domain.
+    enum TargetControlAction {
+        TARGET_CONTROL_ADD_SCENARIO,
+        TARGET_CONTROL_REMOVE_SCENARIO,
+        TARGET_CONTROL_REMOVE_TARGET,
+        TARGET_CONTROL_CLEAR_ALL
+    };
+
+    enum TargetControlResult {
+        TARGET_CONTROL_ACCEPTED,
+        TARGET_CONTROL_REJECTED
     };
 
     // ---- Topic types ---------------------------------------------------------
@@ -266,6 +287,75 @@ module types {
         Cartesian3D acceleration;  // ship-relative ENU [m/s^2]
         double      rcs_dbsm;      // radar cross section [dBsm]
         TargetType  target_type;
+    };
+
+    // Dynamically advertised scenario catalog entry. target_control renders
+    // this catalog without hard-coding one widget layout per future scenario.
+    @appendable
+    struct TargetScenarioTemplateDescriptor {
+        string<MAX_SCENARIO_NAME_LEN> name;
+        string<MAX_SCENARIO_LABEL_LEN> label;
+        string<MAX_SCENARIO_DESCRIPTION_LEN> description;
+        boolean configurable_target_count;
+        long default_target_count;
+        long minimum_target_count;
+        long maximum_target_count;
+    };
+
+    @appendable
+    struct TargetScenarioInstanceState {
+        long long scenario_instance_id;
+        string<MAX_SCENARIO_NAME_LEN> template_name;
+        long target_count;
+    };
+
+    @appendable
+    struct TargetControlTargetState {
+        long target_id;
+        long long scenario_instance_id;
+        TargetType target_type;
+        Cartesian3D position;       // current ship-relative ENU [m]
+        Cartesian3D velocity;       // current ship-relative ENU [m/s]
+        double range_m;
+    };
+
+    // Unkeyed request/reply topics avoid leaking one DDS instance per click.
+    // client_id and request_id correlate replies when multiple UIs coexist.
+    @appendable
+    struct TargetControlRequest {
+        long client_id;
+        long long request_id;
+        TimeStamp timestamp;
+        TargetControlAction action;
+        string<MAX_SCENARIO_NAME_LEN> scenario_template;
+        long long scenario_instance_id;
+        long target_id;
+        long target_count;
+    };
+
+    @appendable
+    struct TargetControlReply {
+        long client_id;
+        long long request_id;
+        TimeStamp timestamp;
+        TargetControlResult result;
+        long long scenario_instance_id;
+        string<MAX_TARGET_CONTROL_MESSAGE_LEN> message;
+    };
+
+    // Last-value snapshot is transient-local so a restarted UI immediately
+    // reconstructs the catalog and complete live inventory.
+    @appendable
+    struct TargetControlSnapshot {
+        @key long generator_id;
+        TimeStamp timestamp;
+        long long revision;
+        sequence<TargetScenarioTemplateDescriptor,
+                 MAX_TARGET_SCENARIO_TEMPLATES> catalog;
+        sequence<TargetScenarioInstanceState,
+                 MAX_TARGET_SCENARIO_INSTANCES> scenarios;
+        sequence<TargetControlTargetState,
+                 MAX_TARGET_CONTROL_TARGETS> targets;
     };
 
 }; // module types

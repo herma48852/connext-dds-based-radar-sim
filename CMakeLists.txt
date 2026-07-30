@@ -4,7 +4,7 @@ project(AesaRadarSim VERSION 1.0.0 LANGUAGES CXX)
 include(CTest)
 
 option(RADAR_BUILD_APPLICATIONS
-    "Build the Connext DDS radar_app and target_gen executables" ON)
+    "Build the Connext DDS radar_app, target_gen, and target_control executables" ON)
 option(RADAR_BUILD_UI_TESTS
     "Build the display-free ImGui operator-control regression" ON)
 
@@ -256,9 +256,37 @@ if(RADAR_BUILD_APPLICATIONS)
     target_include_directories(target_gen PRIVATE src/target_gen)
     target_link_libraries(target_gen PRIVATE radar_common target_scenario_core)
 
+    # --- Out-of-band target-generator control UI ---------------------------
+    add_executable(target_control
+        src/target_control/main.cpp
+        src/target_control/TargetControlClient.cpp
+        src/target_control/TargetControlUi.cpp)
+    target_include_directories(target_control PRIVATE
+        src/target_control src/radar_app/ui)
+    target_link_libraries(target_control PRIVATE
+        radar_common imgui_core imgui_backends)
+
     if(APPLE)
-        set_target_properties(radar_app target_gen PROPERTIES MACOSX_RPATH ON)
+        target_sources(target_control PRIVATE
+            src/radar_app/ui/MetalContext.mm)
+        set_source_files_properties(
+            src/target_control/TargetControlUi.cpp
+            PROPERTIES LANGUAGE OBJCXX COMPILE_OPTIONS "-fobjc-arc")
+        set_source_files_properties(
+            src/radar_app/ui/MetalContext.mm
+            PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+        target_link_libraries(target_control PRIVATE
+            "-framework Metal" "-framework QuartzCore" "-framework Cocoa")
+        set_target_properties(
+            radar_app target_gen target_control PROPERTIES MACOSX_RPATH ON)
         target_compile_definitions(radar_app PRIVATE GL_SILENCE_DEPRECATION)
+    elseif(WIN32)
+        target_sources(target_control PRIVATE
+            src/radar_app/ui/windows/WindowsResources.rc)
+        target_link_options(target_control PRIVATE /MANIFEST:NO)
+        target_link_libraries(target_control PRIVATE OpenGL::GL)
+    else()
+        target_link_libraries(target_control PRIVATE OpenGL::GL)
     endif()
 
     # Always refresh QoS before either executable is built. Unlike POST_BUILD,
@@ -282,6 +310,15 @@ if(RADAR_BUILD_APPLICATIONS)
         COMMENT "Refreshing QoS profiles beside target_gen"
         VERBATIM)
     add_dependencies(target_gen target_gen_qos)
+    add_custom_target(target_control_qos
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+                "$<TARGET_FILE_DIR:target_control>/qos"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_CURRENT_SOURCE_DIR}/qos/radar_qos.xml"
+                "$<TARGET_FILE_DIR:target_control>/qos/radar_qos.xml"
+        COMMENT "Refreshing QoS profiles beside target_control"
+        VERBATIM)
+    add_dependencies(target_control target_control_qos)
 
     # The launcher must use the same RTI target architecture selected by
     # FindRTIConnextDDS. Auto-detected CONNEXTDDS_ARCH is a normal variable,
@@ -290,7 +327,7 @@ if(RADAR_BUILD_APPLICATIONS)
         OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/radar-connext-arch.txt"
         CONTENT "${CONNEXTDDS_ARCH}\n")
 
-    install(TARGETS radar_app target_gen
+    install(TARGETS radar_app target_gen target_control
         RUNTIME DESTINATION bin
         BUNDLE DESTINATION .)
     install(DIRECTORY qos/ DESTINATION bin/qos)
@@ -309,6 +346,7 @@ if(RADAR_BUILD_APPLICATIONS)
             docs/RUN_WINDOWS.md
             docs/CONNEXT_STUDIO.md
             docs/OPERATOR_DISPLAY_GUIDE.md
+            docs/TARGET_CONTROL.md
             docs/beam_spacing_geometry.svg
             docs/elevation_geometry.svg
             DESTINATION docs)

@@ -11,6 +11,7 @@ param(
     [int]$RunSeconds = 0,
     [string]$ConnextDir,
     [switch]$Headless,
+    [switch]$TargetControl,
     [switch]$StopExisting
 )
 
@@ -38,6 +39,8 @@ $BuildDir = $resolvedBuild.BuildDir
 $configDir = $resolvedBuild.ConfigDir
 $radarExe = $resolvedBuild.RadarExe
 $targetExe = $resolvedBuild.TargetExe
+$controlExe = $resolvedBuild.ControlExe
+$controlDomain = ($Domain + 1) % 233
 
 $qosFile = @(
     (Join-Path $repoRoot "qos\radar_qos.xml"),
@@ -47,7 +50,7 @@ if (-not $qosFile) {
     throw "qos\radar_qos.xml was not found in the repository or beside the executables."
 }
 
-$stale = @(Get-Process -Name "radar_app", "target_gen" -ErrorAction SilentlyContinue)
+$stale = @(Get-Process -Name "radar_app", "target_gen", "target_control" -ErrorAction SilentlyContinue)
 if ($stale.Count -gt 0) {
     if (-not $StopExisting) {
         $ids = ($stale.Id -join ", ")
@@ -66,15 +69,19 @@ $quotedStopFile = '"' + $stopFile + '"'
 
 $radarArgs = @("--domain", $Domain, "--stop-file", $quotedStopFile)
 if ($Headless) { $radarArgs += "--headless" }
-$targetArgs = @("--domain", $Domain, "--targets", $Targets,
+$targetArgs = @("--domain", $Domain, "--control-domain", $controlDomain,
+                "--targets", $Targets,
                 "--stop-file", $quotedStopFile)
+$controlArgs = @("--domain", $controlDomain, "--stop-file", $quotedStopFile)
 if ($RunSeconds -gt 0) {
     $radarArgs += @("--run-seconds", $RunSeconds)
     $targetArgs += @("--run-seconds", $RunSeconds)
+    $controlArgs += @("--run-seconds", $RunSeconds)
 }
 
 $radar = $null
 $target = $null
+$control = $null
 $processFailures = @()
 try {
     $radar = Start-Process -FilePath $radarExe -PassThru -WindowStyle Hidden `
@@ -89,8 +96,24 @@ try {
         -RedirectStandardError (Join-Path $logDir "target.stderr.log")
     $null = $target.Handle
 
-    Write-Host "AESA radar demo running on DDS domain $Domain (PIDs $($radar.Id), $($target.Id))."
-    Write-Host "Press ENTER or Q to stop. Closing the radar window also stops the demo."
+    if ($TargetControl) {
+        Start-Sleep -Seconds 1
+        $control = Start-Process -FilePath $controlExe -PassThru -WindowStyle Hidden `
+            -ArgumentList $controlArgs `
+            -RedirectStandardOutput (Join-Path $logDir "control.stdout.log") `
+            -RedirectStandardError (Join-Path $logDir "control.stderr.log")
+        $null = $control.Handle
+    }
+
+    $processIds = @($radar.Id, $target.Id)
+    if ($control) { $processIds += $control.Id }
+    Write-Host "AESA radar demo running on simulation domain $Domain (PIDs $($processIds -join ', '))."
+    if ($control) {
+        Write-Host "Target-control UI running independently on control domain $controlDomain."
+    } else {
+        Write-Host "Optional target UI: `"$controlExe`" --domain $controlDomain"
+    }
+    Write-Host "Press ENTER or Q to stop all launched processes. Closing the radar window also stops them."
     Write-Host "Logs: $logDir"
 
     while (-not $radar.HasExited) {
@@ -111,7 +134,7 @@ try {
 finally {
     Set-Content -LiteralPath $stopFile -Value "stop" -NoNewline
     $deadline = (Get-Date).AddSeconds(15)
-    foreach ($process in @($target, $radar)) {
+    foreach ($process in @($control, $target, $radar)) {
         if (-not $process) { continue }
         while (-not $process.HasExited -and (Get-Date) -lt $deadline) {
             Start-Sleep -Milliseconds 200
