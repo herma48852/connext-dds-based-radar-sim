@@ -2,10 +2,12 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <iostream>
 #include <memory>
 
+#include "EffectiveRangeModel.hpp"
 #include "Log.hpp"
 #include "FaceDetectionFusion.hpp"
 #include "PeriodicDeadline.hpp"
@@ -125,7 +127,8 @@ void TrackManager::update_loop() {
         for (const auto& d : fused_detections) {
             dets.push_back(
                 CoreDetection{
-                    d.range_m, d.azimuth_deg, d.elevation_deg});
+                    d.range_m, d.azimuth_deg, d.elevation_deg,
+                    d.snr_db});
         }
 
         const auto ship = bus_.ship();
@@ -170,8 +173,26 @@ void TrackManager::update_loop() {
             msg.acceleration.y_north_m = 0.0;
             msg.acceleration.z_up_m    = 0.0;
 
+            const double slant_range_m =
+                std::hypot(std::hypot(t.x, t.y), t.z);
+            const double azimuth_world_deg =
+                std::atan2(t.x, t.y)
+                * 180.0 / effective_range::kPi;
+            const double elevation_deg =
+                std::atan2(t.z, std::hypot(t.x, t.y))
+                * 180.0 / effective_range::kPi;
+            const auto covariance =
+                effective_range::cartesian_position_covariance(
+                    slant_range_m,
+                    azimuth_world_deg,
+                    elevation_deg,
+                    effective_range::MeasurementUncertainty{
+                        t.range_stddev_m,
+                        t.azimuth_stddev_deg,
+                        t.elevation_stddev_deg});
             msg.covariance.resize(types::COVARIANCE_SIZE, 0.0);
-            msg.covariance[0] = msg.covariance[4] = msg.covariance[8] = 2500.0;
+            for (std::size_t i = 0; i < covariance.size(); ++i)
+                msg.covariance[i] = covariance[i];
             msg.classification =
                 static_cast<types::TrackClassification>(t.classification);
             msg.quality = t.quality;

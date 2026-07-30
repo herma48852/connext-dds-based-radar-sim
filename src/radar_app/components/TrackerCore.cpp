@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include "EffectiveRangeModel.hpp"
+
 namespace radar::app {
 
 namespace {
@@ -17,6 +19,14 @@ double wrap180(double angle_deg) {
 
 double azimuth_deg(double x, double y) {
     return std::atan2(x, y) * kRad2Deg;
+}
+
+double elevation_deg(double x, double y, double z) {
+    return std::atan2(z, std::hypot(x, y)) * kRad2Deg;
+}
+
+double slant_range_m(double x, double y, double z) {
+    return std::hypot(std::hypot(x, y), z);
 }
 
 // ship-relative polar -> ship-relative ENU (az 0 = bow, CW positive;
@@ -84,6 +94,13 @@ void absorb_duplicate(CoreTrack& survivor, const CoreTrack& fragment) {
         survivor.y = py + TrackerCore::kAlpha * (fragment.y - py);
         survivor.z = pz + TrackerCore::kAlpha * (fragment.z - pz);
         survivor.last_update_ms = fragment.last_update_ms;
+        survivor.range_stddev_m = fragment.range_stddev_m;
+        survivor.azimuth_stddev_deg = fragment.azimuth_stddev_deg;
+        survivor.elevation_stddev_deg = fragment.elevation_stddev_deg;
+        survivor.last_detection_snr_db =
+            fragment.last_detection_snr_db;
+        survivor.last_elevation_bar_deg =
+            fragment.last_elevation_bar_deg;
     }
 
     if (!survivor.v_init && fragment.v_init) {
@@ -135,9 +152,10 @@ void TrackerCore::reset() {
 std::vector<int64_t> TrackerCore::update(const std::vector<CoreDetection>& dets,
                                          double ship_heading_deg, int64_t now_ms) {
     for (const auto& det : dets) {
-        double x, y, z;
-        polar_to_enu(det.range_m, det.azimuth_deg, det.elevation_deg,
-                     ship_heading_deg, x, y, z);
+        const auto uncertainty =
+            effective_range::measurement_uncertainty(det.snr_db);
+        const double measured_azimuth_world_deg =
+            det.azimuth_deg + ship_heading_deg;
 
         // Range/angle nearest-neighbour association. Elevation remains
         // excluded because it is the center of an 11-degree acceptance gate,
@@ -147,10 +165,12 @@ std::vector<int64_t> TrackerCore::update(const std::vector<CoreDetection>& dets,
         double best_score = 1e30;
         for (auto& tr : tracks_) {
             const double dtg = std::max(0.02, (now_ms - tr.last_update_ms) / 1000.0);
-            double px = tr.x, py = tr.y;
+            double px = tr.x, py = tr.y, pz = tr.z;
             double motion_uncertainty_m = 0.0;
             if (tr.v_init) {
-                px += tr.vx * dtg; py += tr.vy * dtg;
+                px += tr.vx * dtg;
+                py += tr.vy * dtg;
+                pz += tr.vz * dtg;
                 if (tr.cross_hits < 4)
                     motion_uncertainty_m =
                         0.5 * kInitSpeedMps * dtg;
@@ -158,24 +178,32 @@ std::vector<int64_t> TrackerCore::update(const std::vector<CoreDetection>& dets,
                 motion_uncertainty_m = kInitSpeedMps * dtg;
             }
 
-            const double predicted_range = std::hypot(px, py);
-            const double measured_range = std::hypot(x, y);
+            const double predicted_range = slant_range_m(px, py, pz);
+            const double measured_range = det.range_m;
             const double range_error =
                 std::fabs(predicted_range - measured_range);
             const double azimuth_error_rad =
                 std::fabs(wrap180(
-                    azimuth_deg(px, py) - azimuth_deg(x, y)))
+                    azimuth_deg(px, py)
+                    - measured_azimuth_world_deg))
                 * kDeg2Rad;
             const double mean_range =
                 0.5 * (predicted_range + measured_range);
             const double cross_range_error =
                 mean_range * std::fabs(std::sin(azimuth_error_rad));
             const double range_gate =
-                kRangeGateM + motion_uncertainty_m;
+                std::max(
+                    kRangeGateM,
+                    3.0 * uncertainty.range_stddev_m)
+                + motion_uncertainty_m;
+            const double azimuth_gate_deg =
+                std::max(
+                    kAzimuthGateDeg,
+                    3.0 * uncertainty.azimuth_stddev_deg);
             const double cross_range_gate =
                 kCrossRangeFloorM
                 + mean_range
-                    * std::tan(kAzimuthGateDeg * kDeg2Rad)
+                    * std::tan(azimuth_gate_deg * kDeg2Rad)
                 + motion_uncertainty_m;
             if (range_error >= range_gate ||
                 cross_range_error >= cross_range_gate) {
@@ -194,11 +222,49 @@ std::vector<int64_t> TrackerCore::update(const std::vector<CoreDetection>& dets,
 
         if (best) {
             const double dt = std::max(0.02, (now_ms - best->last_update_ms) / 1000.0);
+            const double px = best->x + best->vx * dt;
+            const double py = best->y + best->vy * dt;
+            const double pz = best->z + best->vz * dt;
+            const double predicted_elevation_deg =
+                elevation_deg(px, py, pz);
+
+            // The elevation value is the center of an 11-degree acceptance
+            // bar, not a measured angle. Treat it as interval-censored data:
+            // retain the predicted elevation while it lies inside the bar,
+            // otherwise project it to the nearest boundary. For a 14-to-25
+            // degree handoff this selects their physical 19.5-degree boundary
+            // instead of inventing an 11-degree target jump.
+            const double effective_elevation_deg = std::clamp(
+                predicted_elevation_deg,
+                det.elevation_deg
+                    - effective_range::kElevationBarHalfWidthDeg,
+                det.elevation_deg
+                    + effective_range::kElevationBarHalfWidthDeg);
+            double x, y, z;
+            polar_to_enu(
+                det.range_m,
+                det.azimuth_deg,
+                effective_elevation_deg,
+                ship_heading_deg,
+                x, y, z);
+            const bool elevation_bar_changed =
+                std::fabs(
+                    det.elevation_deg
+                    - best->last_elevation_bar_deg) > 0.1;
+
             // Track initiation: seed velocity only from the SECOND
             // cross-sweep hit, over the full birth-to-now span. A
             // single-pair seed is mostly cell-quantization noise and would
             // break the next predicted association.
-            if (dt >= 1.0) {
+            if (elevation_bar_changed && !best->v_init) {
+                // A bar handoff changes the interval-censored elevation
+                // reference. Restart the velocity baseline so that change is
+                // never mistaken for target translation during initiation.
+                best->bx = x;
+                best->by = y;
+                best->birth_ms = now_ms;
+                best->cross_hits = 0;
+            } else if (dt >= 1.0) {
                 ++best->cross_hits;
                 if (!best->v_init && best->cross_hits >= 2) {
                     const double span = std::max(1.0, (now_ms - best->birth_ms) / 1000.0);
@@ -214,13 +280,15 @@ std::vector<int64_t> TrackerCore::update(const std::vector<CoreDetection>& dets,
             // to cross-sweep associations: within a dwell burst detections
             // are ~simultaneous, dt clamps to 0.02, and beta/dt = 10 turns
             // any residual into a multi-km/s velocity kick.
-            const double rx = x - (best->x + best->vx * dt);
-            const double ry = y - (best->y + best->vy * dt);
-            const double rz = z - (best->z + best->vz * dt);
-            best->x  += best->vx * dt + kAlpha * rx;
-            best->y  += best->vy * dt + kAlpha * ry;
-            best->z  += best->vz * dt + kAlpha * rz;
-            if (dt >= 0.25) {
+            const double rx = x - px;
+            const double ry = y - py;
+            const double rz = z - pz;
+            const double position_alpha =
+                elevation_bar_changed ? 1.0 : kAlpha;
+            best->x = px + position_alpha * rx;
+            best->y = py + position_alpha * ry;
+            best->z = pz + position_alpha * rz;
+            if (dt >= 0.25 && !elevation_bar_changed) {
                 best->vx += (kBeta / dt) * rx;
                 best->vy += (kBeta / dt) * ry;
                 best->vz += (kBeta / dt) * rz;
@@ -232,7 +300,21 @@ std::vector<int64_t> TrackerCore::update(const std::vector<CoreDetection>& dets,
                 100,
                 best->quality + (independent_scan ? 12 : 1));
             best->last_update_ms = now_ms;
+            best->range_stddev_m = uncertainty.range_stddev_m;
+            best->azimuth_stddev_deg =
+                uncertainty.azimuth_stddev_deg;
+            best->elevation_stddev_deg =
+                uncertainty.elevation_stddev_deg;
+            best->last_detection_snr_db = det.snr_db;
+            best->last_elevation_bar_deg = det.elevation_deg;
         } else if (tracks_.size() < (size_t)kMaxTracks) {
+            double x, y, z;
+            polar_to_enu(
+                det.range_m,
+                det.azimuth_deg,
+                det.elevation_deg,
+                ship_heading_deg,
+                x, y, z);
             // Bounded id pool: recycle ids of dropped tracks so the keyed
             // TargetTrack topic tops out at kMaxTracks DDS instances.
             int64_t new_id = -1;
@@ -253,6 +335,12 @@ std::vector<int64_t> TrackerCore::update(const std::vector<CoreDetection>& dets,
             t.quality = 30;
             t.classification = CLASS_UNKNOWN;
             t.last_update_ms = now_ms;
+            t.range_stddev_m = uncertainty.range_stddev_m;
+            t.azimuth_stddev_deg = uncertainty.azimuth_stddev_deg;
+            t.elevation_stddev_deg =
+                uncertainty.elevation_stddev_deg;
+            t.last_detection_snr_db = det.snr_db;
+            t.last_elevation_bar_deg = det.elevation_deg;
             t.scan_hit_times.push_back(now_ms);
             tracks_.push_back(t);
         }
@@ -267,8 +355,8 @@ std::vector<int64_t> TrackerCore::update(const std::vector<CoreDetection>& dets,
         for (size_t j = i + 1; j < tracks_.size();) {
             const auto& a = tracks_[i];
             const auto& b = tracks_[j];
-            const double range_a = std::hypot(a.x, a.y);
-            const double range_b = std::hypot(b.x, b.y);
+            const double range_a = slant_range_m(a.x, a.y, a.z);
+            const double range_b = slant_range_m(b.x, b.y, b.z);
             if (std::fabs(range_a - range_b) >= kMergeRangeM ||
                 std::fabs(wrap180(
                     azimuth_deg(a.x, a.y)

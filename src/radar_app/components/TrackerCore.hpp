@@ -22,6 +22,7 @@ struct CoreDetection {
     double range_m;        // ship-relative
     double azimuth_deg;    // ship-relative, 0 = bow, CW positive
     double elevation_deg;  // dwell elevation bar
+    double snr_db = 12.0;  // integrated reported S/N; see EffectiveRangeModel
 };
 
 struct CoreTrack {
@@ -37,6 +38,11 @@ struct CoreTrack {
     int    classification;   // matches types::TrackClassification ordinals
     int    quality;
     int64_t last_update_ms;
+    double range_stddev_m;
+    double azimuth_stddev_deg;
+    double elevation_stddev_deg;
+    double last_detection_snr_db;
+    double last_elevation_bar_deg;
     std::deque<int64_t> scan_hit_times;
     std::deque<std::array<double,3>> history; // display trail (max 10)
 };

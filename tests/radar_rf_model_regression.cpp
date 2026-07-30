@@ -51,9 +51,9 @@ int main() {
     const double test_range_m = 42123.0;
     const int test_bin = detection::range_bin_for(test_range_m);
     const double quantized_range_m = detection::range_m_for_bin(test_bin);
-    check(quantized_range_m <= test_range_m
-              && test_range_m - quantized_range_m < rf::kRangeResolutionM,
-          "range conversion quantizes by the bandwidth-derived cell size");
+    check(std::fabs(quantized_range_m - test_range_m)
+              <= rf::kRangeResolutionM * 0.5,
+          "range conversion reports the center of the bandwidth-derived cell");
     check(!detection::within_instrumented_range(
               rf::kMinimumReceiveRangeM - 1.0)
               && detection::within_instrumented_range(

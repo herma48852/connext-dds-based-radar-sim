@@ -252,7 +252,8 @@ int main(int argc, char** argv) {
                 core_pending.push_back(CoreDetection{
                     detection.range_m,
                     detection.azimuth_deg,
-                    detection.elevation_deg});
+                    detection.elevation_deg,
+                    detection.snr_db});
             }
             const size_t before = core.tracks().size();
             const auto dropped =
@@ -314,8 +315,10 @@ int main(int argc, char** argv) {
         check(std::fabs(sim_s - 60.0) < 1e-9,
               "tracker golden regression requires a 60 second replay");
         check(det_count == 294, "expected 294 integrated dwell plots");
-        check(births == 5, "expected 5 deterministic track births");
-        check(deaths == 1, "expected 1 duplicate-fragment disposal");
+        check(births == 4,
+              "expected one deterministic track birth per truth target");
+        check(deaths == 0,
+              "slant-range association avoids deterministic track fragments");
         check(max_tracks <= static_cast<size_t>(TrackerCore::kMaxTracks),
               "track count exceeded the bounded instance pool");
         check(id_pool_valid, "a track ID escaped the bounded 1000..1255 pool");
@@ -386,9 +389,64 @@ int main(int argc, char** argv) {
                   cell_transition_core.tracks().size() == 1,
               "state-preserving fusion restarts the coast interval");
 
+        // Reproduce the observed target crossing from the 14-degree bar into
+        // the 25-degree bar. Slant range and bearing remain continuous; only
+        // the interval-censored elevation-bar label changes.
+        TrackerCore elevation_transition_core;
+        const CoreDetection elevation_bar_14{
+            22840.0, 326.0, 14.0, 18.0};
+        const CoreDetection elevation_bar_25{
+            22840.0, 326.0, 25.0, 18.0};
+        elevation_transition_core.update(
+            {elevation_bar_14}, 0.0, 0);
+        elevation_transition_core.update(
+            {elevation_bar_14}, 0.0, 1200);
+        elevation_transition_core.update(
+            {elevation_bar_14}, 0.0, 2400);
+        const auto& before_elevation_transition =
+            elevation_transition_core.tracks().front();
+        const int64_t elevation_track_id =
+            before_elevation_transition.id;
+        const double speed_before_transition = std::sqrt(
+            before_elevation_transition.vx
+                * before_elevation_transition.vx
+            + before_elevation_transition.vy
+                * before_elevation_transition.vy
+            + before_elevation_transition.vz
+                * before_elevation_transition.vz);
+        const auto elevation_drops =
+            elevation_transition_core.update(
+                {elevation_bar_25}, 0.0, 3600);
+        const auto& after_elevation_transition =
+            elevation_transition_core.tracks().front();
+        const double speed_after_transition = std::sqrt(
+            after_elevation_transition.vx
+                * after_elevation_transition.vx
+            + after_elevation_transition.vy
+                * after_elevation_transition.vy
+            + after_elevation_transition.vz
+                * after_elevation_transition.vz);
+        const double inferred_elevation_deg = std::atan2(
+            after_elevation_transition.z,
+            std::hypot(
+                after_elevation_transition.x,
+                after_elevation_transition.y)) / kDeg2Rad;
+        check(elevation_drops.empty()
+                  && elevation_transition_core.tracks().size() == 1
+                  && after_elevation_transition.id
+                      == elevation_track_id,
+              "an elevation-bar transition preserves one established track");
+        check(std::fabs(inferred_elevation_deg - 19.5) < 1.0e-6,
+              "elevation-bar handoff projects to the shared 19.5 degree boundary");
+        check(std::fabs(
+                  speed_after_transition
+                  - speed_before_transition) < 1.0e-6,
+              "elevation-bar handoff does not inject a velocity impulse");
+
         if (!ok) return 1;
         std::printf("PASS: deterministic detection/tracker replay golden counts "
-                    "plus scan confirmation and cell-transition continuity\n");
+                    "plus scan confirmation, cell transitions, and "
+                    "elevation-bar continuity\n");
     }
     return 0;
 }

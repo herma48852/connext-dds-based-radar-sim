@@ -38,7 +38,10 @@ inline int range_bin_for(double range_m) noexcept {
 }
 
 inline double range_m_for_bin(int bin) noexcept {
-    return static_cast<double>(bin) * kRangeResolutionM;
+    // The return synthesizer assigns every target in [bin*resolution,
+    // (bin+1)*resolution) to this cell. Report the cell center so range error
+    // is symmetric and bounded by half a resolution cell.
+    return (static_cast<double>(bin) + 0.5) * kRangeResolutionM;
 }
 
 inline double two_way_carrier_phase_rad(double range_m) noexcept {

@@ -347,6 +347,7 @@ if(RADAR_BUILD_APPLICATIONS)
         install(FILES
             docs/RUN_WINDOWS.md
             docs/CONNEXT_STUDIO.md
+            docs/EFFECTIVE_RANGE_PROCESSING.md
             docs/OPERATOR_DISPLAY_GUIDE.md
             docs/TARGET_CONTROL.md
             docs/beam_spacing_geometry.svg
@@ -416,6 +417,13 @@ if(BUILD_TESTING)
     target_link_libraries(radar_rf_model_regression PRIVATE
         radar_project_options)
 
+    add_executable(effective_range_regression
+        tests/effective_range_regression.cpp)
+    target_include_directories(effective_range_regression PRIVATE
+        src/radar_app/components src/common)
+    target_link_libraries(effective_range_regression PRIVATE
+        radar_project_options)
+
     add_executable(periodic_deadline_regression
         tests/periodic_deadline_regression.cpp)
     target_include_directories(periodic_deadline_regression PRIVATE
@@ -444,6 +452,8 @@ if(BUILD_TESTING)
         COMMAND detection_processor_regression)
     add_test(NAME radar_rf_model_regression
         COMMAND radar_rf_model_regression)
+    add_test(NAME effective_range_regression
+        COMMAND effective_range_regression)
     add_test(NAME periodic_deadline_regression
         COMMAND periodic_deadline_regression)
     add_test(NAME radar_faces_regression
@@ -457,6 +467,7 @@ if(BUILD_TESTING)
         search_raster_regression
         detection_processor_regression
         radar_rf_model_regression
+        effective_range_regression
         periodic_deadline_regression
         radar_faces_regression
         face_detection_fusion_regression

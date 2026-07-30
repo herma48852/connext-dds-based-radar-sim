@@ -19,6 +19,11 @@ separate workspace.
 > **Target scenario authors:** Use the
 > **[Target Control Guide](docs/TARGET_CONTROL.md)** for the separate control
 > domain, additive scenario lifecycle, and target-removal controls.
+>
+> **Detection-model reviewers:** See
+> **[Effective-range Detection and Tracking](docs/EFFECTIVE_RANGE_PROCESSING.md)**
+> for the RF timing basis, sensitivity table, measurement uncertainty,
+> covariance, elevation-bar handling, assumptions, and deferred processing.
 
 Three applications in one CMake monorepo. Radar data stays on the simulation
 DDS domain; the optional target-management UI uses a separate control domain:
@@ -77,7 +82,7 @@ The QoS file is copied next to the binaries automatically
 
 ## Regression tests
 
-The default build registers ten fast, headless CTest regressions:
+The default build registers eleven fast, headless CTest regressions:
 
 ```bash
 cmake --build build -j
@@ -128,6 +133,9 @@ ctest --test-dir build --output-on-failure
 - `face_detection_fusion_regression` verifies that unresolved adjacent-dwell
   and cross-face reports fuse across 0/360 and 90-degree boundaries into an
   SNR-weighted bearing while range-resolvable targets remain distinct.
+- `effective_range_regression` verifies the fixed-threshold sensitivity table,
+  S/N-dependent range and bearing uncertainty, quantization floors, the
+  100 km instrumented cap, and the spherical-to-ENU position covariance.
 
 These tests create no DDS participants, graphics window, or renderer, so they
 do not alter or compete with a live webinar run.
