@@ -341,6 +341,7 @@ if(RADAR_BUILD_APPLICATIONS)
             scripts/windows/run-demo.ps1
             scripts/windows/smoke-test.cmd
             scripts/windows/smoke-test.ps1
+            scripts/windows/start-all.cmd
             DESTINATION scripts/windows)
         install(FILES
             docs/RUN_WINDOWS.md
@@ -357,6 +358,11 @@ if(RADAR_BUILD_APPLICATIONS)
         set(CPACK_PACKAGE_DIRECTORY "${CMAKE_BINARY_DIR}/package")
         set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY ON)
         include(CPack)
+    else()
+        install(PROGRAMS
+            scripts/run-demo.sh
+            scripts/start-all.sh
+            DESTINATION scripts)
     endif()
 endif()
 

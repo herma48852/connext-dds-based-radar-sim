@@ -43,7 +43,8 @@ AesaRadarSim/
 │   └── main.cpp
 ├── src/target_gen/              # DDS adapter + testable target scenario core
 ├── src/target_control/          # separate-domain target management UI
-├── scripts/run-demo.sh          # one-command Bash demo launcher
+├── scripts/start-all.sh         # macOS launcher for all three processes
+├── scripts/run-demo.sh          # unattended/headless Bash launcher
 ├── scripts/windows/start-all.cmd # Windows launcher for all three processes
 ├── tests/                       # headless UI, target, and tracker regressions
 ├── ConnextStudioDemo.md         # live webinar workspace-switching runbook
@@ -130,67 +131,49 @@ do not alter or compete with a live webinar run.
 
 ## Run
 
-### Complete interactive demo on Windows
+### Complete interactive demo (preferred)
 
-The primary Windows launcher starts the radar display, target generator, and
-target-management UI together:
+The `start-all` launcher is the primary way to run the interactive demo. It
+starts the radar display, target generator, and target-management UI together.
+
+On Windows:
 
 ```bat
 scripts\windows\start-all.cmd -Domain 92 -Targets 32
 ```
 
-Use `start-all.cmd` for interactive development, operator demonstrations, and
-webinars where targets must be added or removed while the radar continues
-running. It puts radar traffic on simulation domain 92 and target-management
-traffic on control domain 93 by default, configures the Connext DLL and QoS
-environment, and writes separate logs for all three processes. Close the radar
-window to stop the complete demo cooperatively.
-
-The launcher uses `CONNEXTDDS_DIR` or `NDDSHOME`, falling back to the standard
-Connext 7.7.0 installation under `C:\Program Files`. The executables must
-already be built. See the
-[Windows 11 Clean-Machine Runbook](docs/RUN_WINDOWS.md) for the complete setup
-and build procedure.
-
-Common `start-all.cmd` options:
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `-Domain N` | `92` | Select the simulation DDS domain (`0..232`). |
-| `-ControlDomain N` | Simulation domain + 1 | Select the separate target-management domain. |
-| `-Targets N` | `32` | Start with one baseline orbit plus `N-1` randomized inbound targets. |
-| `-Configuration NAME` | `RelWithDebInfo` | Select `Debug`, `RelWithDebInfo`, or `Release`. |
-| `-BuildDir PATH` | `build\windows-x64` | Use a specific CMake build directory. |
-| `-ConnextDir PATH` | Environment/standard install | Use a specific RTI Connext installation. |
-| `-RunSeconds N` | Until the radar closes | Stop all three processes automatically after `N` seconds. |
-
-### Interactive demo on macOS
-
-The Bash launcher starts the radar display and target generator, selects the
-preset or legacy build automatically, configures the Connext runtime and QoS
-paths, writes separate logs, and stops both processes together:
+On macOS:
 
 ```bash
-./scripts/run-demo.sh --domain 92 --targets 32
+./scripts/start-all.sh --domain 92 --targets 32
 ```
 
-It uses `CONNEXTDDS_DIR` or `NDDSHOME` and also detects the default
-`/Applications/rti_connext_dds-7.7.0` installation. Close the radar window or
-press Ctrl-C in the launcher to stop both processes cooperatively. The
-launcher prints the command for starting the optional `target_control` UI
-separately.
+Use `start-all` for interactive development, operator demonstrations, and
+webinars where targets must be added or removed while the radar continues
+running. Both launchers put radar traffic on simulation domain 92 and
+target-management traffic on control domain 93 by default, configure the
+Connext runtime and QoS environment, write separate logs for all three
+processes, and stop the complete demo when the radar window closes.
 
-Bash launcher options:
+Common options:
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--build-dir PATH` | Auto-detect | Use a specific CMake build directory instead of searching `build/macos-arm64`, `build`, and the repository installation layout. |
-| `--connext-dir PATH` | Environment/auto-detect | Use a specific RTI Connext installation instead of `CONNEXTDDS_DIR`, `NDDSHOME`, or the default macOS installation. |
-| `--domain N` | `92` | Select DDS domain `0..232`. |
-| `--targets N` | `32` | Launch `target_gen` with `1..256` total targets: one fixed 12 km baseline orbit plus `N-1` randomized inbound targets. With `N=1`, only the baseline is generated. |
-| `--run-seconds N` | `0` | Stop automatically after `N` seconds (`0..604800`); zero runs until window close or Ctrl-C. |
-| `--headless` | Off | Run `radar_app` without the graphics window. |
-| `-h`, `--help` | — | Print launcher usage and exit. |
+| Purpose | Windows | macOS | Default |
+|---------|---------|-------|---------|
+| Simulation domain | `-Domain N` | `--domain N` | `92` |
+| Control domain | `-ControlDomain N` | `--control-domain N` | Simulation domain + 1 |
+| Initial targets | `-Targets N` | `--targets N` | `32` |
+| Build directory | `-BuildDir PATH` | `--build-dir PATH` | Platform build auto-detection |
+| Connext installation | `-ConnextDir PATH` | `--connext-dir PATH` | Environment/platform default |
+| Timed shutdown | `-RunSeconds N` | `--run-seconds N` | When the radar closes |
+
+Both launchers use `CONNEXTDDS_DIR` or `NDDSHOME`. Windows falls back to the
+standard Connext 7.7.0 installation under `C:\Program Files`; macOS detects
+`/Applications/rti_connext_dds-7.7.0`. The executables must already be built.
+Windows also accepts `-Configuration Debug|RelWithDebInfo|Release`. Use
+`start-all.cmd -Help` on Windows or `start-all.sh --help` on macOS for the
+complete option list. See the
+[Windows 11 Clean-Machine Runbook](docs/RUN_WINDOWS.md) for Windows setup and
+build instructions.
 
 ### Unattended DDS-only runs
 
@@ -201,6 +184,9 @@ its DDS participants and runs the complete processing pipeline; only the
 graphics and target-management windows are omitted. `RunSeconds` gives
 automation a deterministic stop time, and the launchers retain stdout and
 stderr logs for diagnosis.
+
+Unlike `start-all`, `run-demo` starts only `radar_app` and `target_gen`; it
+does not open the target-management UI.
 
 ```bat
 rem Windows

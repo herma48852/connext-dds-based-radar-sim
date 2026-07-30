@@ -165,18 +165,8 @@ the smoke test passes.
 
 ## 7. Run the Demo
 
-Enter:
-
-```bat
-scripts\windows\run-demo.cmd -Domain 92 -Targets 32
-```
-
-The radar window should open and Command Prompt should report that the AESA
-radar demo is running. Leave that Command Prompt open. To stop both processes
-cleanly, press ENTER or Q in Command Prompt, or close the radar window.
-
-To launch the radar UI, target generator, and target-management UI together,
-use:
+The preferred interactive launcher starts the radar UI, target generator, and
+target-management UI together. Enter:
 
 ```bat
 scripts\windows\start-all.cmd -Domain 92 -Targets 32
@@ -184,27 +174,32 @@ scripts\windows\start-all.cmd -Domain 92 -Targets 32
 
 `start-all.cmd` is a native Command Prompt batch launcher. It does not invoke
 PowerShell. It finds the three prebuilt executables, configures the RTI DLL and
-QoS environment, and starts all three from the one Command Prompt.
+QoS environment, and starts all three from one Command Prompt. Leave that
+Command Prompt open. The target-management window is independent and can be
+moved to another Windows virtual desktop or workspace. Close the radar window
+to stop all three applications cleanly.
 
-The target-management window is independent and can be moved to another
-Windows virtual desktop or workspace. Close the radar window to stop all three
-applications cleanly.
+Radar data remains on simulation domain 92. Only `target_gen` and
+`target_control` join the separate control domain 93. Scenario selection is
+additive; use the confirmed **CLEAR ALL** action to dispose every target
+without restarting.
 
-To open the optional target-management UI in a second Command Prompt that has
-the Step 4 Connext environment, enter:
+For an unattended DDS-only run without either graphics window, use:
 
 ```bat
-build\windows-x64\RelWithDebInfo\target_control.exe --domain 93
+scripts\windows\run-demo.cmd -Domain 92 -Targets 32 -Headless -RunSeconds 20
 ```
 
-The radar data remains on domain 92. Only `target_gen` and `target_control`
-join the separate control domain 93. Scenario selection is additive; use the
-confirmed **CLEAR ALL** action to dispose every target without restarting.
+This mode is intended for automated smoke checks, bounded soak tests, and
+remote DDS or Connext Studio captures. It starts `radar_app` and `target_gen`
+without `target_control`, retains separate logs, and stops automatically after
+the requested duration.
 
 The `.cmd` files are the supported launch commands. They handle the bundled
 implementation automatically. Do not open or invoke a `.ps1` file directly.
-The demo launchers also support `-Headless`, `-RunSeconds N`, and
-`-StopExisting` when those behaviors are intentionally needed.
+Run `start-all.cmd -Help` for interactive launcher options.
+`run-demo.cmd` additionally supports `-Headless`, `-RunSeconds N`, and
+`-StopExisting` for unattended operation.
 
 ## Optional: Portable Tests Without Connext
 

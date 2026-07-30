@@ -8,14 +8,18 @@ repo_root="$(cd "$script_dir/.." && pwd)"
 build_dir=""
 connext_dir="${CONNEXTDDS_DIR:-${NDDSHOME:-}}"
 domain=92
+control_domain=""
 targets=32
 run_seconds=0
 headless=0
+start_target_control=0
 
 radar_pid=""
 target_pid=""
+control_pid=""
 radar_status=""
 target_status=""
+control_status=""
 cleanup_started=0
 stop_file=""
 log_dir=""
@@ -26,15 +30,17 @@ usage() {
 Usage: scripts/run-demo.sh [options]
 
 Launch radar_app and target_gen together with cooperative shutdown and logs.
-The optional target_control UI is printed after launch and runs separately.
+Use scripts/start-all.sh for the complete interactive three-process demo.
 
 Options:
   --build-dir PATH    CMake build directory (auto-detected by default)
   --connext-dir PATH  RTI Connext DDS installation (uses CONNEXTDDS_DIR/NDDSHOME)
   --domain N          DDS domain, 0..232 (default: 92)
+  --control-domain N  Target-control domain (default: simulation domain + 1)
   --targets N         Total targets: baseline plus N-1 randomized (default: 32)
   --run-seconds N     Stop after N seconds; 0 runs until window close/Ctrl-C
   --headless          Run radar_app without a window
+  --target-control    Also start target_control (normally use start-all.sh)
   -h, --help          Show this help
 
 Examples:
@@ -57,15 +63,21 @@ require_unsigned() {
     esac
 }
 
-same_domain_demo_pids() {
-    ps -axo pid=,command= 2>/dev/null | awk -v domain="$domain" '
+conflicting_demo_pids() {
+    ps -axo pid=,command= 2>/dev/null |
+        awk -v domain="$domain" -v control_domain="$control_domain" \
+            -v include_control="$start_target_control" '
         {
             executable = $2
             sub(/^.*\//, "", executable)
-            if (executable != "radar_app" && executable != "target_gen")
+            if (executable == "radar_app" || executable == "target_gen")
+                expected_domain = domain
+            else if (include_control == 1 && executable == "target_control")
+                expected_domain = control_domain
+            else
                 next
             for (i = 3; i < NF; ++i) {
-                if ($i == "--domain" && $(i + 1) == domain) {
+                if ($i == "--domain" && $(i + 1) == expected_domain) {
                     print $1
                     break
                 }
@@ -129,6 +141,11 @@ while [[ $# -gt 0 ]]; do
             domain="$2"
             shift 2
             ;;
+        --control-domain)
+            [[ $# -ge 2 ]] || die "--control-domain requires a value"
+            control_domain="$2"
+            shift 2
+            ;;
         --targets)
             [[ $# -ge 2 ]] || die "--targets requires a value"
             targets="$2"
@@ -143,6 +160,10 @@ while [[ $# -gt 0 ]]; do
             headless=1
             shift
             ;;
+        --target-control)
+            start_target_control=1
+            shift
+            ;;
         -h|--help)
             usage
             exit 0
@@ -154,13 +175,24 @@ while [[ $# -gt 0 ]]; do
 done
 
 require_unsigned "--domain" "$domain"
+if [[ -n "$control_domain" ]]; then
+    require_unsigned "--control-domain" "$control_domain"
+fi
 require_unsigned "--targets" "$targets"
 require_unsigned "--run-seconds" "$run_seconds"
 domain=$((10#$domain))
+if [[ -n "$control_domain" ]]; then
+    control_domain=$((10#$control_domain))
+else
+    control_domain=$(((domain + 1) % 233))
+fi
 targets=$((10#$targets))
 run_seconds=$((10#$run_seconds))
-control_domain=$(((domain + 1) % 233))
 ((domain <= 232)) || die "--domain must be between 0 and 232"
+((control_domain <= 232)) ||
+    die "--control-domain must be between 0 and 232"
+((control_domain != domain)) ||
+    die "--control-domain must differ from --domain"
 ((targets >= 1 && targets <= 256)) || die "--targets must be between 1 and 256"
 ((run_seconds <= 604800)) || die "--run-seconds must not exceed 604800"
 
@@ -272,14 +304,16 @@ elif [[ -f "$repo_root/qos/radar_qos.xml" ]]; then
     export RADAR_QOS_FILE="$repo_root/qos/radar_qos.xml"
 elif [[ -f "$build_dir/qos/radar_qos.xml" ]]; then
     export RADAR_QOS_FILE="$build_dir/qos/radar_qos.xml"
+elif [[ -f "$build_dir/bin/qos/radar_qos.xml" ]]; then
+    export RADAR_QOS_FILE="$build_dir/bin/qos/radar_qos.xml"
 else
-    die "qos/radar_qos.xml was not found in the repository or build directory"
+    die "qos/radar_qos.xml was not found in the repository, build, or installation directory"
 fi
 
-existing_demo_pids="$(same_domain_demo_pids)"
+existing_demo_pids="$(conflicting_demo_pids)"
 if [[ -n "$existing_demo_pids" ]]; then
     existing_demo_pids="${existing_demo_pids//$'\n'/, }"
-    die "radar demo processes already use DDS domain $domain (PIDs $existing_demo_pids); stop them or select another domain"
+    die "radar demo processes already use simulation domain $domain or control domain $control_domain (PIDs $existing_demo_pids); stop them or select other domains"
 fi
 acquire_session_lock
 
@@ -317,11 +351,11 @@ collect_process() {
 
     local status=0
     wait "$pid" || status=$?
-    if [[ "$label" == "radar_app" ]]; then
-        radar_status="$status"
-    else
-        target_status="$status"
-    fi
+    case "$label" in
+        radar_app)      radar_status="$status" ;;
+        target_gen)     target_status="$status" ;;
+        target_control) control_status="$status" ;;
+    esac
 }
 
 cleanup() {
@@ -331,6 +365,7 @@ cleanup() {
     if [[ -n "$stop_file" ]]; then
         : > "$stop_file"
     fi
+    collect_process "target_control" "$control_pid"
     collect_process "target_gen" "$target_pid"
     collect_process "radar_app" "$radar_pid"
     if [[ -n "$log_dir" ]]; then
@@ -347,12 +382,14 @@ trap 'exit 143' TERM
 radar_args=(--domain "$domain" --stop-file "$stop_file")
 target_args=(--domain "$domain" --control-domain "$control_domain"
              --targets "$targets" --stop-file "$stop_file")
+control_args=(--domain "$control_domain" --stop-file "$stop_file")
 if ((headless)); then
     radar_args+=(--headless)
 fi
 if ((run_seconds > 0)); then
     radar_args+=(--run-seconds "$run_seconds")
     target_args+=(--run-seconds "$run_seconds")
+    control_args+=(--run-seconds "$run_seconds")
 fi
 
 "$radar_exe" "${radar_args[@]}" \
@@ -365,9 +402,24 @@ else
     "$target_exe" "${target_args[@]}" \
         >"$log_dir/target.stdout.log" 2>"$log_dir/target.stderr.log" &
     target_pid=$!
-    echo "AESA radar demo running on DDS domain $domain (PIDs $radar_pid, $target_pid)."
-    echo "Optional target UI: $control_exe --domain $control_domain"
-    echo "Close the radar window or press Ctrl-C to stop both processes."
+    if ((start_target_control)); then
+        sleep 1
+        "$control_exe" "${control_args[@]}" \
+            >"$log_dir/control.stdout.log" 2>"$log_dir/control.stderr.log" &
+        control_pid=$!
+        sleep 1
+        if ! process_running "$control_pid"; then
+            echo "target_control exited during startup; see $log_dir/control.stderr.log" >&2
+            echo "Radar and target generator remain active (PIDs $radar_pid, $target_pid)."
+        else
+            echo "AESA radar demo running on simulation domain $domain and control domain $control_domain (PIDs $radar_pid, $target_pid, $control_pid)."
+            echo "Close the radar window or press Ctrl-C to stop all three processes."
+        fi
+    else
+        echo "AESA radar demo running on DDS domain $domain (PIDs $radar_pid, $target_pid)."
+        echo "Optional target UI: $control_exe --domain $control_domain"
+        echo "Close the radar window or press Ctrl-C to stop both processes."
+    fi
     echo "Logs: $log_dir"
 
     while process_running "$radar_pid" && process_running "$target_pid"; do
@@ -385,6 +437,10 @@ if [[ -n "$radar_status" && "$radar_status" -ne 0 ]]; then
 fi
 if [[ -n "$target_status" && "$target_status" -ne 0 ]]; then
     echo "target_gen exited with code $target_status" >&2
+    exit_code=1
+fi
+if [[ -n "$control_status" && "$control_status" -ne 0 ]]; then
+    echo "target_control exited with code $control_status" >&2
     exit_code=1
 fi
 exit "$exit_code"
