@@ -20,6 +20,7 @@
 #endif
 
 #include "../DataBus.hpp"
+#include "PanelFocus.hpp"
 #include "RadarFaces.hpp"
 
 namespace radar::ui {
@@ -49,7 +50,8 @@ public:
                 double live_beam_az_deg,
                 bool show_beam_formation,
                 const app::BeamPatternView& beam_pattern,
-                float dt);
+                float dt,
+                PanelFocusState* focus = nullptr);
 
 private:
     static constexpr int kAzBins    = 360;   // 1 deg per column, ship-relative

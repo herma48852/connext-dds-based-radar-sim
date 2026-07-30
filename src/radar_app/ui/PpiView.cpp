@@ -59,12 +59,17 @@ void PpiView::render(const char* title, ImVec2 pos, ImVec2 size,
                      const std::array<double, faces::kFaceCount>&
                          sector_widths_deg,
                      int32_t selected_face_id,
-                     int64_t now_ms, float dt) {
+                     int64_t now_ms, float dt,
+                     PanelFocusState* focus) {
     ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
     ImGui::SetNextWindowSize(size, ImGuiCond_Always);
     ImGui::Begin(title, nullptr,
                  ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove |
                  ImGuiWindowFlags_NoResize);
+    render_panel_focus_control(PanelId::Ppi, focus);
+    const float visual_scale =
+        focus && focus->is_focused(PanelId::Ppi)
+        ? PanelFocusState::presenter_scale() : 1.0f;
 
     // --- smooth zoom (mouse wheel over the scope) ---
     if (ImGui::IsWindowHovered() && ImGui::GetIO().MouseWheel != 0.0f) {
@@ -92,7 +97,9 @@ void PpiView::render(const char* title, ImVec2 pos, ImVec2 size,
     // --- range rings + labels ---
     for (int i = 1; i <= 4; ++i) {
         const float r = (float)(R * i / 4.0);
-        dl->AddCircle(ImVec2((float)cx, (float)cy), r, theme::col_ring(), 128, 1.0f);
+        dl->AddCircle(
+            ImVec2((float)cx, (float)cy), r, theme::col_ring(), 128,
+            1.0f * visual_scale);
         char lbl[32];
         std::snprintf(lbl, sizeof lbl, "%.0f km", range_m_smooth_ * i / 4.0 / 1000.0);
         dl->AddText(ImVec2((float)cx + 4, (float)(cy - r) - 14),
@@ -140,7 +147,7 @@ void PpiView::render(const char* title, ImVec2 pos, ImVec2 size,
             ImVec2((float)(cx + R * std::sin(start_angle)),
                    (float)(cy - R * std::cos(start_angle))),
             with_alpha(face_color, selected ? 150 : 75),
-            selected ? 1.6f : 1.0f);
+            (selected ? 1.6f : 1.0f) * visual_scale);
 
         // Sector Scan is persistent per face, independent of which face is
         // selected in the controls. Show every active sector as a face-local
@@ -192,7 +199,7 @@ void PpiView::render(const char* title, ImVec2 pos, ImVec2 size,
                             (float)cx + (end.x - (float)cx) * t1,
                             (float)cy + (end.y - (float)cy) * t1),
                         with_alpha(mode_color, selected ? 230 : 175),
-                        selected ? 1.5f : 1.0f);
+                        (selected ? 1.5f : 1.0f) * visual_scale);
                 }
             }
         }
@@ -220,7 +227,7 @@ void PpiView::render(const char* title, ImVec2 pos, ImVec2 size,
         const float x2 = (float)(cx + R * std::sin(a));
         const float y2 = (float)(cy - R * std::cos(a));
         dl->AddLine(ImVec2((float)cx, (float)cy), ImVec2(x2, y2),
-                    theme::col_spoke(), 1.0f);
+                    theme::col_spoke(), 1.0f * visual_scale);
         char lbl[8];
         std::snprintf(lbl, sizeof lbl, "%03d", deg);
         dl->AddText(ImVec2((float)(cx + (R + 16) * std::sin(a)) - 10,
@@ -244,14 +251,14 @@ void PpiView::render(const char* title, ImVec2 pos, ImVec2 size,
         if (selected) {
             dl->AddLine(
                 ImVec2((float)cx, (float)cy), end,
-                with_alpha(sweep_color, 45), 6.0f);
+                with_alpha(sweep_color, 45), 6.0f * visual_scale);
         }
         dl->AddLine(
             ImVec2((float)cx, (float)cy), end,
             with_alpha(sweep_color, selected ? 255 : 145),
-            selected ? 2.4f : 1.4f);
+            (selected ? 2.4f : 1.4f) * visual_scale);
         dl->AddCircleFilled(
-            end, selected ? 3.5f : 2.3f,
+            end, (selected ? 3.5f : 2.3f) * visual_scale,
             with_alpha(sweep_color, selected ? 255 : 180));
     }
 
@@ -269,9 +276,12 @@ void PpiView::render(const char* title, ImVec2 pos, ImVec2 size,
         const int base_a = (int)(255 * (1.0f - age));
         if (base_a < 12) continue;
         const ImU32 c = theme::col_snr(b.snr_db);
-        dl->AddCircleFilled(p, 6.5f, with_alpha(c, base_a / 6));  // halo
-        dl->AddCircleFilled(p, 3.5f, with_alpha(c, base_a / 2));  // bloom
-        dl->AddCircleFilled(p, 2.2f, with_alpha(c, base_a));      // core
+        dl->AddCircleFilled(
+            p, 6.5f * visual_scale, with_alpha(c, base_a / 6));  // halo
+        dl->AddCircleFilled(
+            p, 3.5f * visual_scale, with_alpha(c, base_a / 2));  // bloom
+        dl->AddCircleFilled(
+            p, 2.2f * visual_scale, with_alpha(c, base_a));      // core
     }
 
     // --- tracks: diamond + velocity vector + fading 10-pt trail ---
@@ -287,40 +297,51 @@ void PpiView::render(const char* title, ImVec2 pos, ImVec2 size,
                 const ImVec2 q1 = enu_to_screen(cx, cy, R, pts[i-1].first, pts[i-1].second, range_m_smooth_);
                 const ImVec2 q2 = enu_to_screen(cx, cy, R, pts[i].first,   pts[i].second,   range_m_smooth_);
                 const int a = (int)(140 * (double)i / pts.size());
-                dl->AddLine(q1, q2, with_alpha(theme::col_track(), a), 1.5f);
+                dl->AddLine(
+                    q1, q2, with_alpha(theme::col_track(), a),
+                    1.5f * visual_scale);
             }
         }
 
         // diamond symbol
-        const float s = 6.0f;
+        const float s = 6.0f * visual_scale;
         const ImVec2 diamond[5] = {
             {p.x, p.y - s}, {p.x + s, p.y}, {p.x, p.y + s}, {p.x - s, p.y}, {p.x, p.y - s}};
-        dl->AddPolyline(diamond, 5, theme::col_track(), 0, 1.5f);
+        dl->AddPolyline(
+            diamond, 5, theme::col_track(), 0, 1.5f * visual_scale);
 
         // velocity vector (60 s prediction)
         const ImVec2 v = enu_to_screen(cx, cy, R,
             t.x_m + t.vx_mps * 60.0, t.y_m + t.vy_mps * 60.0, range_m_smooth_);
-        dl->AddLine(p, v, with_alpha(theme::col_track(), 160), 1.0f);
+        dl->AddLine(
+            p, v, with_alpha(theme::col_track(), 160),
+            1.0f * visual_scale);
 
         // label
         char lbl[64];
         const double spd = std::sqrt(t.vx_mps*t.vx_mps + t.vy_mps*t.vy_mps);
         std::snprintf(lbl, sizeof lbl, "T%lld %.0fk %.0fm/s",
                       (long long)t.track_id, range / 1000.0, spd);
-        dl->AddText(ImVec2(p.x + 9, p.y - 6), theme::col_text(), lbl);
+        dl->AddText(
+            ImVec2(p.x + 9 * visual_scale, p.y - 6 * visual_scale),
+            theme::col_text(), lbl);
     }
 
     // --- own-ship: crosshair + heading marker ---
-    dl->AddLine(ImVec2((float)cx - 10, (float)cy), ImVec2((float)cx + 10, (float)cy),
-                theme::col_ownship(), 1.5f);
-    dl->AddLine(ImVec2((float)cx, (float)cy - 10), ImVec2((float)cx, (float)cy + 10),
-                theme::col_ownship(), 1.5f);
+    dl->AddLine(
+        ImVec2((float)cx - 10 * visual_scale, (float)cy),
+        ImVec2((float)cx + 10 * visual_scale, (float)cy),
+        theme::col_ownship(), 1.5f * visual_scale);
+    dl->AddLine(
+        ImVec2((float)cx, (float)cy - 10 * visual_scale),
+        ImVec2((float)cx, (float)cy + 10 * visual_scale),
+        theme::col_ownship(), 1.5f * visual_scale);
     {
         const double h = ship.heading_deg * kDeg2Rad;
         dl->AddLine(ImVec2((float)cx, (float)cy),
                     ImVec2((float)(cx + 0.15 * R * std::sin(h)),
                            (float)(cy - 0.15 * R * std::cos(h))),
-                    theme::col_ownship(), 2.0f);
+                    theme::col_ownship(), 2.0f * visual_scale);
     }
 
     // --- readouts (top-left, above the scope) ---
@@ -343,7 +364,9 @@ void PpiView::render(const char* title, ImVec2 pos, ImVec2 size,
         if (rfrac <= 1.0) {
             double brg = std::atan2(dx, dyn) / kDeg2Rad;
             if (brg < 0.0) brg += 360.0;
-            dl->AddCircle(m, 4.0f, theme::col_text_dim(), 0, 1.0f);
+            dl->AddCircle(
+                m, 4.0f * visual_scale, theme::col_text_dim(), 0,
+                1.0f * visual_scale);
             char cur[64];
             std::snprintf(cur, sizeof cur, "CUR %5.1f km  BRG %06.1f",
                           rfrac * range_m_smooth_ / 1000.0, brg);

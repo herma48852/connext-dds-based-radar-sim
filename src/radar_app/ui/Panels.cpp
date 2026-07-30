@@ -16,12 +16,14 @@
 namespace radar::ui {
 
 namespace {
-void begin_panel(const char* title, ImVec2 pos, ImVec2 size) {
+void begin_panel(const char* title, ImVec2 pos, ImVec2 size,
+                 PanelId panel, PanelFocusState* focus) {
     ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
     ImGui::SetNextWindowSize(size, ImGuiCond_Always);
     ImGui::Begin(title, nullptr,
                  ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove |
                  ImGuiWindowFlags_NoResize);
+    render_panel_focus_control(panel, focus);
 }
 
 void led(ImDrawList* dl, ImVec2 center, ImU32 color, const char* label) {
@@ -68,8 +70,9 @@ bool scenario_button(const char* label, bool active, UiControl control,
 
 void render_track_list(const char* title, ImVec2 pos, ImVec2 size,
                        const std::vector<app::TrackView>& tracks,
-                       const app::ShipView& ship) {
-    begin_panel(title, pos, size);
+                       const app::ShipView& ship,
+                       PanelFocusState* focus) {
+    begin_panel(title, pos, size, PanelId::TrackList, focus);
 
     if (ImGui::BeginTable("tracks", 7,
             ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg |
@@ -80,13 +83,15 @@ void render_track_list(const char* title, ImVec2 pos, ImVec2 size,
         // at 2x UI scale. The other six columns keep stretching.
         const float id_w = ImGui::CalcTextSize("T0000").x
                          + 2.0f * ImGui::GetStyle().CellPadding.x;
+        // Put units in the headings so rows remain compact, aligned numeric
+        // readouts. Two-line labels also fit the narrow dashboard pane.
         ImGui::TableSetupColumn("ID", ImGuiTableColumnFlags_WidthFixed, id_w);
         ImGui::TableSetupColumn("CLASS");
-        ImGui::TableSetupColumn("RANGE");
-        ImGui::TableSetupColumn("AZ");
-        ImGui::TableSetupColumn("SPD");
-        ImGui::TableSetupColumn("ALT");
-        ImGui::TableSetupColumn("QUAL");
+        ImGui::TableSetupColumn("RNG\n[km]");
+        ImGui::TableSetupColumn("AZ\n[deg]");
+        ImGui::TableSetupColumn("SPD\n[m/s]");
+        ImGui::TableSetupColumn("ALT\n[m]");
+        ImGui::TableSetupColumn("QUAL\n[0-100]");
         ImGui::TableHeadersRow();
 
         auto sorted = tracks;
@@ -102,7 +107,7 @@ void render_track_list(const char* title, ImVec2 pos, ImVec2 size,
             ImGui::TableNextRow();
             ImGui::TableNextColumn(); ImGui::Text("T%lld", (long long)t.track_id);
             ImGui::TableNextColumn(); ImGui::TextUnformatted(class_name(t.classification));
-            ImGui::TableNextColumn(); ImGui::Text("%.1f km", range / 1000.0);
+            ImGui::TableNextColumn(); ImGui::Text("%.1f", range / 1000.0);
             ImGui::TableNextColumn(); ImGui::Text("%05.1f", az);
             ImGui::TableNextColumn(); ImGui::Text("%.0f", spd);
             ImGui::TableNextColumn(); ImGui::Text("%.0f", t.z_m);
@@ -115,11 +120,31 @@ void render_track_list(const char* title, ImVec2 pos, ImVec2 size,
 
 void render_beam_timeline(const char* title, ImVec2 pos, ImVec2 size,
                           const std::deque<app::BeamView>& history,
-                          int32_t selected_face_id) {
-    begin_panel(title, pos, size);
+                          int32_t selected_face_id,
+                          BeamTimelineState& state,
+                          UiControlObserver* observer,
+                          PanelFocusState* focus) {
+    begin_panel(title, pos, size, PanelId::BeamTimeline, focus);
 
+    const bool pause_clicked =
+        ImGui::SmallButton(state.paused() ? "RESUME" : "PAUSE");
+    if (observer) {
+        observer->observe(
+            UiControl::BeamTimelinePause, -1,
+            ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+    }
+    if (pause_clicked)
+        state.toggle(history);
+    if (state.paused()) {
+        ImGui::SameLine();
+        ImGui::TextColored(
+            ImVec4(1.0f, 0.75f, 0.30f, 1.0f),
+            "FROZEN  %zu samples", state.snapshot_size());
+    }
+
+    const auto& displayed_history = state.displayed_history(history);
     const auto selected_count = std::count_if(
-        history.begin(), history.end(),
+        displayed_history.begin(), displayed_history.end(),
         [&](const auto& beam) {
             return beam.face_id == selected_face_id;
         });
@@ -132,7 +157,7 @@ void render_beam_timeline(const char* title, ImVec2 pos, ImVec2 size,
         ys2.resize(selected_count);
         double t0 = 0.0;
         std::size_t output = 0;
-        for (const auto& beam : history) {
+        for (const auto& beam : displayed_history) {
             if (beam.face_id != selected_face_id)
                 continue;
             if (output == 0)
@@ -166,8 +191,9 @@ void render_beam_timeline(const char* title, ImVec2 pos, ImVec2 size,
 }
 
 void render_health_panel(const char* title, ImVec2 pos, ImVec2 size,
-                         const app::HealthView& h) {
-    begin_panel(title, pos, size);
+                         const app::HealthView& h,
+                         PanelFocusState* focus) {
+    begin_panel(title, pos, size, PanelId::SystemHealth, focus);
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImVec2 p = ImGui::GetCursorScreenPos();
     float y = p.y + 10;
@@ -196,8 +222,9 @@ void render_health_panel(const char* title, ImVec2 pos, ImVec2 size,
 }
 
 void render_ship_panel(const char* title, ImVec2 pos, ImVec2 size,
-                       const app::ShipView& s) {
-    begin_panel(title, pos, size);
+                       const app::ShipView& s,
+                       PanelFocusState* focus) {
+    begin_panel(title, pos, size, PanelId::ShipPosition, focus);
     ImGui::Text("LAT  %9.4f", s.latitude_deg);
     ImGui::Text("LON  %9.4f", s.longitude_deg);
     ImGui::Text("HDG  %6.1f deg", s.heading_deg);
@@ -211,8 +238,9 @@ void render_array_panel(const char* title, ImVec2 pos, ImVec2 size,
                         const app::ArrayGridView& grid, uint32_t live_mask,
                         int32_t& selected_face_id,
                         app::CommandSink& commands,
-                        UiControlObserver* observer) {
-    begin_panel(title, pos, size);
+                        UiControlObserver* observer,
+                        PanelFocusState* focus) {
+    begin_panel(title, pos, size, PanelId::ArrayFace, focus);
 
     const std::array<int32_t, 4> face_layout{
         faces::kForwardPort, faces::kForwardStarboard,
@@ -325,8 +353,9 @@ void render_scenario_bar(const char* title, ImVec2 pos, ImVec2 size,
                          int32_t radar_mode, bool degraded,
                          int32_t selected_face_id,
                          bool& beam_formation_overlay,
-                         UiControlObserver* observer) {
-    begin_panel(title, pos, size);
+                         UiControlObserver* observer,
+                         PanelFocusState* focus) {
+    begin_panel(title, pos, size, PanelId::Scenarios, focus);
     const auto* selected_face = faces::find(selected_face_id);
     const auto target_mask = faces::mask(selected_face_id);
     ImGui::Text(

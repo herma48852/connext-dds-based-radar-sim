@@ -15,6 +15,7 @@
 #include <imgui.h>
 
 #include "../DataBus.hpp"
+#include "PanelFocus.hpp"
 #include "RadarFaces.hpp"
 
 namespace radar::ui {
@@ -36,7 +37,8 @@ public:
                 const std::array<double, faces::kFaceCount>&
                     sector_widths_deg,
                 int32_t selected_face_id,
-                int64_t now_ms, float dt);
+                int64_t now_ms, float dt,
+                PanelFocusState* focus = nullptr);
 
     double display_range_m() const { return range_m_smooth_; }
 

@@ -42,6 +42,8 @@ create independent instances:
 
 - Repeated 12 km orbits use deterministic golden-angle phase offsets.
 - Repeated random fleets continue the deterministic random stream.
+- Repeated presentation fleets continue the golden-angle formation so
+  contacts from separate instances do not overlap.
 - Repeated minimum-range transits rotate to different approach bearings.
 - Repeated face-seam handoffs advance to another physical face boundary.
 - Repeated crossing pairs rotate their complete geometry by the golden angle.
@@ -71,6 +73,29 @@ Adds the selected number of randomized inbound targets using the existing
 fighter, bomber, missile, ship, drone, and decoy profiles. The UI default is
 31 targets, matching the random portion of `--targets 32`. Random targets
 continue to honor `target_gen --respawn-range`.
+
+### Presentation Fleet
+
+Adds a configurable persistent formation intended for screen-shared
+demonstrations. The default six-target fleet contains one fighter, bomber,
+missile, ship, drone, and decoy. It does not alter receiver sensitivity,
+CFAR, or the tracker's three-scan confirmation rule. Instead, each target
+orbits at a range comfortably inside its modeled RCS sensitivity:
+
+| Type | Slant range | Elevation | RCS |
+|---|---:|---:|---:|
+| Fighter | 18 km | 14 deg | 0 dBsm |
+| Bomber | 50 km | 14 deg | 20 dBsm |
+| Missile | 12 km | 25 deg | -10 dBsm |
+| Ship | 45 km | Surface | 35 dBsm |
+| Drone | 9 km | 14 deg | -15 dBsm |
+| Decoy | 30 km | 14 deg | 5 dBsm |
+
+The air contacts are centered on modeled search elevation bars. The surface
+ship remains at zero altitude inside the lowest bar's acceptance gate.
+Golden-angle starting phases keep contacts separated, and repeated fleets
+continue that phase sequence. Counts greater than six repeat the same mixed
+profile at additional separated phases.
 
 ### Minimum-Range Transit
 

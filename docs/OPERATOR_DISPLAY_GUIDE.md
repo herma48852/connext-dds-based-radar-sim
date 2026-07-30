@@ -24,6 +24,20 @@ A detection is evidence from one observation. A track is the radar's
 time-filtered estimate that a contact exists and is moving in a particular
 way. A colored dot is therefore not the same thing as a tracked target.
 
+## Focus and presenter mode
+
+Every panel has a small expand icon at the right side of its title bar.
+Selecting it brings that panel to the full application client area for
+detailed inspection. Focused panels automatically use a crisp 17-point font,
+larger control spacing, and enlarged primary scope symbols and strokes so
+they remain legible in screen-shared demonstrations.
+
+Select the contract icon, double-click the panel title bar, or press `Esc` to
+restore the complete dashboard. Only one panel can be focused at a time.
+The covered dashboard panels continue processing live data while a panel is
+focused, so their detections, phosphor, tracks, and timelines are current
+when the dashboard returns.
+
 ## Coordinate frames: the most important distinction
 
 | Display or field | Azimuth reference | Meaning of 0 degrees |
@@ -239,15 +253,18 @@ simulator uses a simplified fixed threshold in its CFAR-like processing.
 
 The list is sorted nearest contact first.
 
-| Column | Meaning and unit |
+Units appear on a second line in each numeric column heading so the row values
+stay compact and aligned.
+
+| Display heading | Meaning |
 |---|---|
 | `ID` | Radar track number, shown as `Txxxx` |
 | `CLASS` | Simplified kinematic classification |
-| `RANGE` | Horizontal ship-relative range estimate in km |
-| `AZ` | Ship-relative azimuth in degrees |
-| `SPD` | Estimated speed in m/s |
-| `ALT` | Estimated height above the ship-relative plane in m |
-| `QUAL` | Tracker maturity/quality score from 0 to 100 |
+| `RNG [km]` | Horizontal ship-relative range estimate |
+| `AZ [deg]` | Ship-relative azimuth |
+| `SPD [m/s]` | Estimated horizontal speed |
+| `ALT [m]` | Estimated height above the ship-relative plane |
+| `QUAL [0-100]` | Tracker maturity/quality score |
 
 `QUAL` is not a percentage probability and not IFF confidence. New tracks
 begin at a lower score, gain two points per associated detection, and are
@@ -281,6 +298,10 @@ commanded recently?**
   boresight.
 - Elevation cycles through 3, 14, and 25 degrees. It advances after a full
   face sweep or at each sector reversal.
+- **PAUSE** freezes the current plotted history for inspection and changes to
+  **RESUME**. The amber `FROZEN` readout shows the captured sample count.
+  This is a display-only control: beam scheduling and DDS publication keep
+  running. **RESUME** returns immediately to the latest live history.
 
 Each of the four face instances advances at 100 beam dwells per second. A
 face has 40 half-step-inset centers at 2.25-degree spacing and three

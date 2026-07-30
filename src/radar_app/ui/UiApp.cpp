@@ -94,6 +94,7 @@ bool UiApp::init() {
     ImGui_ImplOpenGL3_Init(glsl_version);
     bscope_.init_gl();
 #endif
+    renderer_initialized_ = true;
     return true;
 }
 
@@ -102,27 +103,39 @@ void UiApp::update_content_scale() {
     glfwGetWindowContentScale(window_, &sx, &sy);
     if (!(sx >= 1.0f && sx <= 4.0f) || !std::isfinite(sx))
         sx = 1.0f;
-    if (std::fabs(sx - content_scale_) < 0.01f)
+    const float logical_font_size =
+        panel_focus_.active() ? 17.0f : 13.0f;
+    if (std::fabs(sx - content_scale_) < 0.01f &&
+        std::fabs(logical_font_size - logical_font_size_) < 0.01f)
         return;
     content_scale_ = sx;
+    logical_font_size_ = logical_font_size;
+    const float presenter_scale = logical_font_size / 13.0f;
     ImGuiIO& io = ImGui::GetIO();
 #if defined(__APPLE__)
     // GLFW/Metal already maps logical coordinates to the Retina framebuffer.
     // Keep the UI at the same logical size as Windows and put the backing
     // scale into the font rasterizer so glyphs stay sharp at 2x.
-    theme::configure_default_font(sx);
+    theme::configure_default_font(sx, logical_font_size);
     io.FontGlobalScale = 1.0f;
-    theme::apply_style(1.0f);
-    if (!metal_.rebuild_font_texture())
+    theme::apply_style(presenter_scale);
+    if (renderer_initialized_ && !metal_.rebuild_font_texture())
         std::cerr << "Failed to rebuild Retina font texture\n";
 #else
+    theme::configure_default_font(sx, logical_font_size);
     io.FontGlobalScale = sx;
-    theme::apply_style(sx);
+    theme::apply_style(sx * presenter_scale);
+    if (renderer_initialized_) {
+        ImGui_ImplOpenGL3_DestroyFontsTexture();
+        if (!ImGui_ImplOpenGL3_CreateFontsTexture())
+            std::cerr << "Failed to rebuild presenter font texture\n";
+    }
 #endif
 }
 
 void UiApp::shutdown() {
     if (!window_) return;
+    renderer_initialized_ = false;
 #if defined(__APPLE__)
     bscope_.release_texture(metal_);
     metal_.shutdown(); // ImGui_ImplMetal_Shutdown + device/queue/layer
@@ -208,6 +221,10 @@ int UiApp::run() {
 #endif
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
+        if (panel_focus_.active() &&
+            ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+            panel_focus_.clear();
+        }
 
         const ImGuiViewport* vp = ImGui::GetMainViewport();
         const float W = vp->Size.x, H = vp->Size.y;
@@ -220,12 +237,6 @@ int UiApp::run() {
         const float ppi_w = W * 0.48f;
         const float right_w = W - ppi_w;
 
-        ppi_.render("PPI - PLAN POSITION INDICATOR",
-                    ImVec2(0, 0), ImVec2(ppi_w, scope_h),
-                    tracks, ship, beam_azimuths, rma_masks,
-                    radar_modes, sector_centers_deg, sector_widths_deg,
-                    selected_face_id_, now_ms, dt);
-
         // The comparison view needs enough vertical room for its status,
         // legend, and rotating plots.  On a Retina Mac the 2x UI scale made
         // the former 55% B-scope only a few text rows tall after chrome.
@@ -235,46 +246,143 @@ int UiApp::run() {
         const float ascope_h = scope_h * ascope_share;
         const float bscope_h = scope_h - ascope_h;
 
-        ascope_.render("A-SCOPE - AMPLITUDE / RANGE",
-                       ImVec2(ppi_w, 0), ImVec2(right_w, ascope_h),
-                       trace, dt);
-
-        bscope_.render("B-SCOPE - RANGE / AZIMUTH",
-                       ImVec2(ppi_w, ascope_h),
-                       ImVec2(right_w, bscope_h),
-                       tracks, ship,
-                       bus_.radar_mode[selected_index].load() == 1,
-                       bus_.sector_center_deg[selected_index].load(),
-                       bus_.sector_width_deg[selected_index].load(),
-                       bus_.current_beam_az_deg[selected_index].load(),
-                       show_beam_formation_, beam_pattern, dt);
-
         // bottom strip: 6 panes. Widths tuned so text fits at 2x UI scale
         // (health/ship need ~15%, scenario buttons ~14%, array grid ~16%).
         const float y0 = scope_h;
         const float w1 = W * 0.22f, w2 = W * 0.18f, w3 = W * 0.15f,
                     w4 = W * 0.15f, w5 = W * 0.16f,
                     w6 = W - w1 - w2 - w3 - w4 - w5;
-        render_track_list("TARGET TRACKS", ImVec2(0, y0), ImVec2(w1, panel_h),
-                          tracks, ship);
-        render_beam_timeline("BEAM SCHEDULE", ImVec2(w1, y0), ImVec2(w2, panel_h),
-                             beam_history_, selected_face_id_);
-        render_health_panel("SYSTEM HEALTH", ImVec2(w1 + w2, y0),
-                            ImVec2(w3, panel_h), health);
-        render_ship_panel("SHIP POSITION", ImVec2(w1 + w2 + w3, y0),
-                          ImVec2(w4, panel_h), ship);
-        render_array_panel("ARRAY FACE", ImVec2(w1 + w2 + w3 + w4, y0),
-                           ImVec2(w5, panel_h), array_grid,
-                           rma_masks[selected_index], selected_face_id_,
-                           console_);
         const auto scenario_index =
             static_cast<std::size_t>(selected_face_id_);
-        render_scenario_bar("SCENARIOS", ImVec2(w1 + w2 + w3 + w4 + w5, y0),
-                            ImVec2(w6, panel_h), console_,
-                            bus_.radar_mode[scenario_index].load(),
-                            bus_.degrade_array[scenario_index].load(),
-                            selected_face_id_,
-                            show_beam_formation_);
+
+        // Render every panel once per frame so hidden phosphor, histories, and
+        // controls continue updating. The focused panel is omitted from its
+        // dashboard slot and rendered last at full client size, keeping it
+        // above the still-live dashboard without duplicating state updates.
+        const auto render_ppi = [&](ImVec2 pos, ImVec2 size) {
+            ppi_.render(
+                "PPI - PLAN POSITION INDICATOR", pos, size,
+                tracks, ship, beam_azimuths, rma_masks,
+                radar_modes, sector_centers_deg, sector_widths_deg,
+                selected_face_id_, now_ms, dt, &panel_focus_);
+        };
+        const auto render_ascope = [&](ImVec2 pos, ImVec2 size) {
+            ascope_.render(
+                "A-SCOPE - AMPLITUDE / RANGE", pos, size,
+                trace, dt, &panel_focus_);
+        };
+        const auto render_bscope = [&](ImVec2 pos, ImVec2 size) {
+            bscope_.render(
+                "B-SCOPE - RANGE / AZIMUTH", pos, size,
+                tracks, ship,
+                bus_.radar_mode[selected_index].load() == 1,
+                bus_.sector_center_deg[selected_index].load(),
+                bus_.sector_width_deg[selected_index].load(),
+                bus_.current_beam_az_deg[selected_index].load(),
+                show_beam_formation_, beam_pattern, dt, &panel_focus_);
+        };
+        const auto render_tracks = [&](ImVec2 pos, ImVec2 size) {
+            render_track_list(
+                "TARGET TRACKS", pos, size, tracks, ship, &panel_focus_);
+        };
+        const auto render_timeline = [&](ImVec2 pos, ImVec2 size) {
+            render_beam_timeline(
+                "BEAM SCHEDULE", pos, size,
+                beam_history_, selected_face_id_, beam_timeline_state_,
+                nullptr, &panel_focus_);
+        };
+        const auto render_health = [&](ImVec2 pos, ImVec2 size) {
+            render_health_panel(
+                "SYSTEM HEALTH", pos, size, health, &panel_focus_);
+        };
+        const auto render_ship = [&](ImVec2 pos, ImVec2 size) {
+            render_ship_panel(
+                "SHIP POSITION", pos, size, ship, &panel_focus_);
+        };
+        const auto render_array = [&](ImVec2 pos, ImVec2 size) {
+            render_array_panel(
+                "ARRAY FACE", pos, size, array_grid,
+                rma_masks[selected_index], selected_face_id_,
+                console_, nullptr, &panel_focus_);
+        };
+        const auto render_scenarios = [&](ImVec2 pos, ImVec2 size) {
+            render_scenario_bar(
+                "SCENARIOS", pos, size, console_,
+                bus_.radar_mode[scenario_index].load(),
+                bus_.degrade_array[scenario_index].load(),
+                selected_face_id_, show_beam_formation_,
+                nullptr, &panel_focus_);
+        };
+
+        const PanelId focused = panel_focus_.focused();
+        const auto render_dashboard_panel =
+            [focused](PanelId panel, const auto& render,
+                      ImVec2 pos, ImVec2 size) {
+                if (focused != panel)
+                    render(pos, size);
+            };
+        render_dashboard_panel(
+            PanelId::Ppi, render_ppi,
+            ImVec2(0, 0), ImVec2(ppi_w, scope_h));
+        render_dashboard_panel(
+            PanelId::AScope, render_ascope,
+            ImVec2(ppi_w, 0), ImVec2(right_w, ascope_h));
+        render_dashboard_panel(
+            PanelId::BScope, render_bscope,
+            ImVec2(ppi_w, ascope_h), ImVec2(right_w, bscope_h));
+        render_dashboard_panel(
+            PanelId::TrackList, render_tracks,
+            ImVec2(0, y0), ImVec2(w1, panel_h));
+        render_dashboard_panel(
+            PanelId::BeamTimeline, render_timeline,
+            ImVec2(w1, y0), ImVec2(w2, panel_h));
+        render_dashboard_panel(
+            PanelId::SystemHealth, render_health,
+            ImVec2(w1 + w2, y0), ImVec2(w3, panel_h));
+        render_dashboard_panel(
+            PanelId::ShipPosition, render_ship,
+            ImVec2(w1 + w2 + w3, y0), ImVec2(w4, panel_h));
+        render_dashboard_panel(
+            PanelId::ArrayFace, render_array,
+            ImVec2(w1 + w2 + w3 + w4, y0), ImVec2(w5, panel_h));
+        render_dashboard_panel(
+            PanelId::Scenarios, render_scenarios,
+            ImVec2(w1 + w2 + w3 + w4 + w5, y0),
+            ImVec2(w6, panel_h));
+
+        const ImVec2 focus_pos(0, 0);
+        const ImVec2 focus_size(W, H);
+        switch (focused) {
+            case PanelId::Ppi:
+                render_ppi(focus_pos, focus_size);
+                break;
+            case PanelId::AScope:
+                render_ascope(focus_pos, focus_size);
+                break;
+            case PanelId::BScope:
+                render_bscope(focus_pos, focus_size);
+                break;
+            case PanelId::TrackList:
+                render_tracks(focus_pos, focus_size);
+                break;
+            case PanelId::BeamTimeline:
+                render_timeline(focus_pos, focus_size);
+                break;
+            case PanelId::SystemHealth:
+                render_health(focus_pos, focus_size);
+                break;
+            case PanelId::ShipPosition:
+                render_ship(focus_pos, focus_size);
+                break;
+            case PanelId::ArrayFace:
+                render_array(focus_pos, focus_size);
+                break;
+            case PanelId::Scenarios:
+                render_scenarios(focus_pos, focus_size);
+                break;
+            case PanelId::None:
+                break;
+        }
 
         ImGui::Render();
 #if defined(__APPLE__)

@@ -15,6 +15,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <deque>
 #include <map>
 #include <string>
 #include <utility>
@@ -144,7 +145,7 @@ public:
         ImPlot::CreateContext();
         ImGuiIO& io = ImGui::GetIO();
         io.IniFilename = nullptr;
-        io.DisplaySize = ImVec2(1200.0f, 1000.0f);
+        io.DisplaySize = ImVec2(1800.0f, 1000.0f);
         io.DeltaTime = 1.0f / 60.0f;
         radar::ui::theme::configure_default_font(2.0f);
         io.FontGlobalScale = 1.0f;
@@ -161,6 +162,14 @@ public:
         trace_.face_id = selected_face_id;
         grid_.drift_db.assign(1024, 0.0f);
         grid_.face_id = selected_face_id;
+        for (int i = 0; i < 12; ++i) {
+            beam_history.push_back(radar::app::BeamView{
+                selected_face_id, i, 35.0 + i * 2.25,
+                3.0 + 11.0 * (i % 3), 0, 1, i * 10});
+        }
+        tracks.push_back(radar::app::TrackView{
+            42, 1500.0, 0.0, 120.0, 125.0, 0.0, 0.0, 1, 84, 0});
+        ship.heading_deg = 0.0;
         io.AddMousePosEvent(-1000.0f, -1000.0f);
     }
 
@@ -172,7 +181,23 @@ public:
     void frame() {
         ImGuiIO& io = ImGui::GetIO();
         io.DeltaTime = 1.0f / 60.0f;
+        const float desired_font_size =
+            panel_focus.active() ? 17.0f : 13.0f;
+        if (std::fabs(desired_font_size - font_size_) > 0.01f) {
+            radar::ui::theme::configure_default_font(
+                2.0f, desired_font_size);
+            io.FontGlobalScale = 1.0f;
+            radar::ui::theme::apply_style(desired_font_size / 13.0f);
+            unsigned char* pixels = nullptr;
+            int width = 0, height = 0;
+            io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+            font_size_ = desired_font_size;
+        }
         ImGui::NewFrame();
+        if (panel_focus.active() &&
+            ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+            panel_focus.clear();
+        }
 
         // Exercise the original regression: the visible A-scope title changes
         // every frame and is rendered before the controls. Its hidden ID must
@@ -183,18 +208,61 @@ public:
         grid_.face_id = selected_face_id;
         const auto selected_index =
             static_cast<std::size_t>(selected_face_id);
-        ascope_.render("A-SCOPE - AMPLITUDE / RANGE", ImVec2(0, 0),
-                       ImVec2(1200, 380), trace_, io.DeltaTime);
-
-        radar::ui::render_array_panel(
-            "ARRAY FACE", ImVec2(0, 400), ImVec2(700, 580), grid_,
-            sink.rma_masks[selected_index], selected_face_id, sink, &probe);
         const auto scenario_index =
             static_cast<std::size_t>(selected_face_id);
-        radar::ui::render_scenario_bar(
-            "SCENARIOS", ImVec2(720, 400), ImVec2(460, 580), sink,
-            sink.radar_modes[scenario_index], sink.degraded[scenario_index],
-            selected_face_id, beam_formation_overlay, &probe);
+        const auto render_ascope = [&](ImVec2 pos, ImVec2 size) {
+            ascope_.render(
+                "A-SCOPE - AMPLITUDE / RANGE", pos, size,
+                trace_, io.DeltaTime, &panel_focus);
+        };
+        const auto render_array = [&](ImVec2 pos, ImVec2 size) {
+            radar::ui::render_array_panel(
+                "ARRAY FACE", pos, size, grid_,
+                sink.rma_masks[selected_index], selected_face_id, sink,
+                &probe, &panel_focus);
+        };
+        const auto render_scenarios = [&](ImVec2 pos, ImVec2 size) {
+            radar::ui::render_scenario_bar(
+                "SCENARIOS", pos, size, sink,
+                sink.radar_modes[scenario_index],
+                sink.degraded[scenario_index],
+                selected_face_id, beam_formation_overlay,
+                &probe, &panel_focus);
+        };
+        const auto render_timeline = [&](ImVec2 pos, ImVec2 size) {
+            radar::ui::render_beam_timeline(
+                "BEAM SCHEDULE", pos, size, beam_history,
+                selected_face_id, beam_timeline_state,
+                &probe, &panel_focus);
+        };
+        const auto render_tracks = [&](ImVec2 pos, ImVec2 size) {
+            radar::ui::render_track_list(
+                "TARGET TRACKS", pos, size, tracks, ship, &panel_focus);
+        };
+
+        const auto focused = panel_focus.focused();
+        if (focused != radar::ui::PanelId::AScope)
+            render_ascope(ImVec2(0, 0), ImVec2(1200, 380));
+        if (focused != radar::ui::PanelId::ArrayFace)
+            render_array(ImVec2(0, 400), ImVec2(700, 580));
+        if (focused != radar::ui::PanelId::Scenarios)
+            render_scenarios(ImVec2(720, 400), ImVec2(460, 580));
+        if (focused != radar::ui::PanelId::BeamTimeline)
+            render_timeline(ImVec2(1200, 0), ImVec2(580, 380));
+        if (focused != radar::ui::PanelId::TrackList)
+            render_tracks(ImVec2(1200, 400), ImVec2(580, 580));
+
+        const ImVec2 focus_size(1800, 1000);
+        if (focused == radar::ui::PanelId::AScope)
+            render_ascope(ImVec2(0, 0), focus_size);
+        else if (focused == radar::ui::PanelId::ArrayFace)
+            render_array(ImVec2(0, 0), focus_size);
+        else if (focused == radar::ui::PanelId::Scenarios)
+            render_scenarios(ImVec2(0, 0), focus_size);
+        else if (focused == radar::ui::PanelId::BeamTimeline)
+            render_timeline(ImVec2(0, 0), focus_size);
+        else if (focused == radar::ui::PanelId::TrackList)
+            render_tracks(ImVec2(0, 0), focus_size);
 
         ImGui::Render();
         ++frame_number_;
@@ -218,16 +286,74 @@ public:
         return sink.commands.size() - before;
     }
 
+    void click_focus_toggle(const char* window_name) {
+        ImGuiWindow* window = find_window(window_name);
+        if (!window) {
+            std::fprintf(stderr, "missing ImGui window: %s\n", window_name);
+            std::exit(2);
+        }
+        const float title_height = ImGui::GetFrameHeight();
+        const float side = std::max(16.0f, title_height - 4.0f);
+        const ImVec2 center(
+            window->Pos.x + window->Size.x - side * 0.5f - 4.0f,
+            window->Pos.y + 2.0f + side * 0.5f);
+        ImGuiIO& io = ImGui::GetIO();
+        io.AddMousePosEvent(center.x, center.y);
+        io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+        frame();
+        io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+        frame();
+        io.AddMousePosEvent(-1000.0f, -1000.0f);
+        frame();
+    }
+
+    void press_escape() {
+        ImGuiIO& io = ImGui::GetIO();
+        io.AddKeyEvent(ImGuiKey_Escape, true);
+        frame();
+        io.AddKeyEvent(ImGuiKey_Escape, false);
+        frame();
+    }
+
+    Rect window_rect(const char* window_name) const {
+        ImGuiWindow* window = find_window(window_name);
+        if (!window) {
+            std::fprintf(stderr, "missing ImGui window: %s\n", window_name);
+            std::exit(2);
+        }
+        return {
+            window->Pos,
+            ImVec2(
+                window->Pos.x + window->Size.x,
+                window->Pos.y + window->Size.y)};
+    }
+
     Probe probe;
     RecordingSink sink;
     int32_t selected_face_id = radar::faces::kForwardStarboard;
     bool beam_formation_overlay = false;
+    radar::ui::PanelFocusState panel_focus;
+    std::deque<radar::app::BeamView> beam_history;
+    radar::ui::BeamTimelineState beam_timeline_state;
+    std::vector<radar::app::TrackView> tracks;
+    radar::app::ShipView ship{};
 
 private:
     radar::ui::AScopeView ascope_;
     radar::app::TraceBuffer trace_;
     radar::app::ArrayGridView grid_;
     int frame_number_ = 0;
+    float font_size_ = 13.0f;
+
+    static ImGuiWindow* find_window(const char* window_name) {
+        for (ImGuiWindow* candidate : GImGui->Windows) {
+            if (std::string(candidate->Name).find(window_name)
+                != std::string::npos) {
+                return candidate;
+            }
+        }
+        return nullptr;
+    }
 };
 
 int failures = 0;
@@ -283,6 +409,60 @@ int main() {
     // Warm up hover/window state and capture every production control rect.
     for (int i = 0; i < 4; ++i)
         ui.frame();
+
+    check(!ui.panel_focus.active(),
+          "panel focus starts in dashboard mode");
+    ui.click_focus_toggle("A_SCOPE");
+    check(ui.panel_focus.is_focused(radar::ui::PanelId::AScope),
+          "A-scope title-bar control enters focused mode");
+    const Rect focused_ascope = ui.window_rect("A_SCOPE");
+    check(std::fabs(focused_ascope.min.x) < 1.0e-6f &&
+              std::fabs(focused_ascope.min.y) < 1.0e-6f &&
+              std::fabs(focused_ascope.max.x - 1800.0f) < 1.0e-6f &&
+              std::fabs(focused_ascope.max.y - 1000.0f) < 1.0e-6f,
+          "focused A-scope fills the complete client area");
+    check(ImGui::GetIO().Fonts->ConfigData.Size == 1 &&
+              std::fabs(
+                  ImGui::GetIO().Fonts->ConfigData[0].SizePixels - 17.0f)
+                  < 1.0e-6f,
+          "focused panel rebuilds a crisp 17-point presenter font");
+    ui.click_focus_toggle("A_SCOPE");
+    check(!ui.panel_focus.active(),
+          "focused A-scope title-bar control restores dashboard mode");
+    const Rect restored_ascope = ui.window_rect("A_SCOPE");
+    check(std::fabs(restored_ascope.max.x - 1200.0f) < 1.0e-6f &&
+              std::fabs(restored_ascope.max.y - 380.0f) < 1.0e-6f,
+          "contract restores the A-scope dashboard geometry");
+    check(ImGui::GetIO().Fonts->ConfigData.Size == 1 &&
+              std::fabs(
+                  ImGui::GetIO().Fonts->ConfigData[0].SizePixels - 13.0f)
+                  < 1.0e-6f,
+          "contract restores the normal 13-point dashboard font");
+    ui.click_focus_toggle("A_SCOPE");
+    check(ui.panel_focus.is_focused(radar::ui::PanelId::AScope),
+          "A-scope can re-enter focused mode");
+    ui.press_escape();
+    check(!ui.panel_focus.active(),
+          "Escape restores the complete dashboard");
+
+    const std::size_t live_beams_before_pause = ui.beam_history.size();
+    check(ui.click(radar::ui::UiControl::BeamTimelinePause) == 0,
+          "beam timeline pause is a local display control");
+    check(ui.beam_timeline_state.paused() &&
+              ui.beam_timeline_state.snapshot_size()
+                  == live_beams_before_pause,
+          "beam timeline pause captures the current live history");
+    ui.beam_history.push_back(radar::app::BeamView{
+        radar::faces::kForwardStarboard, 99, 45.0, 3.0, 0, 1, 990});
+    ui.frame();
+    check(ui.beam_timeline_state.snapshot_size()
+              == live_beams_before_pause,
+          "paused beam timeline remains frozen while live history advances");
+    check(ui.click(radar::ui::UiControl::BeamTimelinePause) == 0,
+          "beam timeline resume emits no DDS command");
+    check(!ui.beam_timeline_state.paused() &&
+              ui.beam_timeline_state.snapshot_size() == 0,
+          "beam timeline resume returns to live history");
 
     // Retina uses a denser atlas without doubling logical text metrics.
     const ImGuiIO& io = ImGui::GetIO();
@@ -396,6 +576,7 @@ int main() {
     }
     std::printf(
         "ui_controls_smoke: PASS "
-        "(face selection, 30-degree sector, and face-local RMA controls)\n");
+        "(panel focus/presenter mode, beam pause/resume, face selection, "
+        "30-degree sector, and face-local RMA controls)\n");
     return 0;
 }

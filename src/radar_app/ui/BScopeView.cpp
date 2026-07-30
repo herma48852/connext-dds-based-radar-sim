@@ -121,7 +121,8 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
                         double live_beam_az_deg,
                         bool show_beam_formation,
                         const app::BeamPatternView& beam_pattern,
-                        float dt) {
+                        float dt,
+                        PanelFocusState* focus) {
     const auto face_index = static_cast<std::size_t>(
         faces::valid(beam_pattern.face_id)
             ? beam_pattern.face_id : faces::kForwardStarboard);
@@ -136,6 +137,10 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
     ImGui::Begin(heading, nullptr,
                  ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove |
                  ImGuiWindowFlags_NoResize);
+    render_panel_focus_control(PanelId::BScope, focus);
+    const float visual_scale =
+        focus && focus->is_focused(PanelId::BScope)
+        ? PanelFocusState::presenter_scale() : 1.0f;
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImVec2 wp = ImGui::GetCursorScreenPos();
@@ -210,7 +215,7 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
         auto vertical_line = [&](double az, ImU32 color, float thickness) {
             const float x = x_of_az(wrap360(az));
             dl->AddLine(ImVec2(x, wp.y), ImVec2(x, wp.y + h),
-                        color, thickness);
+                        color, thickness * visual_scale);
         };
         auto dashed_vertical = [&](double az, ImU32 color, float thickness,
                                    float dash, float gap) {
@@ -218,7 +223,7 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
             for (float y = wp.y; y < wp.y + h; y += dash + gap) {
                 dl->AddLine(ImVec2(x, y),
                             ImVec2(x, std::min(y + dash, wp.y + h)),
-                            color, thickness);
+                            color, thickness * visual_scale);
             }
         };
 
@@ -788,7 +793,8 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
                     dl->AddLine(
                         ImVec2(x, y),
                         ImVec2(x, std::min(y + 4.0f, wp.y + h)),
-                        IM_COL32(255, 220, 80, 160), 1.0f);
+                        IM_COL32(255, 220, 80, 160),
+                        1.0f * visual_scale);
             }
         }
 
@@ -802,14 +808,19 @@ void BScopeView::render(const char* title, ImVec2 pos, ImVec2 size,
             double az_ship =
                 std::fmod(az_world - ship.heading_deg + 360.0, 360.0);
             const ImVec2 p(x_of_az(az_ship), y_of_range(range));
+            const float marker_half = 4.0f * visual_scale;
             dl->AddRect(
-                ImVec2(p.x - 4, p.y - 4), ImVec2(p.x + 4, p.y + 4),
-                theme::col_track(), 0.0f, 0, 1.5f);
+                ImVec2(p.x - marker_half, p.y - marker_half),
+                ImVec2(p.x + marker_half, p.y + marker_half),
+                theme::col_track(), 0.0f, 0, 1.5f * visual_scale);
             char lbl[16];
             std::snprintf(lbl, sizeof lbl, "%lld",
                           (long long)t.track_id);
             dl->AddText(
-                ImVec2(p.x + 6, p.y - 6), theme::col_text(), lbl);
+                ImVec2(
+                    p.x + 6 * visual_scale,
+                    p.y - 6 * visual_scale),
+                theme::col_text(), lbl);
         }
 
         // axis labels

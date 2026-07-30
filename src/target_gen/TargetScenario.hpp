@@ -46,6 +46,10 @@ struct TargetState {
     double velocity_y_mps = 0.0;
     double path_progress_m = 0.0;
     double path_length_m = 0.0;
+    // Non-zero only for persistent orbit scenarios. Keeping the radius in
+    // state lets presentation contacts use type-appropriate ranges while
+    // sharing the same deterministic orbit integrator as the baseline.
+    double orbit_radius_m = 0.0;
 };
 
 struct ScenarioTemplateInfo {
@@ -90,6 +94,8 @@ public:
 
     static constexpr std::string_view kOrbitScenario = "orbit_12km";
     static constexpr std::string_view kRandomFleetScenario = "random_fleet";
+    static constexpr std::string_view kPresentationFleetScenario =
+        "presentation_fleet";
     static constexpr std::string_view kMinimumRangeScenario =
         "minimum_range_transit";
     static constexpr std::string_view kFaceSeamScenario =
@@ -119,7 +125,7 @@ public:
     // one 12 km orbit plus num_targets - 1 randomized inbound targets.
     explicit TargetScenario(int num_targets, uint64_t seed = 20260719);
 
-    static const std::array<ScenarioTemplateInfo, 6>& catalog();
+    static const std::array<ScenarioTemplateInfo, 7>& catalog();
 
     void set_respawn_range_km(double km) { respawn_range_m_ = km * 1000.0; }
     double respawn_range_km() const { return respawn_range_m_ / 1000.0; }
@@ -149,6 +155,8 @@ private:
                                   double phase);
     TargetState make_random_target(int32_t target_id, int64_t scenario_id,
                                    int profile);
+    TargetState make_presentation_target(
+        int32_t target_id, int64_t scenario_id, int launch_index);
     TargetState make_minimum_range_target(
         int32_t target_id, int64_t scenario_id);
     TargetState make_face_seam_target(
@@ -167,6 +175,7 @@ private:
     int32_t next_target_id_ = 10000;
     int64_t next_scenario_id_ = 1;
     int next_profile_ = 0;
+    int next_presentation_launch_ = 0;
     int next_face_seam_launch_ = 0;
     int next_crossing_pair_launch_ = 0;
     int next_boundary_crossing_pair_launch_ = 0;

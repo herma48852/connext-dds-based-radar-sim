@@ -211,6 +211,7 @@ if(RADAR_BUILD_APPLICATIONS)
         src/radar_app/components/CommandHandler.cpp
         src/radar_app/components/HmiUi.cpp
         src/radar_app/ShipSimulator.cpp
+        src/radar_app/ui/PanelFocus.hpp
         src/radar_app/ui/UiApp.cpp
         src/radar_app/ui/PpiView.cpp
         src/radar_app/ui/AScopeView.cpp
@@ -384,6 +385,8 @@ if(BUILD_TESTING)
 
     add_executable(target_scenario_regression
         tests/target_scenario_regression.cpp)
+    target_include_directories(target_scenario_regression PRIVATE
+        src/radar_app/components src/common)
     target_link_libraries(target_scenario_regression PRIVATE
         target_scenario_core radar_project_options)
 

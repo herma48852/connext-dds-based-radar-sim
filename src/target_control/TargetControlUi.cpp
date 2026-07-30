@@ -198,10 +198,12 @@ void TargetControlUi::render() {
             "with this control domain.");
     } else {
         const float gap = ImGui::GetStyle().ItemSpacing.x;
+        // Four columns keep the seven-template catalog to two rows in the
+        // standard 1500px window while still allowing descriptions to wrap.
         const std::size_t cards_per_row =
-            std::min<std::size_t>(3, snapshot->catalog.size());
+            std::min<std::size_t>(4, snapshot->catalog.size());
         const float card_width = std::max(
-            260.0f,
+            210.0f,
             (ImGui::GetContentRegionAvail().x -
              gap * static_cast<float>(
                  cards_per_row > 0

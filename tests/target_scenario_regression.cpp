@@ -1,4 +1,5 @@
 #include "TargetScenario.hpp"
+#include "DetectionModel.hpp"
 
 #include <algorithm>
 #include <array>
@@ -35,7 +36,8 @@ bool same_state(const TargetState& a, const TargetState& b) {
            a.velocity_x_mps == b.velocity_x_mps &&
            a.velocity_y_mps == b.velocity_y_mps &&
            a.path_progress_m == b.path_progress_m &&
-           a.path_length_m == b.path_length_m;
+           a.path_length_m == b.path_length_m &&
+           a.orbit_radius_m == b.orbit_radius_m;
 }
 
 double slant_range(const TargetScenario& scenario,
@@ -76,8 +78,21 @@ int main() {
     TargetScenario baseline_only(1);
 
     ok &= require(
-        TargetScenario::catalog().size() == 6,
-        "the control catalog must advertise all six scenarios");
+        TargetScenario::catalog().size() == 7,
+        "the control catalog must advertise all seven scenarios");
+    const auto presentation_descriptor = std::find_if(
+        TargetScenario::catalog().begin(),
+        TargetScenario::catalog().end(),
+        [](const auto& entry) {
+            return entry.name ==
+                TargetScenario::kPresentationFleetScenario;
+        });
+    ok &= require(
+        presentation_descriptor != TargetScenario::catalog().end() &&
+            presentation_descriptor->default_target_count == 6 &&
+            presentation_descriptor->minimum_target_count == 1 &&
+            presentation_descriptor->maximum_target_count == 64,
+        "presentation fleet must advertise a configurable six-target default");
     ok &= require(
         baseline_only.targets().size() == 1 &&
             baseline_only.targets().front().motion == TargetMotion::Orbit &&
@@ -136,6 +151,114 @@ int main() {
     ok &= require(
         observed_types == expected_types,
         "startup target type mix must remain unchanged");
+
+    // Presentation Fleet is intentionally separate from Random Fleet: one
+    // persistent contact per target type, placed at an RCS-appropriate range
+    // and a deterministic search-bar geometry.
+    TargetScenario presentation(1);
+    presentation.clear_all();
+    const auto presentation_added = presentation.add_scenario(
+        TargetScenario::kPresentationFleetScenario);
+    const std::array<ScenarioTargetType, 6> presentation_types{
+        ScenarioTargetType::Fighter,
+        ScenarioTargetType::Bomber,
+        ScenarioTargetType::Missile,
+        ScenarioTargetType::Ship,
+        ScenarioTargetType::Drone,
+        ScenarioTargetType::Decoy};
+    const std::array<double, 6> presentation_ranges_m{
+        18000.0, 50000.0, 12000.0, 45000.0, 9000.0, 30000.0};
+    const std::array<double, 6> presentation_elevations_deg{
+        14.0, 14.0, 25.0, 0.0, 14.0, 14.0};
+    const std::array<double, 6> presentation_rcs_dbsm{
+        0.0, 20.0, -10.0, 35.0, -15.0, 5.0};
+    const std::array<double, 6> presentation_speeds_mps{
+        250.0, 200.0, 600.0, 12.0, 60.0, 240.0};
+    ok &= require(
+        presentation_added.accepted &&
+            presentation_added.added_target_ids.size() == 6 &&
+            presentation.targets().size() == 6 &&
+            presentation.scenario_target_count(
+                presentation_added.scenario_instance_id) == 6,
+        "presentation fleet default must add six persistent contacts");
+    for (std::size_t i = 0; i < presentation.targets().size(); ++i) {
+        const auto& target = presentation.targets()[i];
+        const double range = slant_range(presentation, target);
+        const double horizontal_range = std::hypot(
+            target.x - presentation.ship_east_m(),
+            target.y - presentation.ship_north_m());
+        const double elevation_deg =
+            std::atan2(target.z, horizontal_range) *
+            180.0 / 3.14159265358979323846;
+        ok &= require(
+            target.type == presentation_types[i] &&
+                target.motion == TargetMotion::Orbit &&
+                std::abs(range - presentation_ranges_m[i]) < 1.0e-6 &&
+                std::abs(elevation_deg -
+                         presentation_elevations_deg[i]) < 1.0e-12 &&
+                target.rcs_dbsm == presentation_rcs_dbsm[i] &&
+                target.speed_mps == presentation_speeds_mps[i] &&
+                target.orbit_radius_m > 0.0,
+            "presentation contact must retain its type-specific observable "
+            "orbit");
+
+        // Require margin even at the nominal 3 dB azimuth-beam edge. This
+        // validates presentation placement against the production receiver
+        // equation without changing CFAR or target RCS.
+        const double beam_edge_response = std::sqrt(0.5);
+        const double signal =
+            radar::app::detection_model::target_voltage_amplitude(
+                target.rcs_dbsm, range, 1.0, beam_edge_response);
+        const double integrated_magnitude = std::hypot(
+            signal,
+            radar::app::detection_model::kNoiseMagnitudeRms);
+        ok &= require(
+            integrated_magnitude >
+                radar::app::detection_model::kCfarThreshold,
+            "presentation contact must clear CFAR at the nominal 3 dB "
+            "beam edge");
+    }
+    for (std::size_t i = 0; i < presentation.targets().size(); ++i) {
+        for (std::size_t j = i + 1;
+             j < presentation.targets().size(); ++j) {
+            ok &= require(
+                std::hypot(
+                    presentation.targets()[i].x -
+                        presentation.targets()[j].x,
+                    presentation.targets()[i].y -
+                        presentation.targets()[j].y) > 1000.0,
+                "presentation contacts must begin in distinct resolution "
+                "regions");
+        }
+    }
+    for (int step = 0; step < 6'000; ++step) {
+        const auto update = presentation.step(kDt, step * kDt);
+        ok &= require(
+            update.removed_target_ids.empty() &&
+                update.respawned_target_ids.empty() &&
+                presentation.targets().size() == 6,
+            "presentation fleet must persist without recycling or disposal");
+    }
+    for (std::size_t i = 0; i < presentation.targets().size(); ++i) {
+        ok &= require(
+            std::abs(
+                slant_range(presentation, presentation.targets()[i]) -
+                presentation_ranges_m[i]) < 1.0e-6,
+            "presentation orbit must preserve its configured slant range");
+    }
+    const auto repeated_presentation = presentation.add_scenario(
+        TargetScenario::kPresentationFleetScenario);
+    ok &= require(
+        repeated_presentation.accepted &&
+            repeated_presentation.scenario_instance_id !=
+                presentation_added.scenario_instance_id &&
+            presentation.targets().size() == 12 &&
+            std::hypot(
+                presentation.targets()[0].x -
+                    presentation.targets()[6].x,
+                presentation.targets()[0].y -
+                    presentation.targets()[6].y) > 1000.0,
+        "repeated presentation fleets must use separated orbit phases");
 
     // Additive runtime scenario behavior and deterministic non-overlap.
     TargetScenario additive(1);

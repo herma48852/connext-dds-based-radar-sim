@@ -32,7 +32,29 @@ constexpr Profile kProfiles[] = {
 constexpr int kNumProfiles =
     static_cast<int>(sizeof(kProfiles) / sizeof(kProfiles[0]));
 
-constexpr std::array<ScenarioTemplateInfo, 6> kCatalog{{
+struct PresentationProfile {
+    ScenarioTargetType type;
+    double speed_mps;
+    double slant_range_m;
+    double elevation_deg;
+    double rcs_dbsm;
+};
+
+// Stable, mixed contacts for screen-shared demonstrations. Ranges sit well
+// inside each RCS profile's nominal sensitivity instead of making every
+// truth target artificially bright. Air contacts are centered on a search
+// elevation bar; the ship remains at the physical surface inside the 3-degree
+// bar's acceptance gate.
+constexpr std::array<PresentationProfile, 6> kPresentationProfiles{{
+    {ScenarioTargetType::Fighter, 250.0, 18000.0, 14.0,   0.0},
+    {ScenarioTargetType::Bomber,  200.0, 50000.0, 14.0,  20.0},
+    {ScenarioTargetType::Missile, 600.0, 12000.0, 25.0, -10.0},
+    {ScenarioTargetType::Ship,     12.0, 45000.0,  0.0,  35.0},
+    {ScenarioTargetType::Drone,    60.0,  9000.0, 14.0, -15.0},
+    {ScenarioTargetType::Decoy,   240.0, 30000.0, 14.0,   5.0},
+}};
+
+constexpr std::array<ScenarioTemplateInfo, 7> kCatalog{{
     {
         TargetScenario::kOrbitScenario,
         "12 km Orbit",
@@ -44,6 +66,12 @@ constexpr std::array<ScenarioTemplateInfo, 6> kCatalog{{
         "Random Fleet",
         "Configurable randomized inbound targets using the existing profiles.",
         true, 31, 1, 255,
+    },
+    {
+        TargetScenario::kPresentationFleetScenario,
+        "Presentation Fleet",
+        "Persistent mixed contacts at RCS-appropriate observable ranges.",
+        true, 6, 1, 64,
     },
     {
         TargetScenario::kMinimumRangeScenario,
@@ -78,7 +106,7 @@ double wrap360(double angle_deg) {
 
 } // namespace
 
-const std::array<ScenarioTemplateInfo, 6>& TargetScenario::catalog() {
+const std::array<ScenarioTemplateInfo, 7>& TargetScenario::catalog() {
     return kCatalog;
 }
 
@@ -129,6 +157,7 @@ TargetState TargetScenario::make_orbit_target(
     target.heading_deg = wrap360(90.0 - phase / kDeg2Rad);
     target.rcs_dbsm = 0.0;
     target.profile = -1;
+    target.orbit_radius_m = horizontal_radius;
     return target;
 }
 
@@ -158,6 +187,35 @@ TargetState TargetScenario::make_random_target(
     target.maneuver = profile.maneuver;
     target.phase = phase_dist(rng_);
     target.profile = normalized_profile;
+    return target;
+}
+
+TargetState TargetScenario::make_presentation_target(
+        int32_t target_id, int64_t scenario_id, int launch_index) {
+    const auto& profile = kPresentationProfiles[
+        static_cast<std::size_t>(launch_index)
+        % kPresentationProfiles.size()];
+    const double phase = std::fmod(
+        static_cast<double>(launch_index) * kGoldenAngleDeg * kDeg2Rad,
+        2.0 * kPi);
+    const double elevation_rad = profile.elevation_deg * kDeg2Rad;
+    const double horizontal_radius =
+        profile.slant_range_m * std::cos(elevation_rad);
+
+    TargetState target;
+    target.id = target_id;
+    target.scenario_instance_id = scenario_id;
+    target.type = profile.type;
+    target.motion = TargetMotion::Orbit;
+    target.phase = phase;
+    target.x = ship_e_ + horizontal_radius * std::sin(phase);
+    target.y = ship_n_ + horizontal_radius * std::cos(phase);
+    target.z = profile.slant_range_m * std::sin(elevation_rad);
+    target.speed_mps = profile.speed_mps;
+    target.heading_deg = wrap360(90.0 - phase / kDeg2Rad);
+    target.rcs_dbsm = profile.rcs_dbsm;
+    target.profile = -1;
+    target.orbit_radius_m = horizontal_radius;
     return target;
 }
 
@@ -375,6 +433,14 @@ ScenarioChange TargetScenario::add_scenario(
                 id, change.scenario_instance_id, next_profile_++));
             change.added_target_ids.push_back(id);
         }
+    } else if (template_name == kPresentationFleetScenario) {
+        for (int i = 0; i < target_count; ++i) {
+            const int32_t id = next_target_id_++;
+            targets_.push_back(make_presentation_target(
+                id, change.scenario_instance_id,
+                next_presentation_launch_++));
+            change.added_target_ids.push_back(id);
+        }
     } else if (template_name == kMinimumRangeScenario) {
         const int32_t id = next_target_id_++;
         targets_.push_back(make_minimum_range_target(
@@ -527,25 +593,21 @@ ScenarioStep TargetScenario::step(double dt, double sim_time_s) {
     ScenarioStep result;
     for (auto target = targets_.begin(); target != targets_.end();) {
         if (target->motion == TargetMotion::Orbit) {
-            const double elevation_rad =
-                kBaselineElevationDeg * kDeg2Rad;
-            const double horizontal_radius =
-                kBaselineRangeM * std::cos(elevation_rad);
+            const double horizontal_radius = target->orbit_radius_m;
             const double angular_rate =
-                kBaselineSpeedMps / horizontal_radius;
+                target->speed_mps / horizontal_radius;
 
             target->phase = std::fmod(
                 target->phase + angular_rate * dt, 2.0 * kPi);
             const double sin_phase = std::sin(target->phase);
             const double cos_phase = std::cos(target->phase);
             const double relative_velocity_east =
-                kBaselineSpeedMps * cos_phase;
+                target->speed_mps * cos_phase;
             const double relative_velocity_north =
-                -kBaselineSpeedMps * sin_phase;
+                -target->speed_mps * sin_phase;
 
             target->x = ship_e_ + horizontal_radius * sin_phase;
             target->y = ship_n_ + horizontal_radius * cos_phase;
-            target->z = kBaselineRangeM * std::sin(elevation_rad);
             target->velocity_x_mps =
                 ship_velocity_east + relative_velocity_east;
             target->velocity_y_mps =

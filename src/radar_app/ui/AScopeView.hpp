@@ -11,13 +11,15 @@
 #include <imgui.h>
 
 #include "../DataBus.hpp"
+#include "PanelFocus.hpp"
 
 namespace radar::ui {
 
 class AScopeView {
 public:
     void render(const char* title, ImVec2 pos, ImVec2 size,
-                const app::TraceBuffer& trace, float dt);
+                const app::TraceBuffer& trace, float dt,
+                PanelFocusState* focus = nullptr);
 
 private:
     static constexpr float kDisplayFullScale = 0.6f;   // linear amplitude

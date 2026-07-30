@@ -50,12 +50,13 @@ inline void bscope_gradient(float t, unsigned char& r, unsigned char& g, unsigne
 // keeping Windows-compatible 13-point logical metrics.  On Retina, scaling
 // FontGlobalScale to 2 enlarged a 1x atlas and doubled every column/header;
 // RasterizerDensity instead supplies one atlas texel per framebuffer pixel.
-inline ImFont* configure_default_font(float raster_density) {
+inline ImFont* configure_default_font(
+        float raster_density, float logical_size = 13.0f) {
     ImGuiIO& io = ImGui::GetIO();
     io.Fonts->Clear();
 
     ImFontConfig config;
-    config.SizePixels = 13.0f;
+    config.SizePixels = logical_size;
     config.OversampleH = 1;
     config.OversampleV = 1;
     config.PixelSnapH = true;

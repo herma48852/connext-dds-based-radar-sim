@@ -63,7 +63,7 @@ bool wait_for_snapshot(
 int run_smoke_test(target_control::TargetControlClient& client) {
     if (!wait_for_snapshot(
             client, [](const auto& snapshot) {
-                return snapshot.catalog.size() == 6;
+                return snapshot.catalog.size() == 7;
             })) {
         std::cerr
             << "[target_control] no target_gen catalog on control domain "
@@ -85,6 +85,7 @@ int run_smoke_test(target_control::TargetControlClient& client) {
          {std::pair{"orbit_12km", 1},
           std::pair{"orbit_12km", 1},
           std::pair{"random_fleet", 3},
+          std::pair{"presentation_fleet", 6},
           std::pair{"minimum_range_transit", 1},
           std::pair{"minimum_range_transit", 1},
           std::pair{"face_seam_handoff", 1},
@@ -98,12 +99,12 @@ int run_smoke_test(target_control::TargetControlClient& client) {
 
     if (!wait_for_snapshot(
             client, [](const auto& snapshot) {
-                return snapshot.scenarios.size() == 8 &&
-                       snapshot.targets.size() == 12;
+                return snapshot.scenarios.size() == 9 &&
+                       snapshot.targets.size() == 18;
             })) {
         std::cerr
             << "[target_control] additive inventory did not reach "
-               "8 scenarios / 12 targets\n";
+               "9 scenarios / 18 targets\n";
         return 1;
     }
 
@@ -164,7 +165,7 @@ int run_smoke_test(target_control::TargetControlClient& client) {
 
     std::cout
         << "target_control smoke: PASS "
-           "(six-template catalog, additive launch, separation, "
+           "(seven-template catalog, additive launch, separation, "
            "clear-all)\n";
     return 0;
 }

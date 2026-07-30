@@ -87,14 +87,17 @@ ctest --test-dir build --output-on-failure
 - `ui_controls_smoke` renders the production ImGui A-scope and panels in
   memory, performs real mouse press/hold/release frames, and verifies all
   scenario controls (including the local **BEAM FORMATION** toggle), manual
-  per-face selection, RMA offline/online, and the dynamic
+  per-face selection, panel focus expand/contract, the beam-timeline
+  pause/resume snapshot, RMA offline/online, and the dynamic
   **ALL OFFLINE / ALL ONLINE** control. The A-scope
   azimuth/elevation changes throughout to cover the focus-loss regression.
 - `target_scenario_regression` accelerates 30 minutes of a deterministic
   16-target scenario containing the fixed 12 km baseline orbit and 15
   randomized targets, and checks stable IDs/profile mix, bounded motion,
   deterministic seeded behavior, the missile altitude floor, and periodic
-  120 km respawns. It also verifies additive scenario instances,
+  120 km respawns. It also verifies the persistent mixed Presentation Fleet,
+  including its RCS-appropriate ranges and elevation-bar geometry, additive
+  scenario instances,
   deterministic separation of repeated launches, individual/group removal,
   clear-all, the 15-second minimum-range transit, the one-shot face-seam
   handoff, the free-bearing two-target crossing geometry, and the
