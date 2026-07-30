@@ -13,7 +13,7 @@ set "CONFIGURATION=RelWithDebInfo"
 set "CONNEXT_DIR="
 set "BUILD_DIR="
 set "RUN_SECONDS="
-set "SUB_3KM="
+set "DISABLE_SUB_3KM="
 
 :parse_arguments
 if "%~1"=="" goto arguments_parsed
@@ -66,8 +66,8 @@ if /I "%~1"=="-RunSeconds" (
     shift
     goto parse_arguments
 )
-if /I "%~1"=="-Sub3km" (
-    set "SUB_3KM=1"
+if /I "%~1"=="-DisableSub3km" (
+    set "DISABLE_SUB_3KM=1"
     shift
     goto parse_arguments
 )
@@ -172,7 +172,7 @@ if defined RUN_SECONDS (
     set "TARGET_ARGS=%TARGET_ARGS% --run-seconds %RUN_SECONDS%"
     set "CONTROL_ARGS=%CONTROL_ARGS% --run-seconds %RUN_SECONDS%"
 )
-if defined SUB_3KM set "RADAR_ARGS=%RADAR_ARGS% --sub-3km"
+if defined DISABLE_SUB_3KM set "RADAR_ARGS=%RADAR_ARGS% --disable-sub-3km"
 
 echo Starting target generator on simulation domain %DOMAIN% and control domain %CONTROL_DOMAIN%...
 start "Target Generator" /B /D "%REPO_ROOT%" "%BIN_DIR%\target_gen.exe" %TARGET_ARGS% 1>"%LOG_DIR%\target.stdout.log" 2>"%LOG_DIR%\target.stderr.log"
@@ -230,7 +230,7 @@ echo Usage:
 echo   start-all.cmd [-Domain N] [-ControlDomain N] [-Targets N]
 echo                 [-Configuration Debug^|RelWithDebInfo^|Release]
 echo                 [-ConnextDir PATH] [-BuildDir PATH] [-RunSeconds N]
-echo                 [-Sub3km]
+echo                 [-DisableSub3km]
 echo.
 echo Defaults: simulation domain 92, control domain 93, 32 targets,
 echo           RelWithDebInfo, and the standard Connext 7.7.0 location.

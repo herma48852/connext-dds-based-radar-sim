@@ -11,7 +11,7 @@ param(
     [int]$RunSeconds = 0,
     [string]$ConnextDir,
     [switch]$Headless,
-    [switch]$Sub3km,
+    [switch]$DisableSub3km,
     [switch]$TargetControl,
     [switch]$StopExisting
 )
@@ -70,7 +70,7 @@ $quotedStopFile = '"' + $stopFile + '"'
 
 $radarArgs = @("--domain", $Domain, "--stop-file", $quotedStopFile)
 if ($Headless) { $radarArgs += "--headless" }
-if ($Sub3km) { $radarArgs += "--sub-3km" }
+if ($DisableSub3km) { $radarArgs += "--disable-sub-3km" }
 $targetArgs = @("--domain", $Domain, "--control-domain", $controlDomain,
                 "--targets", $Targets,
                 "--stop-file", $quotedStopFile)

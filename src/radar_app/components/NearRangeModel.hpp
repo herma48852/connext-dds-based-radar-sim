@@ -1,6 +1,6 @@
 #pragma once
-// Optional pulse-eclipse model for targets inside the normal receive blind
-// range. The default receiver still rejects these targets.
+// Pulse-eclipse model for targets inside the normal receive blind range.
+// It is enabled by default; radar_app can explicitly restore the hard gate.
 
 #include <algorithm>
 #include <cmath>
@@ -24,7 +24,7 @@ struct RangeObservation {
 
 inline RangeObservation observe_range(
         double true_range_m,
-        bool experimental_sub_3km_enabled) noexcept {
+        bool sub_3km_enabled) noexcept {
     if (!std::isfinite(true_range_m)
         || true_range_m <= 0.0
         || true_range_m > detection_model::kRangeMaxM) {
@@ -36,7 +36,7 @@ inline RangeObservation observe_range(
             true, false, true_range_m, true_range_m, 1.0};
     }
 
-    if (!experimental_sub_3km_enabled)
+    if (!sub_3km_enabled)
         return {};
 
     // A rectangular echo delayed by tau overlaps the receive-open interval

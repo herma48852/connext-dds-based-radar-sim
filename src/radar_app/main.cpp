@@ -212,7 +212,7 @@ int run_radar_app(int argc, char** argv) {
     bool no_dispose = false;
     bool gl_throttle = false;
     bool no_titlebar = false;
-    bool experimental_sub_3km = false;
+    bool sub_3km_enabled = true;
     int swap_interval = 1;
     double run_seconds = 0.0;
     std::string stop_file;
@@ -233,8 +233,10 @@ int run_radar_app(int argc, char** argv) {
             gl_throttle = true;
         else if (std::strcmp(argv[i], "--no-titlebar") == 0)
             no_titlebar = true;
-        else if (std::strcmp(argv[i], "--sub-3km") == 0)
-            experimental_sub_3km = true;
+        else if (std::strcmp(
+                     argv[i],
+                     "--disable-sub-3km") == 0)
+            sub_3km_enabled = false;
         else if (std::strcmp(argv[i], "--swap-interval") == 0) {
             if (++i >= argc ||
                 !radar::cli::parse_integer<int>(
@@ -261,7 +263,7 @@ int run_radar_app(int argc, char** argv) {
         else if (std::strcmp(argv[i], "--help") == 0) {
             RADAR_LOG << "radar_app [--domain N] [--headless] [--no-dispose]\n"
                          "          [--gl-throttle] [--swap-interval N]\n"
-                         "          [--sub-3km] [--run-seconds N]\n"
+                         "          [--disable-sub-3km] [--run-seconds N]\n"
                          "          [--stop-file PATH]\n"
                          "  --headless       components only (no window); crash-bisect\n"
                          "                   soak: same DDS traffic, zero GLFW/ImGui/AppKit\n"
@@ -271,8 +273,8 @@ int run_radar_app(int argc, char** argv) {
                          "  --swap-interval  legacy knob; no-op with the Metal renderer\n"
                          "                   to 30 fps (default 1 = vsync 60 fps)\n"
                          "  --no-titlebar    undecorated window; removes native titlebar\n"
-                         "  --sub-3km        EXPERIMENTAL: process pulse-eclipsed returns\n"
-                         "                   below 3 km with modeled range ambiguity\n"
+                         "  --disable-sub-3km  restore the legacy hard 3 km blind range\n"
+                         "                     (truncated returns are enabled by default)\n"
                          "  --run-seconds    stop cleanly after N seconds (automation)\n"
                          "  --stop-file      stop cleanly when PATH appears\n";
             return 0;
@@ -298,10 +300,10 @@ int run_radar_app(int argc, char** argv) {
     radar::SimClock::start();
     std::signal(SIGINT, on_sigint);
     RADAR_LOG << "[radar_app] starting on DDS domain " << domain << "\n";
-    if (experimental_sub_3km) {
+    if (!sub_3km_enabled) {
         RADAR_LOG
-            << "[radar_app] --sub-3km enabled: experimental "
-               "truncated-return receiver\n";
+            << "[radar_app] --disable-sub-3km: legacy hard "
+               "receive gate enabled\n";
     }
 
     radar::app::DataBus bus;
@@ -316,7 +318,7 @@ int run_radar_app(int argc, char** argv) {
     radar::app::DetectionProcessor processor(
         domain,
         bus,
-        experimental_sub_3km);
+        sub_3km_enabled);
     radar::app::TrackManager       tracker(domain, bus);
     radar::app::CalibrationMonitor calibration(domain, bus);
     radar::app::CommandHandler     commands(domain, bus);

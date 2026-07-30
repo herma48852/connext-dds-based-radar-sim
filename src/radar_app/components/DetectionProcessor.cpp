@@ -46,9 +46,9 @@ private:
 void DetectionProcessor::start() {
     RADAR_LOG
         << "[DetectionProcessor] sub-3km receiver="
-        << (experimental_sub_3km_enabled_
-                ? "EXPERIMENTAL truncated-return processing"
-                : "disabled (3 km blind range)")
+        << (sub_3km_enabled_
+                ? "enabled (truncated-return processing)"
+                : "DISABLED (hard 3 km blind range)")
         << "\n";
 
     auto beam_topic  = radds::make_topic<types::BeamCommand>(participant_, dds_names::TOPIC_BEAM_COMMAND);
@@ -256,7 +256,7 @@ void DetectionProcessor::return_synthesis_loop() {
                     const auto range_observation =
                         near_range::observe_range(
                             range,
-                            experimental_sub_3km_enabled_);
+                            sub_3km_enabled_);
                     if (!range_observation.observable)
                         continue;
 

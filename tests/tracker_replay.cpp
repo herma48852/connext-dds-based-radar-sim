@@ -452,7 +452,7 @@ int main(int argc, char** argv) {
             bool confirmed = false;
         };
         const auto run_minimum_range_transit =
-            [](bool experimental_sub_3km) {
+            [](bool sub_3km_enabled) {
                 TransitResult result;
                 TrackerCore transit_core;
                 int64_t transit_ms = 0;
@@ -466,7 +466,7 @@ int main(int argc, char** argv) {
                     const auto observation =
                         radar::app::near_range::observe_range(
                             true_range_m,
-                            experimental_sub_3km);
+                            sub_3km_enabled);
                     std::vector<CoreDetection> transit_detections;
                     if (observation.observable) {
                         const int range_bin =
@@ -505,18 +505,18 @@ int main(int argc, char** argv) {
                 return result;
             };
 
-        const auto default_transit =
+        const auto disabled_transit =
             run_minimum_range_transit(false);
-        check(default_transit.observed_ids.size() == 2
-                  && default_transit.dropped >= 1,
-              "default blind interval drops and reacquires the minimum-range transit");
-        const auto experimental_transit =
+        check(disabled_transit.observed_ids.size() == 2
+                  && disabled_transit.dropped >= 1,
+              "disabled near receiver drops and reacquires the minimum-range transit");
+        const auto default_transit =
             run_minimum_range_transit(true);
-        check(experimental_transit.observed_ids.size() == 1
-                  && experimental_transit.dropped == 0
-                  && experimental_transit.max_tracks == 1
-                  && experimental_transit.confirmed,
-              "experimental sub-3 km plots preserve one confirmed transit track");
+        check(default_transit.observed_ids.size() == 1
+                  && default_transit.dropped == 0
+                  && default_transit.max_tracks == 1
+                  && default_transit.confirmed,
+              "default sub-3 km plots preserve one confirmed idealized transit track");
 
         if (!ok) return 1;
         std::printf("PASS: deterministic detection/tracker replay golden counts "

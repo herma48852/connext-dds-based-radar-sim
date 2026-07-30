@@ -112,9 +112,11 @@ ctest --test-dir build --output-on-failure
   fusion, and production tracker against deterministic golden event counts
   and track-ID pool bounds. It also verifies three-scan confirmation,
   beam-cell transition continuity, state-preserving duplicate fusion, and the
-  exact 12-second confirmed-track coast/drop boundary. Its minimum-range
-  replay verifies default coast/drop/reacquisition and one persistent track
-  through the same transit when `--sub-3km` processing is modeled. Running
+  exact 12-second confirmed-track coast/drop boundary. Its idealized
+  minimum-range replay verifies legacy hard-gate coast/drop/reacquisition and
+  continuous default truncated-return plots. The production offset flyby can
+  legitimately break and reinitiate its track because the ambiguous apparent
+  motion is more severe. Running
   `./build/tracker_replay [seconds]` directly retains periodic diagnostics;
   assertions are enabled only by CTest's `--self-test` flag.
 - `beam_pattern_regression` verifies nominal beamwidth, outage gain loss,
@@ -126,10 +128,10 @@ ctest --test-dir build --output-on-failure
   azimuth pointings.
 - `detection_processor_regression` verifies ten-pulse noncoherent dwell
   integration, one-plot extraction, the production CFAR-like peak picker, and
-  all-offline suppression. It also verifies that sub-3 km returns remain
-  rejected by default and that the experimental receiver models coherent
-  pulse-tail loss, outward range ambiguity, boundary continuity, and bounded
-  near-return voltage.
+  all-offline suppression. It also verifies that the default receiver models
+  coherent pulse-tail loss, outward sub-3 km range ambiguity, boundary
+  continuity, and bounded near-return voltage, while the disable option
+  restores the hard gate.
 - `periodic_deadline_regression` simulates an eight-hour machine sleep and
   verifies that fixed-rate simulation loops resume at their normal cadence
   without replaying millions of missed ticks.
@@ -181,12 +183,13 @@ Common options:
 | Build directory | `-BuildDir PATH` | `--build-dir PATH` | Platform build auto-detection |
 | Connext installation | `-ConnextDir PATH` | `--connext-dir PATH` | Environment/platform default |
 | Timed shutdown | `-RunSeconds N` | `--run-seconds N` | When the radar closes |
-| Experimental sub-3 km receiver | `-Sub3km` | `--sub-3km` | Disabled |
+| Disable sub-3 km processing | `-DisableSub3km` | `--disable-sub-3km` | Processing enabled |
 
-The experimental option processes the received tail of a pulse-eclipsed
-target below 3 km. Such a target can be detected, but its reported range is
-biased outward by the modeled delay ambiguity. See
-[Effective-range Detection and Tracking](docs/EFFECTIVE_RANGE_PROCESSING.md#experimental-sub-3-km-receiver).
+The default receiver processes the received tail of a pulse-eclipsed target
+below 3 km. Such a target can be detected, but its reported range is biased
+outward and may initiate a new track because of the modeled delay ambiguity.
+Use the disable option to reproduce the former hard blind range. See
+[Effective-range Detection and Tracking](docs/EFFECTIVE_RANGE_PROCESSING.md#sub-3-km-receiver-and-legacy-disable-option).
 
 Both launchers use `CONNEXTDDS_DIR` or `NDDSHOME`. Windows falls back to the
 standard Connext 7.7.0 installation under `C:\Program Files`; macOS detects
@@ -230,8 +233,8 @@ To run the applications manually in separate terminals:
 # inside the bundle (it also keeps stdout, which the bare .app does not):
 source $CONNEXTDDS_DIR/resource/scripts/rtisetenv_arm64Darwin23clang16.0.bash
 ./build/radar_app.app/Contents/MacOS/radar_app
-# Opt-in near-range evaluation:
-./build/radar_app.app/Contents/MacOS/radar_app --sub-3km
+# Restore the former hard 3 km gate:
+./build/radar_app.app/Contents/MacOS/radar_app --disable-sub-3km
 
 # Terminal 2 — the target generator
 # Live webinars use 32 total targets: one deterministic fighter circling the
@@ -264,9 +267,9 @@ selects that control domain; it never joins the radar data domain. Scenario
 selection is additive, and **CLEAR ALL** disposes all current target instances
 without stopping `target_gen`. See [Target Control](docs/TARGET_CONTROL.md).
 
-Both simulation apps accept `--domain N` (default 0). `radar_app` additionally
-accepts `--sub-3km` for experimental truncated-return processing; the normal
-3 km receive gate remains the default. The radar UI also has a
+Both simulation apps accept `--domain N` (default 0). `radar_app` processes
+truncated sub-3 km returns by default and accepts `--disable-sub-3km` to
+restore the former hard receive gate. The radar UI also has a
 **SCENARIOS** panel (bottom-right). Search/sector mode, degrade/restore array,
 self test, and track reset issue `Radar/SystemCommand`s. **BEAM FORMATION**
 is a local display toggle: it replaces the compact moving outage curtain with

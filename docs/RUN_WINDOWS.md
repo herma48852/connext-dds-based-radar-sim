@@ -199,8 +199,10 @@ The `.cmd` files are the supported launch commands. They handle the bundled
 implementation automatically. Do not open or invoke a `.ps1` file directly.
 Run `start-all.cmd -Help` for interactive launcher options.
 `run-demo.cmd` additionally supports `-Headless`, `-RunSeconds N`,
-`-StopExisting`, and the experimental `-Sub3km` receiver option for unattended
-operation. `start-all.cmd -Sub3km` enables the same option interactively.
+`-StopExisting`, and `-DisableSub3km` for restoring the former hard receive
+gate during unattended operation. `start-all.cmd -DisableSub3km` provides the
+same fallback interactively. Truncated-return processing is enabled by
+default.
 
 ## Optional: Portable Tests Without Connext
 
