@@ -44,6 +44,13 @@ private:
 } // namespace
 
 void DetectionProcessor::start() {
+    RADAR_LOG
+        << "[DetectionProcessor] sub-3km receiver="
+        << (experimental_sub_3km_enabled_
+                ? "EXPERIMENTAL truncated-return processing"
+                : "disabled (3 km blind range)")
+        << "\n";
+
     auto beam_topic  = radds::make_topic<types::BeamCommand>(participant_, dds_names::TOPIC_BEAM_COMMAND);
     auto raw_topic   = radds::make_topic<types::RawReturn>(participant_, dds_names::TOPIC_RAW_RETURN);
     auto det_topic   = radds::make_topic<types::DetectionEvent>(participant_, dds_names::TOPIC_DETECTION_EVENT);
@@ -246,7 +253,11 @@ void DetectionProcessor::return_synthesis_loop() {
                     const double z = t.z + t.vz * age_sec;
                     const double range_xy = std::hypot(x, y);
                     const double range = std::sqrt(x*x + y*y + z*z);
-                    if (!detection_model::within_instrumented_range(range))
+                    const auto range_observation =
+                        near_range::observe_range(
+                            range,
+                            experimental_sub_3km_enabled_);
+                    if (!range_observation.observable)
                         continue;
 
                     // world ENU azimuth -> ship-relative azimuth
@@ -306,14 +317,18 @@ void DetectionProcessor::return_synthesis_loop() {
                         continue;
 
                     const double amp =
-                        detection_model::target_voltage_amplitude(
-                            t.rcs_dbsm, range, active, pattern_response);
+                        near_range::observed_target_voltage(
+                            t.rcs_dbsm,
+                            range_observation,
+                            active,
+                            pattern_response);
                     const double carrier_phase =
                         detection_model::two_way_carrier_phase_rad(range);
                     const double in_phase = std::cos(carrier_phase);
                     const double quadrature = std::sin(carrier_phase);
 
-                    const int b0 = detection_model::range_bin_for(range);
+                    const int b0 = detection_model::range_bin_for(
+                        range_observation.apparent_range_m);
                     for (int db = -1; db <= 1; ++db) {
                         const int b = b0 + db;
                         if (b < 0 || b >= kRangeBins) continue;

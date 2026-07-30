@@ -212,6 +212,7 @@ int run_radar_app(int argc, char** argv) {
     bool no_dispose = false;
     bool gl_throttle = false;
     bool no_titlebar = false;
+    bool experimental_sub_3km = false;
     int swap_interval = 1;
     double run_seconds = 0.0;
     std::string stop_file;
@@ -232,6 +233,8 @@ int run_radar_app(int argc, char** argv) {
             gl_throttle = true;
         else if (std::strcmp(argv[i], "--no-titlebar") == 0)
             no_titlebar = true;
+        else if (std::strcmp(argv[i], "--sub-3km") == 0)
+            experimental_sub_3km = true;
         else if (std::strcmp(argv[i], "--swap-interval") == 0) {
             if (++i >= argc ||
                 !radar::cli::parse_integer<int>(
@@ -258,7 +261,8 @@ int run_radar_app(int argc, char** argv) {
         else if (std::strcmp(argv[i], "--help") == 0) {
             RADAR_LOG << "radar_app [--domain N] [--headless] [--no-dispose]\n"
                          "          [--gl-throttle] [--swap-interval N]\n"
-                         "          [--run-seconds N] [--stop-file PATH]\n"
+                         "          [--sub-3km] [--run-seconds N]\n"
+                         "          [--stop-file PATH]\n"
                          "  --headless       components only (no window); crash-bisect\n"
                          "                   soak: same DDS traffic, zero GLFW/ImGui/AppKit\n"
                          "  --no-dispose     TrackManager never calls dispose_instance\n"
@@ -267,6 +271,8 @@ int run_radar_app(int argc, char** argv) {
                          "  --swap-interval  legacy knob; no-op with the Metal renderer\n"
                          "                   to 30 fps (default 1 = vsync 60 fps)\n"
                          "  --no-titlebar    undecorated window; removes native titlebar\n"
+                         "  --sub-3km        EXPERIMENTAL: process pulse-eclipsed returns\n"
+                         "                   below 3 km with modeled range ambiguity\n"
                          "  --run-seconds    stop cleanly after N seconds (automation)\n"
                          "  --stop-file      stop cleanly when PATH appears\n";
             return 0;
@@ -292,6 +298,11 @@ int run_radar_app(int argc, char** argv) {
     radar::SimClock::start();
     std::signal(SIGINT, on_sigint);
     RADAR_LOG << "[radar_app] starting on DDS domain " << domain << "\n";
+    if (experimental_sub_3km) {
+        RADAR_LOG
+            << "[radar_app] --sub-3km enabled: experimental "
+               "truncated-return receiver\n";
+    }
 
     radar::app::DataBus bus;
     if (no_dispose) {
@@ -302,7 +313,10 @@ int run_radar_app(int argc, char** argv) {
     radar::app::ShipSimulator      ship(domain, bus);
     radar::app::BeamScheduler      scheduler(domain, bus);
     radar::app::Beamformer         beamformer(domain);
-    radar::app::DetectionProcessor processor(domain, bus);
+    radar::app::DetectionProcessor processor(
+        domain,
+        bus,
+        experimental_sub_3km);
     radar::app::TrackManager       tracker(domain, bus);
     radar::app::CalibrationMonitor calibration(domain, bus);
     radar::app::CommandHandler     commands(domain, bus);

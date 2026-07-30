@@ -12,6 +12,7 @@ control_domain=""
 targets=32
 run_seconds=0
 headless=0
+sub_3km=0
 start_target_control=0
 
 radar_pid=""
@@ -40,12 +41,14 @@ Options:
   --targets N         Total targets: baseline plus N-1 randomized (default: 32)
   --run-seconds N     Stop after N seconds; 0 runs until window close/Ctrl-C
   --headless          Run radar_app without a window
+  --sub-3km           Enable experimental pulse-eclipsed returns below 3 km
   --target-control    Also start target_control (normally use start-all.sh)
   -h, --help          Show this help
 
 Examples:
   ./scripts/run-demo.sh
   ./scripts/run-demo.sh --domain 92 --targets 32
+  ./scripts/run-demo.sh --sub-3km
   ./scripts/run-demo.sh --headless --run-seconds 20
 EOF
 }
@@ -158,6 +161,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --headless)
             headless=1
+            shift
+            ;;
+        --sub-3km)
+            sub_3km=1
             shift
             ;;
         --target-control)
@@ -385,6 +392,9 @@ target_args=(--domain "$domain" --control-domain "$control_domain"
 control_args=(--domain "$control_domain" --stop-file "$stop_file")
 if ((headless)); then
     radar_args+=(--headless)
+fi
+if ((sub_3km)); then
+    radar_args+=(--sub-3km)
 fi
 if ((run_seconds > 0)); then
     radar_args+=(--run-seconds "$run_seconds")

@@ -3,8 +3,9 @@
 This document defines what “accurate within the effective detection range”
 means for AesaRadarSim, describes the implemented algorithms, and records the
 assumptions that limit the result. It covers the low-risk first phase of the
-range-processing plan. The detector threshold and the approximately 3 km
-transmit/receive blind range are intentionally unchanged.
+range-processing plan and the subsequent experimental near-range extension.
+The detector threshold and default approximately 3 km transmit/receive blind
+range remain unchanged.
 
 The implementation is internally consistent with the simulation's simplified
 waveform and measurement model. It is not a validated performance model for
@@ -12,9 +13,10 @@ SPY-6 or any other operational radar.
 
 ## Scope
 
-The implemented phase improves processing in the existing valid envelope:
+The implemented processing provides:
 
-- approximately 3 km minimum receive range;
+- an approximately 3 km default minimum receive range;
+- optional pulse-eclipsed return processing below 3 km;
 - 100 km instrumented range;
 - target-dependent sensitivity inside that envelope;
 - symmetric range-cell reporting;
@@ -22,9 +24,10 @@ The implemented phase improves processing in the existing valid envelope:
 - slant-range track association; and
 - continuous track identity across elevation-bar transitions.
 
-It does not add sub-3 km processing, adaptive CFAR, Doppler filtering,
-fractional-delay matched filtering, continuous angle estimation, clutter, or a
-probability-of-detection model. Those are listed under deferred work.
+It does not add adaptive CFAR, Doppler filtering, fractional-delay matched
+filtering, continuous angle estimation, clutter, or a probability-of-detection
+model. The optional sub-3 km mode is an explicit rectangular-pulse
+approximation, not a detailed transmitter-leakage or receiver-recovery model.
 
 ## RF and timing basis
 
@@ -50,8 +53,9 @@ already present in every timing-derived range quantity. For example, a 3 km
 target has an approximately 20 microsecond round-trip delay, while a 100 km
 target has an approximately 667 microsecond delay. Both returns fit inside the
 1 millisecond pulse-repetition interval, but the 3 km return overlaps the
-20-microsecond transmit interval and is therefore rejected by the current
-receiver model.
+20-microsecond transmit interval. The receiver rejects that overlap by
+default. The opt-in mode described below processes the portion that remains
+after transmission ends.
 
 “Range” in detection and association means slant range:
 
@@ -61,6 +65,59 @@ R = sqrt(east^2 + north^2 + up^2)
 
 Horizontal or ground range is `sqrt(east^2 + north^2)`. They are equal only
 for a target at zero elevation.
+
+## Experimental sub-3 km receiver
+
+Start the radar with `--sub-3km` to enable truncated-return processing:
+
+```bash
+./build/radar_app.app/Contents/MacOS/radar_app --domain 92 --sub-3km
+```
+
+The complete macOS launcher accepts the same option:
+
+```bash
+./scripts/start-all.sh --domain 92 --sub-3km
+```
+
+The option is disabled by default. It changes only receiver observations below
+the normal minimum receive range.
+
+For a rectangular transmitted pulse of duration `T`, a target at true slant
+range `R < R_blind` has round-trip delay `tau < T`. Its echo extends from
+`tau` through `tau + T`, but the receiver opens only at `T`. The observable
+tail therefore lasts `tau`, giving the coherent voltage fraction
+
+```text
+f_capture = tau / T = R / R_blind
+```
+
+Correlating that tail with the full rectangular pulse produces an equal-match
+delay plateau from the true delay through the receive-open boundary. The
+simulation chooses the midpoint as a deterministic representative:
+
+```text
+R_apparent = (R_true + R_blind) / 2
+```
+
+This result is intentionally biased outward. A target at 1.5 km, for example,
+contributes approximately half of its full coherent voltage and appears near
+2.25 km before range-cell quantization. At the approximately 2.998 km boundary,
+capture fraction and apparent range both converge continuously to their normal
+values. A target approaching zero range contributes an ever-shorter tail, and
+non-positive ranges are rejected.
+
+The ordinary radar-equation voltage is multiplied by `f_capture`. A half-cell
+minimum range in the far-field amplitude calculation and a normalized voltage
+clip of `64` bound extremely close returns. The clip represents finite
+receiver dynamic range; it prevents an experimental near-field truth point
+from destabilizing I/Q or display scaling. It does not affect ordinary
+returns at or beyond 3 km.
+
+This mode can therefore create a detection and track for a target that the
+default receiver omits, but its reported range is not the target's true range.
+That limitation is part of the experiment rather than an error concealed by
+the implementation.
 
 ## Return synthesis
 
@@ -209,8 +266,10 @@ The one-standard-deviation estimates are:
 ```text
 sigma_range_quantization = range_resolution / sqrt(12)
 sigma_range_noise        = range_resolution / (2 sqrt(rho))
+sigma_range_ambiguity    = ambiguity_width / sqrt(12)
 sigma_range              = RSS(sigma_range_quantization,
-                               sigma_range_noise)
+                               sigma_range_noise,
+                               sigma_range_ambiguity)
 
 sigma_az_quantization = azimuth_step / sqrt(12)
 sigma_az_noise        = nominal_beamwidth / (2 sqrt(2 rho))
@@ -219,10 +278,18 @@ sigma_az              = RSS(sigma_az_quantization, sigma_az_noise)
 sigma_elevation = elevation_bar_width / sqrt(12)
 ```
 
-`RSS(a,b)` means `sqrt(a^2+b^2)`. Uniform quantization gives the `/sqrt(12)`
-terms. The inverse-SNR terms are conservative centroiding approximations, not
-a Cramér-Rao bound. High-S/N uncertainty approaches the approximately
-43.27 m range floor and 0.65° raster-bearing floor.
+`RSS(...)` means root-sum-square of the independent terms. Uniform
+quantization gives the `/sqrt(12)` terms. The inverse-SNR terms are
+conservative centroiding approximations, not a Cramér-Rao bound. High-S/N
+uncertainty approaches the approximately 43.27 m range floor and 0.65°
+raster-bearing floor.
+
+For ordinary reports, `sigma_range_ambiguity` is zero. For an experimental
+report below 3 km, the selected midpoint implies
+`R_true = 2 R_apparent - R_blind`; the remaining correlation plateau spans
+`R_blind - R_true`. Treating that unresolved plateau as uniform carries its
+large uncertainty into association gates and published covariance. Strong S/N
+therefore cannot incorrectly erase pulse-eclipse ambiguity.
 
 Elevation uncertainty does not shrink with S/N because the processor reports
 only one of the 3°, 14°, or 25° dwell-bar centers. Without a continuous
@@ -298,6 +365,9 @@ vertical uncertainty than the former fixed value.
 The portable regressions verify:
 
 - timing-derived range resolution, blind range, and unambiguous range;
+- default rejection and opt-in observation of sub-3 km returns;
+- coherent capture fraction, outward apparent-range bias, boundary
+  continuity, and bounded near-return voltage;
 - range-cell center reporting;
 - fixed-threshold S/N floor;
 - sensitivity crossings for -15 through +35 dBsm;
@@ -305,6 +375,8 @@ The portable regressions verify:
 - monotonic S/N-dependent uncertainty and quantization floors;
 - symmetric, bearing-rotating Cartesian covariance;
 - deterministic four-target replay with one birth per truth target;
+- default coast/drop/reacquisition versus one persistent experimental track
+  through a 4 km–700 m–4 km transit;
 - three-scan confirmation and 12-second coast behavior; and
 - persistent identity and no velocity impulse at the 14°→25° elevation
   transition.
@@ -328,10 +400,12 @@ false alarms, computational load, or the receiver's validity envelope:
    raster/bar floors.
 5. **Clutter and fluctuating targets:** add land/sea/weather backgrounds,
    target fluctuation models, and explicit `Pd/Pfa` validation.
-6. **Sub-3 km processing:** model transmit/receive switching, pulse eclipse,
-   partial pulse compression, and truncated-return false detections. Until
-   that receiver behavior exists, the approximately 3 km boundary remains a
-   hard validity limit.
+6. **Higher-fidelity sub-3 km processing:** replace the opt-in rectangular
+   midpoint approximation with an explicitly sampled waveform, fractional
+   delay, transmitter leakage, duplexer recovery, saturation/recovery, and
+   matched-filter false-peak behavior. The current option exposes the primary
+   pulse-eclipse energy loss and range ambiguity without claiming those
+   hardware details.
 
 Adaptive CFAR and Doppler are intentionally not mixed into this phase. They
 are valuable, but they alter the event stream and carry more regression risk

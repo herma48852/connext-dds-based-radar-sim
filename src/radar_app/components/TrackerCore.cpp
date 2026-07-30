@@ -153,7 +153,9 @@ std::vector<int64_t> TrackerCore::update(const std::vector<CoreDetection>& dets,
                                          double ship_heading_deg, int64_t now_ms) {
     for (const auto& det : dets) {
         const auto uncertainty =
-            effective_range::measurement_uncertainty(det.snr_db);
+            effective_range::measurement_uncertainty(
+                det.snr_db,
+                det.range_m);
         const double measured_azimuth_world_deg =
             det.azimuth_deg + ship_heading_deg;
 

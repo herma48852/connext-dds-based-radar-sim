@@ -11,6 +11,7 @@
 #include <cmath>
 
 #include "DetectionModel.hpp"
+#include "NearRangeModel.hpp"
 #include "SearchRaster.hpp"
 
 namespace radar::app::effective_range {
@@ -63,7 +64,9 @@ inline double reported_power_ratio(double reported_snr_db) noexcept {
 }
 
 inline MeasurementUncertainty measurement_uncertainty(
-        double reported_snr_db) noexcept {
+        double reported_snr_db,
+        double reported_range_m =
+            detection_model::kRangeMaxM) noexcept {
     const double power_ratio = reported_power_ratio(reported_snr_db);
     const double sqrt_power_ratio = std::sqrt(power_ratio);
 
@@ -75,6 +78,8 @@ inline MeasurementUncertainty measurement_uncertainty(
     const double range_noise =
         detection_model::kRangeResolutionM
         / (2.0 * sqrt_power_ratio);
+    const double range_ambiguity =
+        near_range::ambiguity_stddev_m(reported_range_m);
     const double azimuth_quantization =
         search_raster::kAzimuthStepDeg / std::sqrt(12.0);
     const double azimuth_noise =
@@ -84,7 +89,9 @@ inline MeasurementUncertainty measurement_uncertainty(
         (2.0 * kElevationBarHalfWidthDeg) / std::sqrt(12.0);
 
     return MeasurementUncertainty{
-        std::hypot(range_quantization, range_noise),
+        std::hypot(
+            std::hypot(range_quantization, range_noise),
+            range_ambiguity),
         std::hypot(azimuth_quantization, azimuth_noise),
         elevation_quantization};
 }

@@ -104,9 +104,12 @@ Adds one deterministic low-altitude flyby:
 1. It appears inbound at 8 km slant range.
 2. At 250 m/s it follows an offset straight-line chord.
 3. It spends 15 seconds continuously inside 2 km slant range.
-4. It remains inside the radar's approximately 3 km receive blind range for
-   about 23.3 seconds, exceeding the tracker's 12-second coast.
-5. It re-emerges outbound and can be acquired as a new track.
+4. With the default receiver, it remains inside the radar's approximately
+   3 km blind range for about 23.3 seconds, exceeding the tracker's 12-second
+   coast.
+5. With `radar_app --sub-3km`, its truncated pulse tails remain detectable but
+   are reported at an outward-biased ambiguous range; without that option, it
+   re-emerges outbound and can be acquired as a new track.
 6. At 20 km outbound, `target_gen` disposes its keyed truth instance and marks
    the one-shot scenario complete.
 

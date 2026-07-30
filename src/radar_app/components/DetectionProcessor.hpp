@@ -29,6 +29,7 @@
 #include "BeamPatternModel.hpp"
 #include "DetectionModel.hpp"
 #include "DwellPowerAccumulator.hpp"
+#include "NearRangeModel.hpp"
 #include "RadarFaces.hpp"
 #include "../DataBus.hpp"
 
@@ -36,8 +37,14 @@ namespace radar::app {
 
 class DetectionProcessor : public ComponentBase {
 public:
-    DetectionProcessor(int32_t domain_id, DataBus& bus)
-        : ComponentBase(domain_id, "Radar.DetectionProcessor"), bus_(bus) {
+    DetectionProcessor(
+            int32_t domain_id,
+            DataBus& bus,
+            bool experimental_sub_3km_enabled = false)
+        : ComponentBase(domain_id, "Radar.DetectionProcessor"),
+          bus_(bus),
+          experimental_sub_3km_enabled_(
+              experimental_sub_3km_enabled) {
         for (const auto& face : faces::kDefinitions) {
             const auto i = static_cast<std::size_t>(face.id);
             dwell_beam_ids_[i].store(-1);
@@ -82,6 +89,7 @@ private:
     void return_synthesis_loop();
 
     DataBus& bus_;
+    const bool experimental_sub_3km_enabled_;
 
     dds::pub::DataWriter<types::RawReturn>      raw_writer_{dds::core::null};
     dds::pub::DataWriter<types::DetectionEvent> det_writer_{dds::core::null};

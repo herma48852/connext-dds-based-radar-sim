@@ -2,6 +2,7 @@
 #include "DetectionModel.hpp"
 #include "DetectionSignalProcessing.hpp"
 #include "DwellPowerAccumulator.hpp"
+#include "NearRangeModel.hpp"
 
 #include <array>
 #include <chrono>
@@ -48,6 +49,69 @@ int main() {
           "all-offline mask produces a zero-element aperture");
     check(detection_count(all_offline) == 0,
           "all-offline aperture suppresses above-threshold noise detections");
+
+    namespace detection = radar::app::detection_model;
+    namespace near_range = radar::app::near_range;
+    const double blind_range_m = detection::kRangeMinM;
+    const auto default_near =
+        near_range::observe_range(1500.0, false);
+    check(!default_near.observable,
+          "default receiver retains the approximately 3 km blind range");
+
+    const auto experimental_near =
+        near_range::observe_range(1500.0, true);
+    check(experimental_near.observable
+              && experimental_near.truncated,
+          "experimental receiver admits a pulse-eclipsed 1.5 km return");
+    check(std::fabs(
+              experimental_near.coherent_fraction
+              - 1500.0 / blind_range_m) < 1.0e-12,
+          "captured coherent fraction follows return delay over pulse width");
+    check(std::fabs(
+              experimental_near.apparent_range_m
+              - 0.5 * (1500.0 + blind_range_m)) < 1.0e-12,
+          "truncated return reports the delay-ambiguity midpoint");
+
+    const auto at_boundary =
+        near_range::observe_range(blind_range_m, false);
+    const auto just_inside =
+        near_range::observe_range(blind_range_m - 1.0, true);
+    check(at_boundary.observable && !at_boundary.truncated
+              && std::fabs(
+                  at_boundary.apparent_range_m - blind_range_m)
+                     < 1.0e-12,
+          "normal reception begins at the exact blind-range boundary");
+    check(std::fabs(
+              just_inside.apparent_range_m
+              - (blind_range_m - 0.5)) < 1.0e-12,
+          "experimental apparent range is continuous at the boundary");
+    check(!near_range::observe_range(0.0, true).observable
+              && !near_range::observe_range(
+                      detection::kRangeMaxM + 1.0,
+                      true).observable,
+          "experimental mode remains bounded to positive instrumented range");
+
+    const double clipped_voltage =
+        near_range::observed_target_voltage(
+            0.0,
+            experimental_near,
+            1.0,
+            1.0);
+    check(clipped_voltage
+              == near_range::kTruncatedReturnMaxVoltage,
+          "very strong truncated return is bounded by receiver clipping");
+    const int apparent_bin =
+        detection::range_bin_for(
+            experimental_near.apparent_range_m);
+    check(std::fabs(
+              detection::range_m_for_bin(apparent_bin)
+              - experimental_near.apparent_range_m)
+              <= 0.5 * detection::kRangeResolutionM,
+          "truncated apparent range maps to the nearest reported cell center");
+    check(near_range::ambiguity_stddev_m(
+              experimental_near.apparent_range_m) > 400.0
+              && near_range::ambiguity_stddev_m(blind_range_m) == 0.0,
+          "sub-3 km range uncertainty includes the truncated-delay plateau");
 
     radar::app::DwellPowerAccumulator dwell;
     dwell.begin(42, 45.0, 14.0, 5);

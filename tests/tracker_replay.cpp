@@ -14,8 +14,10 @@
 #include "FaceDetectionFusion.hpp"
 #include "TrackerCore.hpp"
 #include "DetectionModel.hpp"
+#include "NearRangeModel.hpp"
 #include "SearchRaster.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -443,10 +445,83 @@ int main(int argc, char** argv) {
                   - speed_before_transition) < 1.0e-6,
               "elevation-bar handoff does not inject a velocity impulse");
 
+        struct TransitResult {
+            std::vector<int64_t> observed_ids;
+            int dropped = 0;
+            std::size_t max_tracks = 0;
+            bool confirmed = false;
+        };
+        const auto run_minimum_range_transit =
+            [](bool experimental_sub_3km) {
+                TransitResult result;
+                TrackerCore transit_core;
+                int64_t transit_ms = 0;
+                // 250 m/s radial test path sampled once per 1.2-second
+                // volume: 4 km inbound to 700 m, then outbound to 4 km.
+                for (int step = 0; step <= 22; ++step) {
+                    const int distance_from_closest =
+                        std::abs(step - 11);
+                    const double true_range_m =
+                        700.0 + 300.0 * distance_from_closest;
+                    const auto observation =
+                        radar::app::near_range::observe_range(
+                            true_range_m,
+                            experimental_sub_3km);
+                    std::vector<CoreDetection> transit_detections;
+                    if (observation.observable) {
+                        const int range_bin =
+                            radar::app::detection_model::range_bin_for(
+                                observation.apparent_range_m);
+                        transit_detections.push_back(CoreDetection{
+                            radar::app::detection_model::range_m_for_bin(
+                                range_bin),
+                            45.0,
+                            14.0,
+                            30.0});
+                    }
+                    const auto transit_drops =
+                        transit_core.update(
+                            transit_detections,
+                            0.0,
+                            transit_ms);
+                    result.dropped +=
+                        static_cast<int>(transit_drops.size());
+                    result.max_tracks = std::max(
+                        result.max_tracks,
+                        transit_core.tracks().size());
+                    for (const auto& track : transit_core.tracks()) {
+                        if (std::find(
+                                result.observed_ids.begin(),
+                                result.observed_ids.end(),
+                                track.id)
+                            == result.observed_ids.end()) {
+                            result.observed_ids.push_back(track.id);
+                        }
+                        result.confirmed =
+                            result.confirmed || track.confirmed;
+                    }
+                    transit_ms += 1200;
+                }
+                return result;
+            };
+
+        const auto default_transit =
+            run_minimum_range_transit(false);
+        check(default_transit.observed_ids.size() == 2
+                  && default_transit.dropped >= 1,
+              "default blind interval drops and reacquires the minimum-range transit");
+        const auto experimental_transit =
+            run_minimum_range_transit(true);
+        check(experimental_transit.observed_ids.size() == 1
+                  && experimental_transit.dropped == 0
+                  && experimental_transit.max_tracks == 1
+                  && experimental_transit.confirmed,
+              "experimental sub-3 km plots preserve one confirmed transit track");
+
         if (!ok) return 1;
         std::printf("PASS: deterministic detection/tracker replay golden counts "
                     "plus scan confirmation, cell transitions, and "
-                    "elevation-bar continuity\n");
+                    "elevation/near-range continuity\n");
     }
     return 0;
 }

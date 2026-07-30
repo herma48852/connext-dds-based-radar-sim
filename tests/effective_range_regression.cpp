@@ -63,6 +63,10 @@ int main() {
             effective::detection_threshold_reported_snr_db());
     const auto strong_uncertainty =
         effective::measurement_uncertainty(40.0);
+    const auto truncated_uncertainty =
+        effective::measurement_uncertainty(
+            40.0,
+            2250.0);
     check(threshold_uncertainty.range_stddev_m
               > strong_uncertainty.range_stddev_m,
           "range uncertainty decreases with S/N");
@@ -85,6 +89,8 @@ int main() {
               11.0 / std::sqrt(12.0),
               1.0e-12),
           "bar-only elevation uncertainty remains the 11-degree interval floor");
+    check(truncated_uncertainty.range_stddev_m > 400.0,
+          "truncated returns carry pulse-eclipse range ambiguity into tracking");
 
     const auto covariance =
         effective::cartesian_position_covariance(
