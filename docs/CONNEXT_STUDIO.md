@@ -160,40 +160,74 @@ duplicate target/truth publisher.
 - No DDS-Security and no Persistence/Recording service in play; Recording
   Service can be pointed at the same domain later without code changes.
 
-## 4. Hypothetical multi-topic custom AI views
+## 4. Designing hypothetical live multi-topic custom AI views
 
-Connext Studio custom views currently operate on one topic at a time. This
-section describes questions that could be answered if a custom AI view could
-subscribe to, retain, and correlate samples from multiple topics. The design
-is intentionally forward-looking; it is not a description of a currently
-available Studio feature.
+Connext Studio custom views currently operate on one topic at a time. The
+prompts in this section describe what could be built if a custom AI view could
+subscribe to several topics and maintain state across their live samples. They
+are forward-looking design prompts, not descriptions of a currently available
+Studio feature.
 
-The AI should perform deterministic joins and calculations first, then use the
-language model to explain the evidence. Every result should be labeled as
-**exact**, **reconstructed**, or **inferred**.
+These prompts do not ask an AI to answer a question once. Each prompt asks it
+to construct a continuously updating view: subscribe before the event, perform
+deterministic stream processing, retain the resulting rows, render tables and
+charts, and explain a selected row on demand. A user can inspect an earlier
+event only if the view observed and retained it, or if a DDS recording/replay
+source supplies it.
 
-### 4.1 Common correlation model
+### 4.1 Live-view prompt contract
 
-A multi-topic view should:
+A useful multi-topic prompt must specify all of the following:
 
-- Subscribe before the event and retain a rolling history. `BeamCommand`,
-  `RawReturn`, `DetectionEvent`, and `TargetTruth` are VOLATILE, so a
-  late-joining view cannot reconstruct their earlier activity.
-- Use `timestamp.epoch_millis` for cross-process alignment. `sim_millis` is
-  process-relative and is unsafe when samples from `radar_app` and
-  `target_gen` are combined.
-- Retain DDS metadata: writer GUID, instance key, source and reception
-  timestamps, validity, instance state/disposal, and sample-loss status.
-- Use as-of joins for state topics: select the latest `CalibrationStatus`,
-  `BeamPatternStatus`, and `ShipPosition` sample at or before the event.
-- Match each reader's QoS to the topic. `RawReturn`, `DetectionEvent`, and
-  `TargetTruth` are BEST_EFFORT; a sample missing from the view does not prove
-  that another reader, such as TrackManager, did not receive it.
-- Keep track identities lifecycle-scoped. `TargetTrack.track_id` values come
-  from a bounded, recycled pool, so the same numeric ID can represent a later
-  track after disposal and re-registration.
+1. **Subscriptions:** the topics and instance filters that feed the view.
+2. **Working state:** short rolling buffers, per-instance state, event-time
+   ordering, and an allowance for samples arriving on different DDS streams in
+   a different order.
+3. **Materialized history:** compact correlated rows that remain selectable
+   after the high-rate source samples have expired from the working buffers.
+4. **Deterministic processing:** joins, windowing, coordinate transforms,
+   counters, and confidence rules. The language model should explain computed
+   evidence; it should not invent joins from a textual sample dump.
+5. **Live presentation:** tables, charts, alerts, filters, sorting, and a
+   detail panel that update as samples arrive.
+6. **Session limits:** what is unknown because the view joined late, lost a
+   BEST_EFFORT sample, restarted, or evicted retained history.
 
-Face-local fields share one bounded identity:
+Apply these rules to every prompt below:
+
+- Mark the view's subscription time and show it in the UI.
+- Use `timestamp.epoch_millis` for joins across processes. `sim_millis` is
+  process-relative and is safe only when the compared samples are known to
+  originate in the same process.
+- Retain DDS metadata needed to interpret the stream: writer GUID, instance
+  key, source and reception timestamps, validity, instance state/disposal,
+  and sample-loss status.
+- Match reader QoS to each topic. `RawReturn`, `DetectionEvent`, and
+  `TargetTruth` are BEST_EFFORT and VOLATILE. `BeamCommand` and
+  `SystemCommand` are RELIABLE but VOLATILE. Their samples from before the
+  view subscribed are not available without recording/replay.
+- Treat `CalibrationStatus`, `BeamPatternStatus`, and `ShipPosition` as state
+  topics. Use the latest sample at or before an event, and report the age of
+  the state used.
+- Project high-rate samples into compact metadata before invoking the language
+  model. Do not continuously send `RawReturn.iq_samples`,
+  `BeamPatternStatus.azimuth_pattern_db`, or
+  `CalibrationStatus.element_drift_db` to the model. A deterministic transform
+  may inspect those arrays and retain derived values.
+- Use a short event-time grace period before finalizing a join because samples
+  written on different DDS topics can reach the view in either order.
+- Preserve publisher sessions in identifiers. A displayed detection can use
+  `detection_id`, but its retained identity should include writer GUID,
+  `sensor_id`, and `detection_id`. A track identity should include writer GUID,
+  `track_id`, and the DDS instance lifecycle because numeric track IDs can be
+  recycled.
+- Label results `EXACT`, `RECONSTRUCTED_HIGH`, `RECONSTRUCTED_MEDIUM`,
+  `RECONSTRUCTED_LOW`, or `UNRESOLVED`, and retain the evidence behind the
+  label.
+- Never equate “not observed by this view” with “not published” or “not
+  received by another DDS reader.”
+
+Face-local identifiers use the following common mapping:
 
 | Face | Name | `scheduler_id` / `array_id` / `sensor_id` |
 |---:|---|---:|
@@ -202,7 +236,7 @@ Face-local fields share one bounded identity:
 | 2 | Aft Port (AP) | 2 |
 | 3 | Forward Port (FP) | 3 |
 
-The correlated processing chain is:
+The live processing chain is:
 
 ```text
 SystemCommand -> CalibrationStatus -> BeamPatternStatus
@@ -212,291 +246,599 @@ BeamCommand -> RawReturn -> DetectionEvent -> TargetTrack
       ^              ShipPosition + TargetTruth
 ```
 
-### 4.2 Which beam command produced this detection?
+### 4.2 Which beam is producing each live detection?
 
-Subscribe to:
+This is not a prompt to inspect one already-expired detection. It constructs a
+live, retained detection-to-beam table. Correlation happens as each detection
+arrives, while the surrounding raw-return and command samples are still in the
+view's buffers.
 
-- `Radar/DetectionEvent`
-- `Radar/RawReturn`
-- `Radar/BeamCommand`
-- `Radar/BeamPatternStatus`
+Use this custom AI view prompt:
 
-For a selected detection:
+```text
+Build a live multi-topic view named "Detection-to-Beam Correlation".
 
-1. Read its `sensor_id`, timestamp, azimuth, and elevation.
-2. Find the immediately preceding completed `RawReturn` dwell for the same
-   face.
-3. Detect the `RawReturn.beam_id` transition. DetectionProcessor integrates
-   ten 1 kHz returns and completes the previous dwell when the first return of
-   the next beam arrives.
-4. Treat the previous `RawReturn.beam_id` as the producing dwell.
-5. Join it to `BeamCommand` using:
+Do not produce a one-time answer. Subscribe continuously to:
+- Radar/DetectionEvent
+- Radar/RawReturn
+- Radar/BeamCommand
+- Radar/BeamPatternStatus
 
-   ```text
-   BeamCommand.scheduler_id = DetectionEvent.sensor_id
-   BeamCommand.beam_id      = inferred RawReturn.beam_id
-   ```
+Show the subscription start time. State that the view can correlate only
+detections observed since that time unless recording/replay supplies earlier
+samples.
 
-6. Verify that the command and detection azimuth/elevation agree.
-7. Join `BeamPatternStatus` by face and `beam_id` when that beam was published.
-   Pattern status is 20 Hz while commands are 100 Hz, so some dwells require
-   an as-of join to the latest pattern state on that face.
+Working state:
+- Keep a rolling RawReturn metadata buffer for every array_id. Retain
+  array_id, beam_id, timestamp.epoch_millis, azimuth_deg, elevation_deg,
+  range_bin_count, DDS source/reception order, and sample-loss indicators.
+- Do not copy iq_samples into the language-model context. It is not needed to
+  find a dwell boundary.
+- Keep a rolling BeamCommand buffer containing all scalar fields and DDS
+  metadata.
+- Keep the latest BeamPatternStatus samples per array_id and beam_id. Project
+  scalar pattern metrics; do not continuously copy azimuth_pattern_db.
+- Keep pending DetectionEvent rows briefly so RawReturn and DetectionEvent
+  delivery order cannot determine the join result.
+- Separately retain completed enriched detection rows for the life of this
+  view, subject to an explicitly displayed retention limit.
 
-An answer should identify the face, beam ID, mode, priority, pointing,
-dwell duration, and applied pattern state. For example:
+For each RawReturn.array_id, maintain the current distinct beam_id, its first
+and last observed timestamps, pointing angles, and observed sample count.
+Detect a dwell boundary when an incoming RawReturn for that array_id has a
+different beam_id.
 
-> Detection 4812 was produced by inferred search dwell 938 on the
-> Forward-Starboard face, commanded to azimuth 22.5 degrees and elevation
-> 14 degrees. Ten raw pulses were integrated. The applied pattern had
-> 1.8 dB gain loss and 0.4 degrees of boresight error.
+For a transition A -> B:
+- A is the completed, producing dwell.
+- B is the new dwell whose first processed return caused DetectionProcessor
+  to complete A and publish A's detections.
+- The transition time is the timestamp of the first observed RawReturn for B.
+- Missing BEST_EFFORT pulses may mean the view observes a later pulse of B
+  rather than its first pulse.
 
-This is normally a high-confidence reconstruction, not an exact join:
-`DetectionEvent` does not currently contain `beam_id`. Missing BEST_EFFORT raw
-samples or repeated pointings can leave more than one candidate. Adding
-`beam_id` to `DetectionEvent` would make the lineage explicit.
+For every new DetectionEvent:
+1. Select the RawReturn stream where:
+     RawReturn.array_id = DetectionEvent.sensor_id
+2. Find the closest plausible A -> B transition around the detection event
+   time. Normally the transition timestamp is equal to or just before the
+   DetectionEvent timestamp. Permit an observed transition up to one 10 ms
+   dwell after the detection when the first B pulses may have been lost by
+   this view.
+3. Attribute the detection to A, never to B.
+4. Validate that A's RawReturn azimuth_deg and elevation_deg match the
+   DetectionEvent pointing within configured numeric tolerances.
+5. Join the producing dwell to BeamCommand exactly on:
+     BeamCommand.scheduler_id = RawReturn.array_id
+     BeamCommand.beam_id      = A
+6. Join BeamPatternStatus first by matching array_id and beam_id. Because
+   pattern status is 20 Hz while commands are 100 Hz, fall back to the latest
+   state for that array_id at or before the producing dwell and label that
+   pattern join as AS_OF rather than EXACT.
+7. Copy the correlation and its evidence into the retained detection row.
+   Do not require the original RawReturn or BeamCommand samples to remain
+   available after this row has been materialized.
 
-### 4.3 Did an RMA outage change the beam pattern and detection rate?
+Use writer GUID + sensor_id + detection_id as the internal row identity.
+Display detection_id prominently and sort newest detections first.
 
-Subscribe to:
+Render a continuously updating table with:
 
-- `Radar/SystemCommand`
-- `Radar/CalibrationStatus`
-- `Radar/BeamPatternStatus`
-- `Radar/BeamCommand`
-- `Radar/DetectionEvent`
-- optionally `TargetGen/TargetTruth` and `Ship/ShipPosition`
+Detection:
+- sensor_id and face name
+- detection_id
+- detection epoch_millis
+- range_m
+- azimuth_deg
+- elevation_deg
+- amplitude
+- snr_db
 
-The analysis should:
+Producing raw dwell:
+- producing_raw_array_id
+- producing_raw_beam_id
+- dwell_first_raw_epoch_millis
+- dwell_last_raw_epoch_millis
+- observed_raw_sample_count
+- producing_raw_azimuth_deg
+- producing_raw_elevation_deg
+- transition_to_beam_id
+- observed_transition_epoch_millis
 
-1. Find the outage request in `SystemCommand`, including its
-   `target_face_mask`.
-2. Confirm the actual transition in `CalibrationStatus`, using
-   `rma_offline_mask`, `failed_element_count`, and `overall_status`.
-3. Confirm that `BeamPatternStatus.rma_offline_mask` reflects the calibration
-   state.
-4. Calculate the number of offline RMAs and active elements:
+Beam command:
+- scheduler_id
+- beam_id
+- command epoch_millis
+- commanded azimuth_deg
+- commanded elevation_deg
+- dwell_time_us
+- mode
+- priority
 
-   ```text
-   offline_RMAs  = popcount(rma_offline_mask)
-   active_elements = 1024 - 64 * offline_RMAs
-   ```
+Pattern state:
+- pattern join type and state age
+- rma_offline_mask
+- boresight_error_deg
+- gain_loss_db
+- beamwidth_3db_deg
+- peak_sidelobe_level_db
 
-5. Chart `gain_loss_db`, `beamwidth_3db_deg`, `boresight_error_deg`, peak
-   sidelobe level, and sidelobe offsets.
-6. Compare equal pre-outage and post-outage windows, such as 15 seconds each.
-7. Normalize detection count by illumination opportunity:
+Correlation:
+- detection_to_transition_delta_ms
+- command_to_dwell_delta_ms
+- detection/raw azimuth delta
+- detection/raw elevation delta
+- attribution confidence
+- attribution status
+- concise evidence or ambiguity explanation
 
-   ```text
-   detection_yield = detections / applicable search dwells
-   ```
+Add filters for face, detection_id, producing beam_id, mode, SNR, confidence,
+and time. Selecting a retained row must open its evidence without rerunning
+the correlation from expired source buffers.
 
-   Detections per second alone are misleading if sector or scan mode changes.
-8. Compare median and percentile SNR, not only detection count. A moderate
-   outage may reduce SNR without immediately suppressing detections.
-9. Use unaffected faces as a control group:
+Confidence:
+- RECONSTRUCTED_HIGH: the A -> B transition was observed, A joins exactly to
+  BeamCommand by face and beam_id, and pointing/timing agree.
+- RECONSTRUCTED_MEDIUM: the producing dwell is identifiable but some raw
+  pulses or pattern evidence are missing.
+- RECONSTRUCTED_LOW: attribution depends mainly on time/pointing proximity or
+  a transition was partially missed.
+- UNRESOLVED: no single producing dwell is defensible.
+- Do not label attribution EXACT because DetectionEvent does not carry
+  beam_id.
 
-   ```text
-   outage_effect = affected-face post/pre change
-                 - unaffected-face post/pre change
-   ```
+Never silently choose the nearest command when candidates are ambiguous.
+```
 
-10. For the strongest analysis, use `TargetTruth` to count opportunities when
-    a target was inside the commanded beam, elevation gate, instrumented
-    range, and target-dependent effective range.
+The key `RawReturn` transition fields are `array_id`, `beam_id`, and
+`timestamp.epoch_millis`. `azimuth_deg` and `elevation_deg` validate the
+result. Neither `range_bin_count` nor `iq_samples` is needed to identify the
+boundary. Adding `beam_id` to `DetectionEvent` would turn the central
+attribution into an exact join.
 
-The view should combine an outage/restore event line, RMA mask heatmap, beam
-metrics, detections per search dwell, SNR distribution, and confirmed-track
-count. A useful conclusion would be:
+### 4.3 How is a live RMA outage changing radar performance?
 
-> After RMA 3 went offline, gain fell 1.2 dB, beamwidth increased 6%, and
-> median SNR fell 1.4 dB. Detection yield declined from 0.31 to 0.24 per
-> eligible search dwell, while unaffected faces remained within 2%.
+This view begins measuring before an outage, detects the actual calibration
+transition, and keeps updating its post-event comparison. It should not wait
+for a user to ask retrospectively whether an outage mattered.
 
-With all 16 RMAs offline, raw thermal noise remains on that face's I/Q stream,
-but DetectionProcessor intentionally publishes no detections.
+Use this custom AI view prompt:
 
-### 4.4 Which detections contributed to a particular track?
+```text
+Build a live multi-topic view named "RMA Outage Impact Monitor".
 
-Subscribe to:
+Do not produce a one-time answer. Subscribe continuously to:
+- Radar/SystemCommand
+- Radar/CalibrationStatus
+- Radar/BeamPatternStatus
+- Radar/BeamCommand
+- Radar/DetectionEvent
+- optionally TargetGen/TargetTruth
+- optionally Ship/ShipPosition with source_id = 0
 
-- `Radar/DetectionEvent`
-- `Radar/TargetTrack`
-- `Ship/ShipPosition`, filtered to `source_id = 0`
-- optionally `TargetGen/TargetTruth`
+Maintain:
+- current CalibrationStatus and BeamPatternStatus per face;
+- a rolling minimum 30-second history of scalar pattern metrics, beam-command
+  metadata, detection metadata, and SystemCommand events;
+- rolling per-face counters by BeamCommand.mode;
+- compact retained incident rows for every rma_offline_mask transition;
+- a 15-second pre-event baseline and a 15-second post-event window for each
+  incident. Mark a baseline incomplete when the view has not yet run for the
+  full pre-event interval.
 
-This question requires reconstruction because the current tracker does not
-publish detection-to-track provenance.
+Treat a CalibrationStatus.rma_offline_mask change as the authoritative outage
+or restore event. Correlate a preceding SystemCommand by time and
+target_face_mask to show the requested action, but do not treat the command
+alone as proof that array state changed.
 
-1. Buffer detections in the same 100 ms batches used by TrackManager.
-2. Reproduce resolution-cell fusion. Reports are grouped when they are within:
+For every calibration transition:
+1. Record face, event time, old mask, new mask, failed_element_count, and
+   overall_status.
+2. Calculate:
+     offline_RMAs    = popcount(rma_offline_mask)
+     active_elements = 1024 - 64 * offline_RMAs
+3. Confirm whether BeamPatternStatus.rma_offline_mask converges to the new
+   calibration mask and record the propagation delay.
+4. Track gain_loss_db, beamwidth_3db_deg, boresight_error_deg,
+   peak_sidelobe_level_db, and sidelobe offsets before and after the event.
+5. Count search opportunities from BeamCommand where
+   mode = BEAM_MODE_SEARCH.
+6. Count DetectionEvent samples for the same face and interval.
+7. Calculate:
+     search_detection_yield =
+         detections / observed BEAM_MODE_SEARCH commands
+   Keep detection rate per second as a secondary metric only.
+8. Compare median, 10th percentile, and 90th percentile DetectionEvent.snr_db
+   and amplitude.
+9. Use unaffected faces as a concurrent control:
+     controlled_change =
+         affected_face_post_pre_change
+         - aggregate_unaffected_face_post_pre_change
+10. If TargetTruth is subscribed, compute a second, stronger yield metric
+    using only search dwells in which a target was within the commanded beam,
+    elevation acceptance, instrumented range, and target-dependent effective
+    range. Label this truth-assisted metric separately from observable radar
+    telemetry.
+11. Update the post-event statistics continuously until the 15-second window
+    closes, then freeze a final incident summary while leaving live rolling
+    charts active.
 
-   - 30 ms;
+Render:
+- a current per-face status table with mask, health, active elements, latest
+  pattern metrics, search-dwell rate, detection yield, and SNR;
+- an incident table sorted newest first, with REQUESTED, OBSERVED,
+  COLLECTING, COMPLETE, or INCOMPLETE status;
+- synchronized time charts for mask changes, gain, beamwidth, boresight,
+  sidelobes, detections per search dwell, and SNR;
+- a 4-by-16 RMA mask heatmap;
+- a short evidence-based summary that refreshes while an incident is
+  COLLECTING and becomes retained when COMPLETE.
+
+Every incident summary must state:
+- requested command, if observed;
+- actual calibration transition;
+- pattern response;
+- detection-yield and SNR changes;
+- unaffected-face control behavior;
+- completeness and confidence.
+
+Do not claim that zero detections proves a dead RawReturn stream. With all
+16 RMAs offline, the simulator continues publishing thermal-noise RawReturn
+samples but intentionally publishes no detections.
+
+If BEST_EFFORT DetectionEvent or TargetTruth loss is reported, show the loss
+indicator and reduce confidence. If the view joined after the outage, display
+the current transient-local calibration/pattern state but state that no valid
+pre-event comparison exists.
+```
+
+The operational question is now “what changed when the state changed while
+this view was watching?” A retained incident can be selected later, but the
+view cannot manufacture its missing pre-outage baseline after joining late.
+
+### 4.4 Which incoming detections are likely updating each live track?
+
+The current schema does not publish detection-to-track provenance. This view
+therefore maintains a live reconstruction and stores the inferred association
+at the time it is made. Its title and labels must say “likely” rather than
+presenting the result as authoritative tracker output.
+
+Use this custom AI view prompt:
+
+```text
+Build a live multi-topic view named "Likely Detection-to-Track Lineage".
+
+Do not produce a one-time answer. Subscribe continuously to:
+- Radar/DetectionEvent
+- Radar/TargetTrack
+- Ship/ShipPosition filtered to source_id = 0
+- optionally TargetGen/TargetTruth for evaluation only
+
+Track writer GUID, DDS instance state, and disposal. Define a track lifecycle
+as writer GUID + track_id + the interval from instance appearance until
+disposal. Never attach retained detections from an old lifecycle to a recycled
+numeric track_id.
+
+Maintain:
+- DetectionEvent samples in event-time order with a late-arrival grace period;
+- the latest own-ship state and an interpolation buffer;
+- active track state and prediction history;
+- compact retained fused-measurement and inferred-association rows;
+- at least six seconds of initiation evidence and more than twelve seconds of
+  confirmed-track coast evidence.
+
+Every 100 ms, reproduce the TrackManager observation batch:
+1. Group detections into the same resolution cells when they are within:
+   - 30 ms in time;
    - 1.5 range cells, approximately 225 m;
    - 3.3 degrees in azimuth; and
    - 0.1 degrees in elevation-bar center.
-
-   Fused range and bearing are weighted by linear power derived from SNR.
-3. Interpolate own-ship heading at the batch time.
-4. Convert each ship-relative polar measurement to ENU:
-
-   ```text
-   az_world = az_ship + ship_heading
-   horizontal_range = range * cos(elevation)
-
-   east  = horizontal_range * sin(az_world)
-   north = horizontal_range * cos(az_world)
-   up    = range * sin(elevation)
-   ```
-
-5. Predict each candidate track to the batch time.
-6. Reproduce the association gates:
-
-   - range gate: at least 375 m, widened by SNR-derived measurement and motion
-     uncertainty;
-   - azimuth gate: at least 2.6 degrees, widened by measurement uncertainty;
-   - cross-range gate: a 150 m floor plus range-scaled angular and motion
+2. Fuse each group using linear-power weighting derived from SNR. Retain every
+   contributing writer GUID, sensor_id, and detection_id in the view's fused
+   row.
+3. Interpolate own-ship heading to the measurement time.
+4. Convert the fused ship-relative measurement to ENU:
+     az_world         = az_ship + ship_heading
+     horizontal_range = range * cos(elevation)
+     east             = horizontal_range * sin(az_world)
+     north            = horizontal_range * cos(az_world)
+     up               = range * sin(elevation)
+5. Predict every candidate track to the batch time.
+6. Apply the simulator's association gates:
+   - range gate has a 375 m floor and widens with SNR-derived measurement and
+     motion uncertainty;
+   - azimuth gate has a 2.6 degree floor and widens with uncertainty;
+   - cross-range gate has a 150 m floor plus range-scaled angular and motion
      uncertainty.
+7. Calculate the normalized range/cross-range innovation score and retain all
+   candidates that pass, not only the winner.
+8. Choose the lowest-score candidate as the view's likely association.
+9. Compare that association with the following live TargetTrack updates.
+10. Reconstruct initiation evidence: three independent visits separated by at
+    least 600 ms inside a six-second window are required for confirmation.
 
-7. Compute the normalized range/cross-range innovation score and select the
-   lowest valid candidate.
-8. Associate the fused measurement with the following 10 Hz `TargetTrack`
-   update.
-9. Backtrack through initiation. A track is confirmed only after three
-   independent visits, at least 600 ms apart, inside a six-second window.
+Render two continuously updating tables.
 
-The view could present the inferred lineage as:
+Active track table:
+- lifecycle-scoped track identity and track_id
+- last TargetTrack timestamp
+- position, velocity, classification, quality
+- likely most recent fused measurement
+- contributing detection IDs
+- association score
+- time since likely accepted measurement
+- lineage confidence and ambiguity status
 
-```text
-Detection IDs 4102 + 4103
-        |
-        v  resolution-cell fusion, power weighted
-Measurement: 12.15 km, 43.1 degrees, SNR 17.8 dB
-        |
-        v  association score 0.18
-Track 1004 update at 14:32:08.400
+Retained association table:
+- batch time
+- fused measurement values
+- all contributing detection identities
+- candidate track lifecycles and scores
+- selected likely track or INITIATION/REJECTED
+- following TargetTrack update time
+- confidence and evidence
+
+Selecting a track must show a live lineage timeline from initiation through
+updates and coast. Selecting a retained association must show its source
+detections and all passing candidate tracks.
+
+Confidence:
+- RECONSTRUCTED_HIGH: the view observed every contributing detection, one
+  candidate clearly passed with the lowest score, and the following track
+  update was consistent.
+- RECONSTRUCTED_MEDIUM: the association is unique but BEST_EFFORT loss or
+  state interpolation weakens the evidence.
+- RECONSTRUCTED_LOW: multiple candidates passed, the following track update
+  was ambiguous, or batch membership is uncertain.
+- UNRESOLVED: no defensible association can be reconstructed.
+
+Never label lineage EXACT. Detection IDs are discarded before tracker output,
+TargetTrack contains no contributing IDs, and this view's BEST_EFFORT reader
+may observe a different subset than TrackManager. TargetTruth may evaluate an
+inference, but it must not be presented as evidence used by the operational
+tracker.
 ```
 
-This cannot be exact with the current schema. `detection_id` is discarded
-when reports enter resolution-cell fusion, and `TargetTrack` contains no
-contributing IDs. Studio's BEST_EFFORT reader can also receive a different
-sample subset from TrackManager's reader.
+The useful live question is “which detections are most likely feeding this
+track now?” Earlier retained associations remain inspectable only because the
+view materialized them while their source samples were available.
 
-An exact implementation would publish a bounded `TrackAssociationEvent` with
-the track ID, source detection IDs, fused measurement, innovation score, and
-association result such as initiate, update, reject, merge, coast, or drop.
+### 4.5 How much of live contact motion is caused by own-ship motion?
 
-### 4.5 How does ship motion affect displayed target geometry?
+This view continuously decomposes display motion instead of asking generally
+how ship motion affects geometry. It makes the current simulator limitation
+explicit: heading affects transforms, while published pitch and roll do not
+tilt the modeled beam or PPI geometry.
 
-Subscribe to:
-
-- `Ship/ShipPosition`, keys 0 and 1;
-- `Radar/DetectionEvent`;
-- `Radar/TargetTrack`;
-- `TargetGen/TargetTruth`; and
-- optionally `Radar/BeamCommand`.
-
-The view should separate translation, heading, and attitude effects.
-
-**Translation:** `TargetTruth.position` is produced relative to the moving
-ship: target_gen subtracts the ship's east/north position. As the ship moves,
-a target's relative range and bearing change even when its Earth-fixed motion
-does not. An Earth-fixed path can be reconstructed by adding interpolated
-own-ship displacement back to the target-relative ENU vector.
-
-**Heading:** detections and beam commands use ship-relative azimuth. Tracks
-and truth use east/north/up axes relative to the ship. The PPI bearing is:
+Use this custom AI view prompt:
 
 ```text
-az_world   = atan2(east, north)
-az_display = wrap360(az_world - ship_heading)
+Build a live multi-topic view named "Own-Ship Motion Geometry Decomposition".
+
+Do not produce a one-time answer. Subscribe continuously to:
+- Ship/ShipPosition for source_id = 0 and source_id = 1
+- Radar/DetectionEvent
+- Radar/TargetTrack
+- TargetGen/TargetTruth
+- optionally Radar/BeamCommand
+
+Use timestamp.epoch_millis for cross-process joins. Interpolate ShipPosition
+to each detection, track, and truth event. Identify track lifecycles using
+writer GUID, track_id, and DDS instance state. Treat any TargetTrack-to-
+TargetTruth.target_id match as inferred.
+
+Maintain:
+- a local tangent-plane own-ship path derived from latitude, longitude, and
+  altitude for both INS and truth;
+- current and previous ship heading, course, speed, pitch, and roll;
+- retained per-track geometry rows and short motion segments;
+- INS-minus-truth navigation residuals;
+- inferred track-to-truth matches with confidence and ambiguity.
+
+For each TargetTrack sample, derive:
+  slant_range = sqrt(east^2 + north^2 + up^2)
+  az_world    = wrap360(atan2(east, north))
+  elevation   = atan2(up, sqrt(east^2 + north^2))
+  az_display  = wrap360(az_world - interpolated_ship_heading)
+
+For every consecutive pair of samples in one track lifecycle:
+1. Let r0 be the previous ship-relative ENU vector and r1 the current vector.
+2. Let delta_ship be own-ship ENU displacement between the two timestamps.
+3. Construct the counterfactual relative vector for a stationary Earth-fixed
+   contact:
+     r_after_translation = r0 - delta_ship
+4. Compute display azimuth in this fixed order:
+     a0            = bearing(r0) - old_heading
+     a_translation = bearing(r_after_translation) - old_heading
+     a_heading     = bearing(r_after_translation) - new_heading
+     a1            = bearing(r1) - new_heading
+5. Use wrapped angular differences:
+     translation_contribution = a_translation - a0
+     heading_contribution     = a_heading - a_translation
+     contact_motion_residual  = a1 - a_heading
+6. Apply the analogous vector decomposition for range:
+     observed relative displacement = r1 - r0
+     own_ship_translation effect    = -delta_ship
+     estimated contact displacement =
+         observed relative displacement + delta_ship
+7. Retain the interval, source states, components, and propagated track/INS
+   uncertainty.
+
+For DetectionEvent, show instantaneous geometry using the interpolated ship
+state. Do not claim persistent detection identity unless it has been linked
+through the inferred track-lineage view.
+
+Render:
+- an Earth-fixed map and ship-relative PPI side by side;
+- own-ship course and heading vectors;
+- per-contact trails in both frames;
+- a current contact table containing range, world bearing, display bearing,
+  elevation, translation contribution, heading contribution, estimated
+  contact-motion residual, and confidence;
+- synchronized charts of heading/course/speed/pitch/roll and selected-contact
+  geometry;
+- INS-versus-truth position and heading residuals;
+- a retained interval-detail panel showing the counterfactual calculation.
+
+For a selected live contact, generate a concise statement such as:
+  "During the last interval the contact moved 1.8 degrees clockwise on the
+   PPI: 1.5 degrees came from heading change, 0.3 degrees from translation,
+   and the remaining change came from estimated contact motion."
+
+Always state:
+- DetectionEvent and BeamCommand azimuths are ship-relative.
+- TargetTrack and TargetTruth positions are ship-relative ENU.
+- Pitch and roll are published and displayed but are not applied by the
+  current simulator's detection or display geometry. Their correlation with
+  contact motion is not a modeled geometric effect.
+- Track-to-truth identity is inferred, not exact.
 ```
 
-A heading change rotates the PPI without necessarily changing slant range.
+This formulation answers a per-contact, continuously updated operational
+question. It also preserves interval rows so the operator can inspect motion
+that occurred after the view subscribed.
 
-**Pitch and roll:** the simulator publishes pitch and roll, but the current
-detection and display coordinate transforms use heading only. Pitch and roll
-appear in the ship panel but do not currently tilt the beam or PPI target
-geometry. The AI should state this explicitly rather than attributing
-displayed movement to seaway attitude.
+### 4.6 Why is a live track coasting, and why did it disappear?
 
-A useful view would show an Earth-fixed map and ship-relative PPI side by
-side, own-ship course and heading vectors, INS-versus-truth residuals, and a
-decomposition such as:
+A useful live view should warn while a track is coasting, classify the missing
+evidence as new illumination opportunities occur, and freeze an incident row
+if DDS reports track disposal. Waiting until after disposal to start
+subscribing would lose most of the required volatile evidence.
 
-> The contact moved 1.8 degrees clockwise on the PPI: 1.5 degrees came from
-> the ship's heading change and 0.3 degrees from relative translation. Pitch
-> and roll had no modeled geometric effect.
+Use this custom AI view prompt:
 
-Mapping a `TargetTrack` to a `TargetTruth.target_id` remains inferred because
-tracks intentionally do not carry truth IDs.
+```text
+Build a live multi-topic view named "Track Coast and Loss Diagnosis".
 
-### 4.6 Did a track disappear because of receiver behavior, scheduling, or calibration state?
+Do not produce a one-time answer. Subscribe continuously to:
+- Radar/TargetTrack
+- Radar/DetectionEvent
+- Radar/BeamCommand
+- Radar/RawReturn
+- Radar/BeamPatternStatus
+- Radar/CalibrationStatus
+- Radar/SystemCommand
+- Ship/ShipPosition filtered to source_id = 0
+- TargetGen/TargetTruth when truth-assisted diagnosis is desired
 
-Subscribe to:
+Track DDS writer GUID, instance lifecycle, validity, and disposal. Retain at
+least the preceding 20 seconds of compact evidence because a confirmed track
+can coast for approximately 12 seconds after its last accepted measurement.
+Do not retain the complete high-rate RawReturn.iq_samples stream in the
+language-model context. Derive and retain per-dwell health and expected-range-
+cell features deterministically.
 
-- `Radar/TargetTrack`
-- `Radar/DetectionEvent`
-- `Radar/BeamCommand`
-- `Radar/RawReturn`
-- `Radar/BeamPatternStatus`
-- `Radar/CalibrationStatus`
-- `Radar/SystemCommand`
-- `Ship/ShipPosition`
-- `TargetGen/TargetTruth`
+Reuse the live detection-fusion and likely-association reconstruction from the
+"Likely Detection-to-Track Lineage" view. The timestamp on a repeatedly
+published TargetTrack is not proof of a new accepted detection. Maintain a
+separate inferred last_accepted_measurement_time.
 
-For a selected track lifecycle:
+For each active track lifecycle:
+1. Predict its current ship-relative range, bearing, and elevation.
+2. Identify every BeamCommand that should illuminate that geometry, including
+   face, elevation bar, mode, dwell time, and beam offset.
+3. For each expected visit, join the applicable CalibrationStatus and
+   BeamPatternStatus state as of the dwell.
+4. Monitor RawReturn metadata for the same face and beam_id. Retain observed
+   pulse count, range-bin availability, and stream-loss indicators.
+5. When needed, deterministically integrate only the relevant RawReturn range
+   cell and neighboring cells across the dwell. Retain peak magnitude,
+   local-maximum result, and comparison with the fixed 0.26 threshold rather
+   than retaining all I/Q.
+6. Look for a DetectionEvent and a likely track association after the dwell.
+7. Update coast age, number of expected visits since the last likely accepted
+   measurement, current diagnosis, and confidence.
+8. On DDS disposal, freeze the lifecycle and all preceding evidence as a
+   retained loss incident. Continue accepting a short grace window of
+   late-arriving evidence before finalizing the diagnosis.
+9. Detect CMD_RESET separately. Disposal of all track instances immediately
+   after reset is an explicit reset, not a receiver failure.
 
-1. Detect the track's DDS disposal.
-2. Find its last likely associated detection.
-3. Predict its range, bearing, and elevation for the following 12 seconds.
-4. Identify every expected illumination opportunity for the appropriate face
-   and elevation bar.
-5. Classify the evidence:
+Classify every missed update using this evidence:
 
-| Diagnosis | Expected evidence |
-|---|---|
-| Scheduling | No applicable `BeamCommand` crossed the predicted target geometry, often after a sector or mode command. |
-| Calibration | Applicable commands existed, but calibration masks changed and pattern gain/pointing degraded; SNR and detection yield fell concurrently. |
-| Receiver/data path | Commands and pattern were valid, but `RawReturn` stopped, was incomplete, or failed to produce the expected integrated peak. |
-| Sensitivity/range | Raw-return traffic was healthy, but the target peak fell below the fixed 0.26 detector threshold because of range, RCS, beam offset, or gain loss. |
-| Tracker association | Detections continued, but fell outside the gate, fused into another measurement, or initiated a replacement track. |
-| Explicit reset | A `CMD_RESET` immediately preceded disposal of all tracks. |
-| Normal coast/drop | The track disappeared just over 12 seconds after its last accepted measurement. |
+SCHEDULING:
+No applicable BeamCommand crossed the predicted target geometry, commonly
+after a sector or mode command.
 
-For receiver diagnosis, the view could reproduce ten-pulse integration from
-`RawReturn`, inspect the expected range cell, and apply the same local-maximum
-and fixed-threshold tests used by DetectionProcessor.
+CALIBRATION:
+Applicable commands existed, but rma_offline_mask changed or pattern gain,
+boresight, beamwidth, or sidelobes degraded while SNR/yield fell.
 
-The near-range model must also be considered. Below approximately 3 km, a
-truncated echo can be reported at an outward-biased apparent range. That can
-break association and initiate a replacement track even when the receiver is
-working as modeled.
+RECEIVER_OR_DATA_PATH:
+Commands and pattern state were valid, but expected RawReturn samples stopped,
+were incomplete, or could not form the expected integrated trace. Because
+RawReturn is BEST_EFFORT, distinguish source failure from view-local loss when
+DDS metadata allows it.
 
-An evidence-based answer could be:
+SENSITIVITY_OR_RANGE:
+RawReturn traffic was healthy, but the expected peak failed the local-maximum
+or 0.26 threshold test because of range, target RCS, beam offset, gain loss, or
+noise. Consider the target-dependent effective-range model.
 
-> Track 1004 was last updated at 14:32:08.4 and was disposed 12.1 seconds
-> later. Six expected search visits occurred. Beam commands and raw-return
-> traffic remained present, but RMA mask `0xFFFF` made the aperture offline;
-> pattern gain collapsed and no detections were published. Classification:
-> calibration-induced loss followed by normal tracker coast/drop. Confidence:
-> high.
+TRACKER_ASSOCIATION:
+Detections continued but were outside the reconstructed gates, fused into
+another measurement, assigned to a competing track, or initiated a
+replacement lifecycle.
 
-The classifier should include tracker behavior as a fourth causal category
-rather than forcing every disappearance into receiver, scheduling, or
-calibration.
+EXPLICIT_RESET:
+CMD_RESET immediately preceded broad track disposal.
 
-### 4.7 Telemetry additions for exact answers
+NORMAL_COAST_DROP:
+A confirmed track was disposed just over 12 seconds after its last likely
+accepted measurement. Preserve the upstream reason that caused the coast;
+"normal coast/drop" describes tracker behavior, not the original missed
+measurement.
 
-Multi-topic views would enable strong operational inference with the current
-topics. Three small telemetry additions would make the most important joins
-exact:
+NEAR_RANGE_MODEL:
+Below approximately 3 km, a truncated echo can be reported at an
+outward-biased apparent range. This can break association and create a
+replacement track even when the receiver is behaving as modeled.
 
-1. Add `beam_id` to `DetectionEvent`.
-2. Publish a bounded `TrackAssociationEvent` containing contributing
-   detection IDs and the association decision.
-3. Publish a track lifecycle/drop-reason event distinguishing coast timeout,
-   reset, duplicate merge, and capacity rejection.
+INSUFFICIENT_EVIDENCE:
+Required volatile history predates the view, BEST_EFFORT loss is material, or
+multiple explanations remain equally plausible.
 
-Without these additions, outage-impact and ship-motion analyses can be highly
-reliable. Beam attribution and track provenance should always include an
-explicit confidence level.
+Render:
+- an active-track table with lifecycle, track_id, quality, predicted geometry,
+  last likely accepted measurement, coast age, estimated time to drop,
+  expected/missed visits, current diagnosis, and confidence;
+- a live timeline for the selected track showing commands, calibration and
+  pattern state, raw-dwell health, detections, inferred associations, track
+  publications, commands, and disposal;
+- alert cards when a track begins coasting, changes diagnosis, approaches the
+  coast limit, or is disposed;
+- a retained loss-incident table with final diagnosis, upstream cause,
+  disposal time, coast duration, evidence completeness, and confidence;
+- a selected-incident explanation that cites the observed samples and missing
+  evidence.
+
+Do not force every incident into scheduling, receiver, or calibration.
+Tracker association, explicit reset, sensitivity/range, near-range behavior,
+normal coast/drop, and insufficient evidence are valid outcomes.
+
+If TargetTruth is used, label the conclusion TRUTH_ASSISTED. Do not imply that
+truth was available to the operational tracker.
+```
+
+This changes the old retrospective question into two live behaviors: an early
+warning for a currently coasting track and a retained incident created when a
+track disappears.
+
+### 4.7 Telemetry that would make live views exact
+
+Stateful multi-topic views can provide strong operational reconstructions, but
+retaining more samples does not remove schema ambiguity. Three bounded
+telemetry additions would convert the most important inferences into exact
+live joins:
+
+1. Add the producing `beam_id` to `DetectionEvent`.
+2. Publish a bounded `TrackAssociationEvent` containing the lifecycle-scoped
+   track identity, contributing detection identities, fused measurement,
+   innovation score, and decision such as initiate, update, reject, merge,
+   coast, or drop.
+3. Publish a track lifecycle event with the last accepted measurement time and
+   a drop reason distinguishing coast timeout, reset, duplicate merge, and
+   capacity rejection.
+
+With those additions, the live views would still need subscription-time and
+retention notices, but beam attribution and detection-to-track lineage would
+no longer depend on reconstructed timing.
