@@ -239,14 +239,14 @@ effective result.
 > clutter, propagation and atmospheric losses, multipath, interference,
 > jamming, and calibrated probability of detection or false alarm.
 
-| Target RCS | Nominal beam-center crossing | At the -3 dB beam edge | Effective cap |
-|---:|---:|---:|---:|
-| -15 dBsm | 14.6 km | 12.3 km | unchanged |
-| -10 dBsm | 19.5 km | 16.4 km | unchanged |
-| 0 dBsm | 34.6 km | 29.1 km | unchanged |
-| +5 dBsm | 46.2 km | 38.9 km | unchanged |
-| +20 dBsm | 109.5 km | 92.1 km | 100 km center |
-| +35 dBsm | 259.6 km | 218.3 km | 100 km throughout the main beam |
+| Target type | Target RCS | Nominal beam-center crossing | At the -3 dB beam edge | Effective cap |
+|---|---:|---:|---:|---:|
+| Drone | -15 dBsm | 14.6 km | 12.3 km | unchanged |
+| Missile | -10 dBsm | 19.5 km | 16.4 km | unchanged |
+| Fighter | 0 dBsm | 34.6 km | 29.1 km | unchanged |
+| Decoy | +5 dBsm | 46.2 km | 38.9 km | unchanged |
+| Bomber | +20 dBsm | 109.5 km | 92.1 km | 100 km center |
+| Ship | +35 dBsm | 259.6 km | 218.3 km | 100 km throughout the main beam |
 
 The -3 dB column uses a voltage-pattern response of `sqrt(0.5)`. Since range
 is proportional to the square root of voltage response, the edge range is

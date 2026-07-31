@@ -272,13 +272,13 @@ capped at 100.
 
 The classifications are simplified:
 
-| Label | Simulator meaning |
-|---|---|
-| `AIR` | Air-breathing-like motion, generally 100-300 m/s |
-| `BAL` | Ballistic-like motion, greater than 300 m/s |
-| `SURF` | Slow, low-elevation contact, generally less than 30 m/s |
-| `UNK` | Kinematics do not yet fit one of the modeled categories |
-| `CLTR` | Clutter label supported by the display; the current tracker does not assign it |
+| Label | Nominal target type | Simulator meaning |
+|---|---|---|
+| `AIR` | Fighter, bomber, or decoy | Air-breathing-like motion, generally 100-300 m/s |
+| `BAL` | Missile | Ballistic-like motion, greater than 300 m/s |
+| `SURF` | Ship | Slow, low-elevation contact, generally less than 30 m/s |
+| `UNK` | Drone or unmatched contact | Kinematics do not yet fit one of the modeled categories |
+| `CLTR` | None | Clutter label supported by the display; the current tracker does not assign it |
 
 Classification is based on estimated motion and geometry. It is not target
 truth, platform identification, IFF, intent, or threat assessment. Altitude
