@@ -325,11 +325,42 @@ half-power contours, providing scan coverage margin.
 
 ![Three-bar elevation acceptance-gate tiling](elevation_geometry.svg)
 
-Elevation is deliberately different. The three ±5.5-degree acceptance gates
-meet exactly at 8.5 and 19.5 degrees, so every modeled elevation belongs to
-one bar without double-implanting a target. Those gates are simulation
-classification bins; they are not claimed to be the physical elevation-array
-factor or its HPBW. Physical elevation beams would ordinarily overlap too.
+Elevation is deliberately different. The simulator commands only three bar
+centers and applies a hard ±5.5-degree truth-elevation acceptance test:
+
+| Commanded bar center | Accepted target elevation |
+|---:|---:|
+| 3° | -2.5° through 8.5° |
+| 14° | 8.5° through 19.5° |
+| 25° | 19.5° through 30.5° |
+
+For each dwell, the receiver calculates a target's true geometric elevation
+from its horizontal range and height. A target outside the commanded bar's
+interval contributes no return. A target inside it is accepted without an
+additional elevation-pattern attenuation; its return amplitude still includes
+the modeled azimuth array response and other receiver effects. The resulting
+`DetectionEvent` carries the commanded center—3°, 14°, or 25°—rather than a
+continuously estimated target angle. For example, a target at 12° elevation is
+accepted by the 14° bar and reported with a 14° elevation label.
+
+The intervals tile the modeled coverage without gaps and, except at their
+shared edges, without overlap. The implementation's inclusive comparison makes
+a target exactly at 8.5° or 19.5° eligible for both adjoining bars when those
+bars are visited at different times. This measure-zero boundary case does not
+produce two returns in one dwell, but it can produce detections carrying
+different bar labels on successive elevation sweeps.
+
+These are elevation acceptance bins, not the `AIR`/`BAL`/`SURF` target
+classifier and not a physical elevation-array factor or HPBW. A physical radar
+would ordinarily have smooth elevation gain patterns, overlapping neighboring
+beams, and reduced response away from each beam center. It might use monopulse
+channels or comparisons between overlapping beams to estimate a continuous
+arrival angle. This simulator does not model those mechanisms, so the tracker
+treats each bar label as an 11-degree interval rather than as a precise angle.
+When a track moves from one bar to another, the tracker projects its predicted
+elevation to the shared boundary and suppresses the velocity correction caused
+solely by the 11-degree label change. That prevents a bar transition from
+appearing as an instantaneous vertical jump.
 
 The receiver uses a 1 MHz pulse-compressed waveform at 1 kHz PRF. This gives
 149.9 m range resolution, 149.9 km unambiguous range, and 668 complex cells
