@@ -37,8 +37,8 @@ The representative, unclassified search waveform uses:
 | Quantity | Value | Consequence |
 |---|---:|---|
 | Carrier frequency | 3 GHz | approximately 9.99 cm wavelength |
-| Bandwidth | 1 MHz | approximately 149.90 m range resolution |
 | Pulse repetition frequency | 1 kHz | approximately 149.90 km unambiguous range |
+| Baseband bandwidth | 1 MHz | approximately 149.90 m range resolution |
 | Pulse width | 20 microseconds | approximately 2.998 km receive blind range |
 | Dwell time | 10 ms | 10 pulses integrated per dwell |
 | Instrumented range | 100 km | 668 complex range cells |
@@ -46,7 +46,7 @@ The representative, unclassified search waveform uses:
 A monostatic return travels to the target and back, so its delay is
 
 ```text
-t_return = 2 R / c
+t_return = 2 * R / c
 ```
 
 where `R` is slant range and `c` is the speed of light. The factor of two is
@@ -129,7 +129,7 @@ For a target inside the receive and instrumented-range gates, the simulated
 voltage amplitude is
 
 ```text
-A = K f_active P(azimuth offset) sqrt(RCS_linear) / R^2
+A = K * f_active * P(azimuth offset) * sqrt(RCS_linear) / R^2
 ```
 
 where:
@@ -158,7 +158,7 @@ Each 10 ms dwell contains ten 1 kHz pulses. The signal processor performs
 noncoherent power integration:
 
 ```text
-M_bin = sqrt((1/N) sum(I_pulse^2 + Q_pulse^2)),  N = 10
+M_bin = sqrt((1 / N) * sum(I_pulse^2 + Q_pulse^2)),  N = 10
 ```
 
 A range cell becomes a plot when all of the following are true:
@@ -188,7 +188,7 @@ important.
 The reported S/N is
 
 ```text
-S/N_reported_dB = 20 log10(M_bin / noise_magnitude_RMS)
+S/N_reported_dB = 20 * log10(M_bin / noise_magnitude_RMS)
 noise_magnitude_RMS = sqrt(2) * 0.05
 ```
 
@@ -224,7 +224,7 @@ Solving `M_expected = 0.26` gives a required target voltage of approximately
 
 ```text
 R_threshold =
-  sqrt(K f_active P sqrt(RCS_linear) / required_target_voltage)
+  sqrt(K * f_active * P * sqrt(RCS_linear) / required_target_voltage)
 ```
 
 This is a mean-magnitude engineering boundary, not a hard detection boundary.
@@ -276,14 +276,14 @@ The one-standard-deviation estimates are:
 
 ```text
 sigma_range_quantization = range_resolution / sqrt(12)
-sigma_range_noise        = range_resolution / (2 sqrt(rho))
+sigma_range_noise        = range_resolution / (2 * sqrt(rho))
 sigma_range_ambiguity    = ambiguity_width / sqrt(12)
 sigma_range              = RSS(sigma_range_quantization,
                                sigma_range_noise,
                                sigma_range_ambiguity)
 
 sigma_az_quantization = azimuth_step / sqrt(12)
-sigma_az_noise        = nominal_beamwidth / (2 sqrt(2 rho))
+sigma_az_noise        = nominal_beamwidth / (2 * sqrt(2 * rho))
 sigma_az              = RSS(sigma_az_quantization, sigma_az_noise)
 
 sigma_elevation = elevation_bar_width / sqrt(12)
@@ -297,7 +297,7 @@ raster-bearing floor.
 
 For ordinary reports, `sigma_range_ambiguity` is zero. For a truncated report
 below 3 km, the selected midpoint implies
-`R_true = 2 R_apparent - R_blind`; the remaining correlation plateau spans
+`R_true = 2 * R_apparent - R_blind`; the remaining correlation plateau spans
 `R_blind - R_true`. Treating that unresolved plateau as uniform carries its
 large uncertainty into association gates and published covariance. Strong S/N
 therefore cannot incorrectly erase pulse-eclipse ambiguity.
@@ -356,9 +356,9 @@ range, azimuth, and elevation errors, the implementation transforms polar
 measurement variance into ENU position covariance:
 
 ```text
-C_ENU = J diag(sigma_range^2,
+C_ENU = J * diag(sigma_range^2,
                sigma_azimuth_rad^2,
-               sigma_elevation_rad^2) J^T
+               sigma_elevation_rad^2) * J^T
 ```
 
 `J` is the exact spherical-to-Cartesian Jacobian evaluated at the filtered
