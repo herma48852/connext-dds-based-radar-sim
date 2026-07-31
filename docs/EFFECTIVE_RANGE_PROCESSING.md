@@ -232,6 +232,13 @@ Noise makes detection probabilistic near the threshold; the current simulator
 does not calculate `Pd` or `Pfa`. The 100 km instrumented range caps the
 effective result.
 
+> **Model limitation:** The sensitivity values below come from the simulator's
+> simplified, demo-calibrated return model. They are not validated SPY-6 or
+> operational-radar performance figures and must not be used to infer real-world
+> detection ranges. The model omits aspect-dependent and fluctuating RCS,
+> clutter, propagation and atmospheric losses, multipath, interference,
+> jamming, and calibrated probability of detection or false alarm.
+
 | Target RCS | Nominal beam-center crossing | At the -3 dB beam edge | Effective cap |
 |---:|---:|---:|---:|
 | -15 dBsm | 14.6 km | 12.3 km | unchanged |
