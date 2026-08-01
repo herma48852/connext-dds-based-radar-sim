@@ -1141,14 +1141,14 @@
         <div class="metric-trend">rolling 10-second window</div>
       </article>
       <article class="metric">
-        <span class="label">High confidence</span>
+        <span class="label">Exact command joins</span>
         <div class="metric-value"><span id="confidenceValue">0</span><small>%</small></div>
-        <div class="metric-trend">transition + command + pointing</div>
+        <div class="metric-trend">DetectionEvent beam_id + BeamCommand</div>
       </article>
       <article class="metric">
-        <span class="label">Unresolved</span>
+        <span class="label">Join issues</span>
         <div class="metric-value" id="unresolvedValue">0</div>
-        <div class="metric-trend">no defensible producing dwell</div>
+        <div class="metric-trend">command not observed or schema error</div>
       </article>
       <article class="metric">
         <span class="label">Raw metadata rate</span>
@@ -1200,10 +1200,8 @@
           <select id="confidenceFilter" aria-label="Filter by confidence">
             <option value="">All confidence</option>
             <option value="EXACT">Exact</option>
-            <option value="RECONSTRUCTED_HIGH">High</option>
-            <option value="RECONSTRUCTED_MEDIUM">Medium</option>
-            <option value="RECONSTRUCTED_LOW">Low</option>
-            <option value="UNRESOLVED">Unresolved</option>
+            <option value="COMMAND_NOT_OBSERVED">Command not observed</option>
+            <option value="SCHEMA_ERROR">Schema error</option>
           </select>
         </div>
         <div class="field">
@@ -1259,8 +1257,8 @@
 
       <div class="footnote">
         <span>
-          Current publishers carry <code>DetectionEvent.beam_id</code> for an exact command
-          join. Older publishers fall back to the observed RawReturn transition.
+          <code>DetectionEvent.beam_id</code> is required for authoritative attribution.
+          RawReturn transitions and pattern state are optional corroborating evidence.
         </span>
         <span id="bufferStatus">Raw metadata buffer: 0 transitions · Commands: 0 · Patterns: 0</span>
       </div>
@@ -1398,8 +1396,6 @@
     const MAX_TRANSITIONS_PER_FACE = 240;
     const MAX_PATTERNS_PER_FACE = 800;
     const JOIN_GRACE_MS = 70;
-    const TRANSITION_WINDOW_BEFORE_MS = 28;
-    const TRANSITION_WINDOW_AFTER_MS = 12;
     const AZ_TOLERANCE_DEG = 0.15;
     const EL_TOLERANCE_DEG = 0.08;
 
@@ -1498,14 +1494,11 @@
 
     function confidenceClass(confidence) {
       if (confidence === "EXACT") return "confidence-high";
-      if (confidence === "RECONSTRUCTED_HIGH") return "confidence-high";
-      if (confidence === "RECONSTRUCTED_MEDIUM") return "confidence-medium";
-      if (confidence === "RECONSTRUCTED_LOW") return "confidence-low";
       return "confidence-unresolved";
     }
 
     function confidenceLabel(confidence) {
-      return String(confidence || "UNRESOLVED").replace("RECONSTRUCTED_", "");
+      return String(confidence || "SCHEMA_ERROR").replaceAll("_", " ");
     }
 
     function newSession(source) {
@@ -1618,7 +1611,6 @@
           sampleCount: 1,
           rangeBinCount: sample.rangeBinCount
         };
-        resolvePending(false);
       }
 
       scheduleRender();
@@ -1671,7 +1663,6 @@
         state.patterns[face].splice(0, state.patterns[face].length - MAX_PATTERNS_PER_FACE);
       }
       state.sampleCounts.pattern += 1;
-      resolvePending(false);
       scheduleRender();
     }
 
@@ -1714,48 +1705,10 @@
       scheduleRender();
     }
 
-    function findTransition(detection) {
-      const candidates = state.transitions[detection.sensorId]
-        .map(transition => {
-          const deltaTime = detection.time - transition.transitionTime;
-          const deltaAzimuth = Math.abs(circularDelta(detection.azimuth, transition.producing.azimuth));
-          const deltaElevation = Math.abs(detection.elevation - transition.producing.elevation);
-          const inTime =
-            deltaTime >= -TRANSITION_WINDOW_AFTER_MS &&
-            deltaTime <= TRANSITION_WINDOW_BEFORE_MS;
-          const score =
-            Math.abs(deltaTime) * 0.16 +
-            (Number.isFinite(deltaAzimuth) ? deltaAzimuth * 5 : 40) +
-            (Number.isFinite(deltaElevation) ? deltaElevation * 12 : 40);
-          return { transition, deltaTime, deltaAzimuth, deltaElevation, inTime, score };
-        })
-        .filter(candidate => candidate.inTime)
-        .sort((a, b) => a.score - b.score);
-
-      if (!candidates.length) return { best: null, ambiguous: false, candidates: [] };
-      const ambiguous =
-        candidates.length > 1 &&
-        Math.abs(candidates[1].score - candidates[0].score) < 0.18;
-      return { best: candidates[0], ambiguous, candidates };
-    }
-
-    function fallbackCommand(detection) {
-      const candidates = [];
-      for (const command of state.commands.values()) {
-        if (command.schedulerId !== detection.sensorId) continue;
-        const age = detection.time - command.time;
-        if (age < -12 || age > 60) continue;
-        const da = Math.abs(circularDelta(detection.azimuth, command.azimuth));
-        const de = Math.abs(detection.elevation - command.elevation);
-        if (da > 0.4 || de > 0.2) continue;
-        candidates.push({ command, score: Math.abs(age) * 0.03 + da * 3 + de * 7 });
-      }
-      candidates.sort((a, b) => a.score - b.score);
-      if (!candidates.length) return { command: null, ambiguous: false };
-      const ambiguous =
-        candidates.length > 1 &&
-        Math.abs(candidates[1].score - candidates[0].score) < 0.14;
-      return { command: ambiguous ? null : candidates[0].command, ambiguous };
+    function findTransitionByBeam(face, beamId) {
+      return state.transitions[face].find(
+        transition => transition.producing.beamId === beamId
+      ) || null;
     }
 
     function findPattern(face, beamId, eventTime) {
@@ -1784,131 +1737,98 @@
       if (!pending) return;
 
       const detection = pending.data;
-      const transitionResult = findTransition(detection);
-      const candidate = transitionResult.best;
-      const declaredBeamId = Number.isFinite(detection.beamId)
-        ? detection.beamId
-        : null;
-      const producingBeamId = declaredBeamId ??
-        candidate?.transition?.producing?.beamId;
-      const exactCommand = Number.isFinite(producingBeamId)
-        ? state.commands.get(commandKey(detection.sensorId, producingBeamId))
+      const hasBeamId = Number.isFinite(detection.beamId);
+      const command = hasBeamId
+        ? state.commands.get(commandKey(detection.sensorId, detection.beamId))
         : null;
 
-      if (!force && (!exactCommand || (declaredBeamId == null && !candidate))) return;
+      // Cross-topic delivery order is not deterministic. Briefly wait only for
+      // the exact command named by DetectionEvent.beam_id; never infer another.
+      if (!force && hasBeamId && !command) return;
 
       clearTimeout(pending.timer);
       state.pendingDetections.delete(key);
       state.seenDetections.add(key);
 
-      let transition = candidate?.transition?.producing?.beamId === producingBeamId
-        ? candidate.transition
+      const transition = hasBeamId
+        ? findTransitionByBeam(detection.sensorId, detection.beamId)
         : null;
-      let command = exactCommand;
-      let fallback = false;
-      let fallbackAmbiguous = false;
+      const patternResult = hasBeamId
+        ? findPattern(
+            detection.sensorId,
+            detection.beamId,
+            transition?.transitionTime ?? detection.time
+          )
+        : { pattern: null, joinType: "MISSING", ageMs: null };
 
-      if (declaredBeamId == null && !transition && force) {
-        const result = fallbackCommand(detection);
-        command = result.command;
-        fallbackAmbiguous = result.ambiguous;
-        fallback = Boolean(command);
-      }
-
-      const patternResult = findPattern(
-        detection.sensorId,
-        transition?.producing?.beamId ?? command?.beamId,
-        transition?.transitionTime ?? detection.time
-      );
-
-      const deltaAzimuth = transition
-        ? Math.abs(circularDelta(detection.azimuth, transition.producing.azimuth))
-        : command
-          ? Math.abs(circularDelta(detection.azimuth, command.azimuth))
-          : NaN;
-      const deltaElevation = transition
-        ? Math.abs(detection.elevation - transition.producing.elevation)
-        : command
-          ? Math.abs(detection.elevation - command.elevation)
-          : NaN;
+      const pointingReference = command || transition?.producing || null;
+      const deltaAzimuth = pointingReference
+        ? Math.abs(circularDelta(detection.azimuth, pointingReference.azimuth))
+        : NaN;
+      const deltaElevation = pointingReference
+        ? Math.abs(detection.elevation - pointingReference.elevation)
+        : NaN;
       const pointingOk =
         Number.isFinite(deltaAzimuth) &&
         Number.isFinite(deltaElevation) &&
         deltaAzimuth <= AZ_TOLERANCE_DEG &&
         deltaElevation <= EL_TOLERANCE_DEG;
 
-      let confidence = "UNRESOLVED";
-      let status = "NO_DEFENSIBLE_DWELL";
+      let confidence;
+      let status;
       const evidence = [];
 
-      if (declaredBeamId != null && command) {
+      if (!hasBeamId) {
+        confidence = "SCHEMA_ERROR";
+        status = "MISSING_DETECTION_BEAM_ID";
+        evidence.push({
+          ok: false,
+          text: "DetectionEvent.beam_id is required for authoritative attribution; no beam was inferred."
+        });
+      } else if (command) {
         confidence = "EXACT";
         status = "DETECTION_BEAM_COMMAND_EXACT";
         evidence.push({
           ok: true,
-          text: `DetectionEvent declares producing beam_id ${declaredBeamId} on face ${detection.sensorId}.`
+          text: `DetectionEvent declares producing beam_id ${detection.beamId} on face ${detection.sensorId}.`
         });
         evidence.push({
           ok: true,
-          text: `Exact BeamCommand join on scheduler_id ${detection.sensorId} and beam_id ${declaredBeamId}.`
-        });
-        evidence.push({
-          ok: pointingOk,
-          text: `Detection/command pointing deltas are ${number(deltaAzimuth, 3)}° azimuth and ${number(deltaElevation, 3)}° elevation.`
-        });
-        if (transition) evidence.push({
-          ok: true,
-          text: `RawReturn independently observed transition ${transition.producing.beamId} → ${transition.nextBeamId}.`
-        });
-      } else if (transition) {
-        evidence.push({
-          ok: true,
-          text: `Observed RawReturn transition ${transition.producing.beamId} → ${transition.nextBeamId} on face ${detection.sensorId}.`
-        });
-        if (command) {
-          evidence.push({
-            ok: true,
-            text: `Exact BeamCommand join on scheduler_id ${detection.sensorId} and beam_id ${transition.producing.beamId}.`
-          });
-        } else {
-          evidence.push({ ok: false, text: "The exact BeamCommand was not observed before the join deadline." });
-        }
-        evidence.push({
-          ok: pointingOk,
-          text: `Detection/raw pointing deltas are ${number(deltaAzimuth, 3)}° azimuth and ${number(deltaElevation, 3)}° elevation.`
-        });
-        evidence.push({
-          ok: Boolean(patternResult.pattern),
-          text: patternResult.pattern
-            ? `Pattern state joined as ${patternResult.joinType}; state age ${number(patternResult.ageMs, 0)} ms.`
-            : "No applicable BeamPatternStatus was retained."
-        });
-
-        if (command && pointingOk && transition.producing.sampleCount >= 8) {
-          confidence = "RECONSTRUCTED_HIGH";
-          status = "TRANSITION_COMMAND_POINTING";
-        } else if (command || pointingOk) {
-          confidence = "RECONSTRUCTED_MEDIUM";
-          status = "PARTIAL_TRANSITION_EVIDENCE";
-        } else {
-          confidence = "RECONSTRUCTED_LOW";
-          status = "TRANSITION_ONLY";
-        }
-      } else if (fallback) {
-        confidence = "RECONSTRUCTED_LOW";
-        status = "COMMAND_PROXIMITY_ONLY";
-        evidence.push({
-          ok: false,
-          text: "No RawReturn beam transition was observed; attribution uses a unique nearby command with matching pointing."
+          text: `Exact BeamCommand join on scheduler_id ${detection.sensorId} and beam_id ${detection.beamId}.`
         });
       } else {
+        confidence = "COMMAND_NOT_OBSERVED";
+        status = "EXACT_BEAM_ID_COMMAND_NOT_OBSERVED";
+        evidence.push({
+          ok: true,
+          text: `DetectionEvent authoritatively identifies beam_id ${detection.beamId} on face ${detection.sensorId}.`
+        });
         evidence.push({
           ok: false,
-          text: fallbackAmbiguous
-            ? "Multiple nearby BeamCommand candidates were equally plausible."
-            : "No RawReturn transition or unique command candidate was available."
+          text: "The matching BeamCommand was not observed after this browser subscribed; no substitute command was inferred."
         });
       }
+
+      if (pointingReference) {
+        evidence.push({
+          ok: pointingOk,
+          text: `Detection/beam pointing deltas are ${number(deltaAzimuth, 3)} degrees azimuth and ${number(deltaElevation, 3)} degrees elevation.`
+        });
+      }
+
+      evidence.push({
+        ok: Boolean(transition),
+        text: transition
+          ? `Optional RawReturn evidence observed beam ${transition.producing.beamId} transition to ${transition.nextBeamId}.`
+          : "Optional RawReturn transition evidence was not observed; this does not change the authoritative beam_id join."
+      });
+
+      evidence.push({
+        ok: Boolean(patternResult.pattern),
+        text: patternResult.pattern
+          ? `Pattern state joined as ${patternResult.joinType}; state age ${number(patternResult.ageMs, 0)} ms.`
+          : "No applicable BeamPatternStatus was retained."
+      });
 
       const row = {
         key,
@@ -1943,7 +1863,6 @@
       }
       scheduleRender(true);
     }
-
     function ingest(topicName, data, metadata = {}) {
       const topic = String(topicName);
       if (topic === TOPICS.raw || topic.endsWith("/RawReturn") || topic === "raw") {
@@ -1986,7 +1905,7 @@
         if (filters.query) {
           const haystack = [
             row.detection.detectionId,
-            row.transition?.producing?.beamId,
+            row.detection.beamId,
             row.command?.beamId,
             FACE_INFO[row.detection.sensorId]?.short
           ].join(" ").toLowerCase();
@@ -2023,8 +1942,8 @@
       const now = performance.now();
       state.detectionTimes = state.detectionTimes.filter(time => now - time <= 10000);
       state.rawTimes = state.rawTimes.filter(time => now - time <= 1000);
-      const high = state.rows.filter(row => row.confidence === "EXACT" || row.confidence === "RECONSTRUCTED_HIGH").length;
-      const unresolved = state.rows.filter(row => row.confidence === "UNRESOLVED").length;
+      const high = state.rows.filter(row => row.confidence === "EXACT").length;
+      const unresolved = state.rows.filter(row => row.confidence !== "EXACT").length;
       el("rowCount").textContent = state.rows.length.toLocaleString();
       el("rateValue").textContent = (state.detectionTimes.length / 10).toFixed(1);
       el("confidenceValue").textContent = state.rows.length ? Math.round(high * 100 / state.rows.length) : "0";
@@ -2053,7 +1972,7 @@
             <td>${number(row.detection.azimuth, 2)}° / ${number(row.detection.elevation, 1)}°</td>
             <td class="cell-primary">${number(row.detection.snr, 1)} dB</td>
             <td>${number(row.detection.amplitude, 3)}</td>
-            <td class="cell-primary">${integer(producing?.beamId ?? row.command?.beamId)}</td>
+            <td class="cell-primary">${integer(row.detection.beamId)}</td>
             <td>${transitionLabel}</td>
             <td>${integer(producing?.sampleCount)}</td>
             <td>${escapeHtml(row.command?.mode)}</td>
@@ -2129,7 +2048,7 @@
           <div class="detail-grid">
             ${detailItem("Confidence", row.confidence)}
             ${detailItem("Status", row.status)}
-            ${detailItem("Producing beam", producing?.beamId ?? row.command?.beamId ?? "—")}
+            ${detailItem("Producing beam", row.detection.beamId ?? "—")}
             ${detailItem("Pattern join", row.patternJoinType)}
             ${detailItem("Detection ↔ transition", row.deltaTransitionMs == null ? "—" : number(row.deltaTransitionMs, 2) + " ms")}
             ${detailItem("Command ↔ dwell", row.commandToDwellMs == null ? "—" : number(row.commandToDwellMs, 2) + " ms")}
@@ -2144,6 +2063,7 @@
           <div class="detail-grid">
             ${detailItem("Sensor / face", `${row.detection.sensorId} · ${face.name}`)}
             ${detailItem("Detection ID", integer(row.detection.detectionId))}
+            ${detailItem("Producing beam ID", integer(row.detection.beamId))}
             ${detailItem("Timestamp", iso(row.detection.time))}
             ${detailItem("Range", number(row.detection.range, 1) + " m")}
             ${detailItem("Azimuth", number(row.detection.azimuth, 3) + "°")}
@@ -2214,7 +2134,7 @@
         lines.push([
           row.detection.time, row.detection.sensorId, row.detection.detectionId,
           row.detection.range, row.detection.azimuth, row.detection.elevation,
-          row.detection.snr, row.detection.amplitude, producing?.beamId,
+          row.detection.snr, row.detection.amplitude, row.detection.beamId,
           row.transition?.nextBeamId, producing?.sampleCount,
           row.command?.schedulerId, row.command?.time, row.command?.mode,
           row.command?.priority, row.command?.azimuth, row.command?.elevation,
@@ -2303,6 +2223,7 @@
           ingest(TOPICS.detection, {
             sensor_id: face,
             detection_id: state.demo.detectionId++,
+            beam_id: previous.beamId,
             timestamp: demoTimestamp(base),
             ship_position: {
               latitude_deg: 36.95,

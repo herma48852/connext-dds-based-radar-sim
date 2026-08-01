@@ -1,61 +1,468 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Track Association Diagnostics</title><link rel="stylesheet" href="radar_live_view_common.css"></head>
-<body><main class="app">
-<header class="masthead"><div><div class="eyebrow">Connext multi-topic live view · 4.4</div><h1>Track Association Diagnostics</h1><div class="subtitle">Consumes the TrackManager's authoritative association decisions and joins their exact detection identities to live TargetTrack state.</div></div><div class="status"><span id="statusDot" class="dot"></span><span id="statusText">Not connected</span></div></header>
-<nav class="nav"><a href="detection_to_beam_live_view.html">4.2 Detection → Beam</a><a href="rma_outage_impact_live_view.html">4.3 RMA impact</a><a class="current" href="likely_detection_track_lineage_live_view.html">4.4 Association diagnostics</a><a href="own_ship_motion_geometry_live_view.html">4.5 Motion geometry</a><a href="track_coast_loss_live_view.html">4.6 Coast/loss</a></nav>
-<section class="toolbar"><div class="connection"><div class="field"><label>WIS endpoint</label><input id="endpoint" value="http://localhost:18080"></div><div class="field"><label>Application</label><input id="application" value="RecordingDiagnosticsApp"></div></div><button id="connect" class="primary">Connect live</button><button id="demo">Demo stream</button><button id="csv">Export lineage</button></section>
-<section class="metric-grid" style="margin-bottom:12px"><div class="metric"><div class="label">Active lifecycles</div><div id="activeCount" class="value">0</div><div class="note">tracker instance + lifecycle id</div></div><div class="metric"><div class="label">Detection samples</div><div id="detectionCount" class="value">0</div><div class="note">optional source-sample lookup</div></div><div class="metric"><div class="label">Decisions retained</div><div id="batchCount" class="value">0</div><div class="note">authoritative reliable telemetry</div></div><div class="metric"><div class="label">Fallback / truncated</div><div id="ambiguousCount" class="value">0</div><div class="note">clearly marked when present</div></div></section>
-<section class="panel"><div class="panel-head"><span>Active track lifecycles</span><span>joined to reported decisions</span></div><div class="table-wrap"><table><thead><tr><th>Lifecycle</th><th>Last track sample</th><th>Position ENU</th><th>Velocity ENU</th><th>Class / quality</th><th>Reported fused measurement</th><th>Detection IDs</th><th>Score</th><th>Measurement age</th><th>Confidence</th></tr></thead><tbody id="trackRows"></tbody></table></div></section>
-<section class="grid two" style="margin-top:12px"><div class="panel"><div class="panel-head">Retained associations</div><div class="table-wrap"><table><thead><tr><th>Batch</th><th>Fused polar</th><th>Detection identities</th><th>Candidates</th><th>Selected</th><th>Following update</th><th>Confidence</th></tr></thead><tbody id="assocRows"></tbody></table></div></div><div class="panel"><div class="panel-head">Selected evidence</div><div class="panel-body"><div id="detail" class="detail">Select an active lifecycle or retained association.</div></div></div></section>
-<section class="panel" style="margin-top:12px"><div class="panel-head">Selected lifecycle timeline · initiation, update, coast</div><div class="panel-body"><div id="timeline" class="timeline"></div></div></section>
-<div class="limitations"><strong>Authority boundary:</strong> TrackAssociationEvent is the TrackManager's reliable decision record, including lifecycle-scoped identity, fused measurement, innovation score, and exact contributing detections. DetectionEvent remains BEST_EFFORT and is used only for optional sample lookup. If no association writer is discovered, the page falls back to its older reconstruction algorithm and labels those rows RECONSTRUCTED_* or UNRESOLVED.</div>
-</main><script src="radar_live_view_common.js"></script><script>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Track Association Diagnostics</title>
+  <link rel="stylesheet" href="radar_live_view_common.css">
+</head>
+<body>
+<main class="app">
+  <header class="masthead">
+    <div>
+      <div class="eyebrow">Connext multi-topic live view &middot; 4.4</div>
+      <h1>Track Association Diagnostics</h1>
+      <div class="subtitle">Displays TrackManager's authoritative association decisions and joins exact contributor identities to live TargetTrack state.</div>
+    </div>
+    <div class="status"><span id="statusDot" class="dot"></span><span id="statusText">Not connected</span></div>
+  </header>
+
+  <nav class="nav">
+    <a href="detection_to_beam_live_view.html">4.2 Detection &rarr; Beam</a>
+    <a href="rma_outage_impact_live_view.html">4.3 RMA impact</a>
+    <a class="current" href="likely_detection_track_lineage_live_view.html">4.4 Association diagnostics</a>
+    <a href="own_ship_motion_geometry_live_view.html">4.5 Motion geometry</a>
+    <a href="track_coast_loss_live_view.html">4.6 Coast/loss</a>
+  </nav>
+
+  <section class="toolbar">
+    <div class="connection">
+      <div class="field"><label>WIS endpoint</label><input id="endpoint" value="http://localhost:18080"></div>
+      <div class="field"><label>Application</label><input id="application" value="RecordingDiagnosticsApp"></div>
+    </div>
+    <button id="connect" class="primary">Connect live</button>
+    <button id="demo">Demo stream</button>
+    <button id="csv">Export decisions</button>
+  </section>
+
+  <section class="metric-grid" style="margin-bottom:12px">
+    <div class="metric"><div class="label">Active lifecycles</div><div id="activeCount" class="value">0</div><div class="note">tracker instance + lifecycle id</div></div>
+    <div class="metric"><div class="label">Detection samples</div><div id="detectionCount" class="value">0</div><div class="note">optional source-sample lookup</div></div>
+    <div class="metric"><div class="label">Decisions retained</div><div id="decisionCount" class="value">0</div><div class="note">authoritative reliable telemetry</div></div>
+    <div class="metric"><div class="label">Truncated contributors</div><div id="truncatedCount" class="value">0</div><div class="note">reported by TrackManager</div></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><span>Active track lifecycles</span><span>joined by reported lifecycle identity</span></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Track / lifecycle</th><th>Last track sample</th><th>Position ENU</th><th>Velocity ENU</th><th>Class / quality</th><th>Last decision</th><th>Contributor IDs</th><th>Score</th><th>Accepted age</th><th>State</th></tr></thead>
+      <tbody id="trackRows"></tbody>
+    </table></div>
+  </section>
+
+  <section class="grid two" style="margin-top:12px">
+    <div class="panel">
+      <div class="panel-head">Retained TrackAssociationEvent decisions</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Time</th><th>Decision / reason</th><th>Fused polar</th><th>Detection identities</th><th>Lifecycle</th><th>Candidates</th><th>Following track</th><th>Confidence</th></tr></thead>
+        <tbody id="decisionRows"></tbody>
+      </table></div>
+    </div>
+    <div class="panel"><div class="panel-head">Selected evidence</div><div class="panel-body"><div id="detail" class="detail">Select a lifecycle or decision.</div></div></div>
+  </section>
+
+  <section class="panel" style="margin-top:12px">
+    <div class="panel-head">Selected lifecycle timeline &middot; reported decisions and track publications</div>
+    <div class="panel-body"><div id="timeline" class="timeline"></div></div>
+  </section>
+
+  <div class="limitations"><strong>Authority boundary:</strong> This view requires TrackAssociationEvent. DetectionEvent is BEST_EFFORT and is retained only to inspect source fields when that exact sample is available. Missing association telemetry is reported as missing; the browser does not reconstruct fusion, gates, candidate scores, or track selection.</div>
+</main>
+
+<script src="radar_live_view_common.js"></script>
+<script>
 "use strict";
-const R=RadarLive,$=id=>document.getElementById(id),status=R.statusBinder("statusDot","statusText");
-const readers={association:"TrackAssociationEventReader",detection:"DetectionEventReader",track:"TargetTrackReader"};
-const state={ships:[],tracks:new Map(),generations:new Map(),lifecycleByTrack:new Map(),pending:[],associations:[],selected:null,detectionCount:0,associationCount:0,client:null,demo:null,lastBatch:0};
-function xyz(v){return {x:R.n(v?.x_east_m,0),y:R.n(v?.y_north_m,0),z:R.n(v?.z_up_m,0)};}
-function polar(p){const horizontal=Math.hypot(p.x,p.y);return {range:Math.hypot(horizontal,p.z),az:R.wrap360(R.degrees(Math.atan2(p.x,p.y))),el:R.degrees(Math.atan2(p.z,horizontal))};}
-function lifecycleKey(data,info){const authoritative=state.lifecycleByTrack.get(String(data.track_id));if(authoritative)return authoritative;const base=`${R.guid(info)}:${data.track_id}`,generation=state.generations.get(base)||1;return `${base}:${generation}`;}
-function isDisposed(info){return info?.valid_data===false||String(info?.instance_state||"").includes("NOT_ALIVE");}
-function associationEnum(value,prefix,names){if(Number.isInteger(value))return names[value]||`UNKNOWN_${value}`;return R.enumName(value,prefix);}
-function ingestAssociation(data,info,t){if(!data)return;state.associationCount++;const decision=associationEnum(data.decision,"TRACK_ASSOCIATION_",["INITIATE","UPDATE","REJECT","MERGE","DROP"]),reason=associationEnum(data.reason,"TRACK_ASSOCIATION_REASON_",["NONE","CAPACITY","DUPLICATE","COAST_TIMEOUT","RESET","SHUTDOWN"]),trackId=Number(data.track_id),selected=trackId>=0?`${data.tracker_instance_id}:${trackId}:${data.track_lifecycle_id}`:null;if(selected){state.lifecycleByTrack.set(String(trackId),selected);const observed=[...state.tracks.values()].find(track=>track.id===trackId&&track.key!==selected);if(observed){state.tracks.delete(observed.key);if(state.selected===observed.key)state.selected=selected;observed.key=selected;state.tracks.set(selected,observed);}}const sources=Array.isArray(data.contributing_detections)?data.contributing_detections:[],measurement={range:R.n(data.fused_range_m,NaN),azShip:R.n(data.fused_azimuth_deg,NaN),azWorld:R.n(data.fused_azimuth_deg,NaN),el:R.n(data.fused_elevation_deg,NaN),snr:R.n(data.fused_snr_db,NaN),position:null,detections:sources.map(d=>`${d.sensor_id}:${d.detection_id}:beam-${d.beam_id}`),ids:sources.map(d=>d.detection_id),headingInterpolated:false},candidate=selected?{key:selected,trackId,score:R.n(data.innovation_score,0)}:null,row={id:`association-${data.tracker_instance_id}-${data.association_id}`,t,measurement,candidates:candidate?[candidate]:[],selected,confidence:data.contributors_truncated?"REPORTED_TRUNCATED":"REPORTED",following:null,consistent:null,decision,reason,authoritative:true,relatedTrackId:data.related_track_id,relatedLifecycleId:data.related_track_lifecycle_id,hasMeasurement:Boolean(data.has_measurement)};state.associations.unshift(row);if(state.associations.length>300)state.associations.length=300;if(selected){const tr=state.tracks.get(selected);if(tr){tr.associations.unshift(row);if(tr.associations.length>100)tr.associations.length=100;}}state.selected=state.selected||row.id;}
-function ingest(topic,data,info={}){
-  const t=R.epoch(data,info);
-  if(topic==="association"){ingestAssociation(data,info,t);return;}
-  if(topic==="ship"&&data&&Number(data.source_id)===0){state.ships.push({t,data});R.trim(state.ships,t-20000);return;}
-  if(topic==="track"){
-    if(!data)return;const base=`${R.guid(info)}:${data.track_id}`,key=lifecycleKey(data,info);
-    if(isDisposed(info)){const tr=state.tracks.get(key);if(tr){tr.disposed=t;state.tracks.delete(key);}state.generations.set(base,(state.generations.get(base)||1)+1);return;}
-    let track=state.tracks.get(key);if(!track){track={key,id:Number(data.track_id),writer:R.guid(info),appeared:t,history:[],associations:state.associations.filter(a=>a.selected===key)};state.tracks.set(key,track);}
-    track.t=t;track.data=data;track.history.push({t,data});R.trim(track.history,t-20000);const pending=[...state.associations].reverse().find(a=>a.selected===key&&!a.following&&t>=a.t&&t-a.t<=350);if(pending){pending.following=t;pending.consistent=innovation(track.data,pending.measurement,t).score<1.4;}
+const R = RadarLive;
+const $ = id => document.getElementById(id);
+const status = R.statusBinder("statusDot", "statusText");
+const readers = {
+  association: "TrackAssociationEventReader",
+  detection: "DetectionEventReader",
+  track: "TargetTrackReader"
+};
+const state = {
+  tracks: new Map(),
+  lifecycleByTrack: new Map(),
+  detections: new Map(),
+  decisions: [],
+  selected: null,
+  detectionCount: 0,
+  associationSeen: false,
+  client: null,
+  demo: null
+};
+
+function xyz(value) {
+  return {
+    x: R.n(value?.x_east_m, 0),
+    y: R.n(value?.y_north_m, 0),
+    z: R.n(value?.z_up_m, 0)
+  };
+}
+
+function polar(value) {
+  const horizontal = Math.hypot(value.x, value.y);
+  return {
+    range: Math.hypot(horizontal, value.z),
+    azimuth: R.wrap360(R.degrees(Math.atan2(value.x, value.y))),
+    elevation: R.degrees(Math.atan2(value.z, horizontal))
+  };
+}
+
+function enumValue(value, prefix, names) {
+  return Number.isInteger(value) ? (names[value] || `UNKNOWN_${value}`) : R.enumName(value, prefix);
+}
+
+function decisionName(value) {
+  return enumValue(value, "TRACK_ASSOCIATION_", ["INITIATE", "UPDATE", "REJECT", "MERGE", "DROP"]);
+}
+
+function reasonName(value) {
+  return enumValue(value, "TRACK_ASSOCIATION_REASON_", ["NONE", "CAPACITY", "DUPLICATE", "COAST_TIMEOUT", "RESET", "SHUTDOWN"]);
+}
+
+function lifecycleKey(data) {
+  const trackId = Number(data.track_id);
+  if (trackId < 0) return null;
+  return `${data.tracker_instance_id}:${data.track_lifecycle_id}`;
+}
+
+function provisionalKey(trackId, info) {
+  return `awaiting-association:${R.guid(info)}:${trackId}`;
+}
+
+function contributorKey(value) {
+  return `${value.sensor_id}:${value.detection_id}`;
+}
+
+function rekeyTrack(trackId, authoritativeKey) {
+  const existing = [...state.tracks.values()].find(track => track.id === trackId && track.key !== authoritativeKey);
+  if (!existing) return;
+  state.tracks.delete(existing.key);
+  if (state.selected === existing.key) state.selected = authoritativeKey;
+  existing.key = authoritativeKey;
+  state.tracks.set(authoritativeKey, existing);
+}
+
+function ingestAssociation(data, info) {
+  if (!data) return;
+  state.associationSeen = true;
+  const time = R.epoch(data, info);
+  const trackId = Number(data.track_id);
+  const key = lifecycleKey(data);
+  if (key) {
+    state.lifecycleByTrack.set(String(trackId), key);
+    rekeyTrack(trackId, key);
+  }
+
+  const contributors = Array.isArray(data.contributing_detections)
+    ? data.contributing_detections.map(value => ({
+        sensorId: Number(value.sensor_id),
+        detectionId: Number(value.detection_id),
+        beamId: Number(value.beam_id),
+        key: contributorKey(value)
+      }))
+    : [];
+  const decision = {
+    id: `association:${data.tracker_instance_id}:${data.association_id}`,
+    time,
+    key,
+    trackId,
+    lifecycleId: data.track_lifecycle_id,
+    associationId: data.association_id,
+    decision: decisionName(data.decision),
+    reason: reasonName(data.reason),
+    hasMeasurement: Boolean(data.has_measurement),
+    contributors,
+    contributorCount: Number(data.contributor_count),
+    truncated: Boolean(data.contributors_truncated),
+    range: R.n(data.fused_range_m),
+    azimuth: R.n(data.fused_azimuth_deg),
+    elevation: R.n(data.fused_elevation_deg),
+    snr: R.n(data.fused_snr_db),
+    innovation: R.n(data.innovation_score),
+    candidates: Number(data.passing_candidate_count),
+    confirmed: Boolean(data.track_confirmed),
+    lastAcceptedSim: Number(data.last_accepted_sim_millis),
+    relatedTrackId: Number(data.related_track_id),
+    relatedLifecycleId: Number(data.related_track_lifecycle_id)
+  };
+  state.decisions.unshift(decision);
+  if (state.decisions.length > 300) state.decisions.length = 300;
+
+  if (key) {
+    const track = state.tracks.get(key);
+    if (track) {
+      track.decisions.unshift(decision);
+      if (track.decisions.length > 100) track.decisions.length = 100;
+    }
+  }
+  state.selected ||= decision.id;
+}
+
+function ingestTrack(data, info) {
+  if (!data) return;
+  const trackId = Number(data.track_id);
+  const mapped = state.lifecycleByTrack.get(String(trackId));
+  const key = mapped || provisionalKey(trackId, info);
+  const disposed = info?.valid_data === false || String(info?.instance_state || "").includes("NOT_ALIVE");
+  if (disposed) {
+    state.tracks.delete(key);
     return;
   }
-  if(topic==="detection"&&data){if(state.associationCount===0){state.pending.push({t,data,info,identity:`${R.guid(info)}:${data.sensor_id}:${data.detection_id}`});state.pending.sort((a,b)=>a.t-b.t);}state.detectionCount++;}
+  let track = state.tracks.get(key);
+  if (!track) {
+    track = {
+      key,
+      id: trackId,
+      writer: R.guid(info),
+      appeared: R.epoch(data, info),
+      history: [],
+      decisions: state.decisions.filter(item => item.key === key)
+    };
+    state.tracks.set(key, track);
+  }
+  track.time = R.epoch(data, info);
+  track.data = data;
+  track.history.push({ time: track.time, data });
+  R.trim(track.history, track.time - 20000, item => item.time);
+  for (const decision of state.decisions) {
+    if (decision.key === key && decision.followingTrackTime == null && track.time >= decision.time) {
+      decision.followingTrackTime = track.time;
+    }
+  }
 }
-function measurementUncertainty(snr){const power=Math.pow(10,Math.max(11.3,Math.min(80,R.n(snr,12)))/10),rangeStd=Math.hypot(150/Math.sqrt(12),150/(2*Math.sqrt(power))),azStd=Math.hypot(2.25/Math.sqrt(12),3.1719/(2*Math.sqrt(2*power)));return{rangeStd,azStd};}
-function shipAt(t){return R.interpolateShip(state.ships,t);}
-function fuse(group){const weights=group.map(d=>Math.pow(10,R.n(d.data.snr_db,0)/10)),sum=weights.reduce((a,b)=>a+b,0)||1;const avg=key=>group.reduce((a,d,i)=>a+R.n(d.data[key],0)*weights[i],0)/sum,t=group.reduce((a,d,i)=>a+d.t*weights[i],0)/sum,ship=shipAt(t),heading=R.n(ship?.data?.heading_deg,0),range=avg("range_m"),azShip=avg("azimuth_deg"),el=avg("elevation_deg"),azWorld=R.wrap360(azShip+heading),horizontal=range*Math.cos(R.radians(el));return{t,range,azShip,azWorld,el,snr:10*Math.log10(sum),position:{x:horizontal*Math.sin(R.radians(azWorld)),y:horizontal*Math.cos(R.radians(azWorld)),z:range*Math.sin(R.radians(el))},detections:group.map(d=>d.identity),ids:group.map(d=>d.data.detection_id),headingInterpolated:Boolean(ship?.interpolated)};}
-function innovation(trackData,m,batchT){const p0=xyz(trackData.position),v=xyz(trackData.velocity),dt=Math.max(.02,(batchT-R.epoch(trackData,{}))/1000),p={x:p0.x+v.x*dt,y:p0.y+v.y*dt,z:p0.z+v.z*dt},pp=polar(p),rangeError=Math.abs(pp.range-m.range),azError=Math.abs(R.wrap180(pp.az-m.azWorld)),mean=.5*(pp.range+m.range),cross=mean*Math.abs(Math.sin(R.radians(azError))),u=measurementUncertainty(m.snr),motion=Math.max(0,350*Math.min(dt,1)),rangeGate=Math.max(375,3*u.rangeStd)+motion,azGate=Math.max(2.6,3*u.azStd),crossGate=150+mean*Math.tan(R.radians(azGate))+motion,score=(rangeError/rangeGate)**2+(cross/crossGate)**2;return{rangeError,cross,rangeGate,crossGate,azError,score,pass:rangeError<rangeGate&&cross<crossGate};}
-function processBatches(){
-  if(state.associationCount>0){state.pending.length=0;return;}
-  const now=Date.now(),ready=state.pending.filter(d=>d.t<=now-60);state.pending=state.pending.filter(d=>d.t>now-60);if(!ready.length)return;
-  const groups=[];for(const det of ready){let group=groups.find(g=>Math.abs(g[0].t-det.t)<=30&&Math.abs(R.n(g[0].data.range_m)-R.n(det.data.range_m))<=225&&Math.abs(R.wrap180(R.n(g[0].data.azimuth_deg)-R.n(det.data.azimuth_deg)))<=3.3&&Math.abs(R.n(g[0].data.elevation_deg)-R.n(det.data.elevation_deg))<=.1);if(group)group.push(det);else groups.push([det]);}
-  for(const group of groups){const measurement=fuse(group),candidates=[];for(const track of state.tracks.values()){const score=innovation(track.data,measurement,measurement.t);if(score.pass)candidates.push({key:track.key,trackId:track.id,...score});}candidates.sort((a,b)=>a.score-b.score);const selected=candidates[0]?.key||null,ambiguous=candidates.length>1&&candidates[1].score-candidates[0].score<.25;let confidence=!selected?"UNRESOLVED":ambiguous?"RECONSTRUCTED_LOW":measurement.headingInterpolated?"RECONSTRUCTED_HIGH":"RECONSTRUCTED_MEDIUM";const row={id:`${measurement.t}-${measurement.ids.join("-")}`,t:measurement.t,measurement,candidates,selected,confidence,following:null,consistent:null};state.associations.unshift(row);if(state.associations.length>300)state.associations.length=300;if(selected){const tr=state.tracks.get(selected);tr?.associations.unshift(row);if(tr&&tr.associations.length>100)tr.associations.length=100;}state.selected=state.selected||row.id;}
+
+function ingest(topic, data, info = {}) {
+  if (topic === "association") ingestAssociation(data, info);
+  if (topic === "track") ingestTrack(data, info);
+  if (topic === "detection" && data) {
+    state.detectionCount += 1;
+    const key = contributorKey(data);
+    state.detections.set(key, { data, info, time: R.epoch(data, info) });
+    if (state.detections.size > 1000) state.detections.delete(state.detections.keys().next().value);
+  }
 }
-function classification(v){return R.enumName(v,"CLASS_");}
-function confidenceBadge(c){const cls=c.startsWith("REPORTED")?"good":c.includes("HIGH")?"good":c.includes("MEDIUM")?"info":c.includes("LOW")?"warn":"bad";return `<span class="badge ${cls}">${c}</span>`;}
-function render(){
-  $("activeCount").textContent=state.tracks.size;$("detectionCount").textContent=state.detectionCount;$("batchCount").textContent=state.associations.length;$("ambiguousCount").textContent=state.associations.filter(a=>a.confidence==="UNRESOLVED"||a.confidence.includes("LOW")||a.confidence.includes("TRUNCATED")).length;
-  $("trackRows").innerHTML=state.tracks.size?[...state.tracks.values()].map(tr=>{const p=xyz(tr.data.position),v=xyz(tr.data.velocity),a=tr.associations[0],age=a?Math.max(0,Date.now()-a.t):NaN,selected=state.selected===tr.key?"selected":"";return `<tr data-key="${R.esc(tr.key)}" class="${selected}"><td>${R.esc(tr.key.slice(-30))}</td><td>${R.clock(tr.t)}</td><td>${R.fmt(p.x,0)}, ${R.fmt(p.y,0)}, ${R.fmt(p.z,0)}</td><td>${R.fmt(v.x,1)}, ${R.fmt(v.y,1)}, ${R.fmt(v.z,1)}</td><td>${classification(tr.data.classification)} / ${R.integer(tr.data.quality)}</td><td>${a?`${R.fmt(a.measurement.range/1000,2)} km @ ${R.fmt(a.measurement.azShip,1)}°`:"—"}</td><td>${a?a.measurement.ids.join(" · "):"—"}</td><td>${a?R.fmt(a.candidates.find(c=>c.key===tr.key)?.score,3):"—"}</td><td>${R.fmt(age/1000,1)} s</td><td>${a?confidenceBadge(a.confidence):confidenceBadge("UNRESOLVED")}</td></tr>`;}).join(""):`<tr><td colspan="10" class="empty">Waiting for TargetTrack instances</td></tr>`;
-  $("assocRows").innerHTML=state.associations.length?state.associations.slice(0,150).map(a=>`<tr data-key="${R.esc(a.id)}" class="${state.selected===a.id?"selected":""}"><td>${R.clock(a.t)}</td><td>${a.hasMeasurement!==false?`${R.fmt(a.measurement.range/1000,2)} km / ${R.fmt(a.measurement.azShip,1)}° / ${R.fmt(a.measurement.el,1)}°`:"—"}</td><td>${a.measurement.detections.map(x=>R.esc(x.slice(-28))).join("<br>")||"—"}</td><td>${a.authoritative?`${a.decision} / ${a.reason}`:(a.candidates.length?a.candidates.map(c=>`${c.trackId}:${R.fmt(c.score,2)}`).join(" · "):"none")}</td><td>${a.selected?`track ${state.tracks.get(a.selected)?.id??a.selected.split(":").at(-2)}`:"none"}</td><td>${a.following?`${R.clock(a.following)} ${a.consistent?"consistent":"weak"}`:"pending / none"}</td><td>${confidenceBadge(a.confidence)}</td></tr>`).join(""):`<tr><td colspan="7" class="empty">Waiting for TrackAssociationEvent decisions</td></tr>`;
+
+function classification(value) {
+  return R.enumName(value, "CLASS_");
+}
+
+function badge(value) {
+  const cls = value === "REPORTED" ? "good" : value === "REPORTED_TRUNCATED" ? "warn" : "bad";
+  return `<span class="badge ${cls}">${R.esc(value)}</span>`;
+}
+
+function renderTracks() {
+  const tracks = [...state.tracks.values()];
+  $("trackRows").innerHTML = tracks.length ? tracks.map(track => {
+    const position = xyz(track.data.position);
+    const velocity = xyz(track.data.velocity);
+    const latest = track.decisions[0];
+    const age = latest ? Math.max(0, Date.now() - latest.time) : NaN;
+    const stateLabel = latest ? (latest.confirmed ? "CONFIRMED" : latest.decision) : "AWAITING_ASSOCIATION";
+    return `<tr data-key="${R.esc(track.key)}" class="${state.selected === track.key ? "selected" : ""}">
+      <td>T${track.id} / ${R.esc(track.key)}</td><td>${R.clock(track.time)}</td>
+      <td>${R.fmt(position.x, 0)}, ${R.fmt(position.y, 0)}, ${R.fmt(position.z, 0)}</td>
+      <td>${R.fmt(velocity.x, 1)}, ${R.fmt(velocity.y, 1)}, ${R.fmt(velocity.z, 1)}</td>
+      <td>${classification(track.data.classification)} / ${R.integer(track.data.quality)}</td>
+      <td>${latest ? `${latest.decision} / ${latest.reason}` : "-"}</td>
+      <td>${latest ? latest.contributors.map(item => item.detectionId).join(" / ") : "-"}</td>
+      <td>${latest ? R.fmt(latest.innovation, 3) : "-"}</td>
+      <td>${R.fmt(age / 1000, 1)} s</td><td>${badge(latest ? (latest.truncated ? "REPORTED_TRUNCATED" : "REPORTED") : "MISSING")}</td>
+    </tr>`;
+  }).join("") : `<tr><td colspan="10" class="empty">Waiting for TargetTrack instances</td></tr>`;
+}
+
+function renderDecisions() {
+  $("decisionRows").innerHTML = state.decisions.length ? state.decisions.slice(0, 150).map(item => {
+    const identities = item.contributors.map(value => `${value.sensorId}:${value.detectionId}:beam-${value.beamId}`).join("<br>") || "-";
+    const fused = item.hasMeasurement ? `${R.fmt(item.range / 1000, 2)} km / ${R.fmt(item.azimuth, 1)} deg / ${R.fmt(item.elevation, 1)} deg` : "-";
+    return `<tr data-key="${R.esc(item.id)}" class="${state.selected === item.id ? "selected" : ""}">
+      <td>${R.clock(item.time)}</td><td>${item.decision} / ${item.reason}</td><td>${fused}</td>
+      <td>${identities}</td><td>${R.esc(item.key || "rejected")}</td><td>${R.integer(item.candidates)}</td><td>${item.followingTrackTime ? R.clock(item.followingTrackTime) : "pending / none"}</td>
+      <td>${badge(item.truncated ? "REPORTED_TRUNCATED" : "REPORTED")}</td>
+    </tr>`;
+  }).join("") : `<tr><td colspan="8" class="empty">Waiting for TrackAssociationEvent decisions</td></tr>`;
+}
+
+function renderTimeline(track) {
+  if (!track) {
+    $("timeline").innerHTML = `<div class="empty">Select an active lifecycle to see its timeline.</div>`;
+    return;
+  }
+  const events = [
+    ...track.history.map(item => ({ time: item.time, row: "track", cls: "lime", title: "TargetTrack publication" })),
+    ...track.decisions.map(item => ({ time: item.time, row: "decision", cls: "", title: `${item.decision} ${item.contributors.map(value => value.detectionId).join(",")}` }))
+  ];
+  const min = Math.min(...events.map(item => item.time));
+  const max = Math.max(Date.now(), ...events.map(item => item.time), min + 1000);
+  $("timeline").innerHTML = [["Track publications", "track"], ["Reported decisions", "decision"]].map(([label, row]) =>
+    `<div class="timeline-row"><div class="timeline-label">${label}</div><div class="timeline-track">${events.filter(item => item.row === row).map(item => `<span class="tick ${item.cls}" style="left:${100 * (item.time - min) / (max - min)}%" title="${R.esc(R.clock(item.time) + " " + item.title)}"></span>`).join("")}</div></div>`
+  ).join("");
+}
+
+function renderDetail() {
+  const track = state.tracks.get(state.selected);
+  const decision = state.decisions.find(item => item.id === state.selected);
+  if (track) {
+    const latest = track.decisions[0];
+    $("detail").textContent = `LIFECYCLE ${track.key}\nappeared: ${new Date(track.appeared).toISOString()}\nwriter: ${track.writer}\ntrack_id: ${track.id}\nretained reported decisions: ${track.decisions.length}\nlatest contributors: ${latest?.contributors.map(item => item.key).join(", ") || "none observed"}\n\n${latest ? "Lineage reported by TrackManager." : "TrackAssociationEvent has not yet identified this lifecycle."}`;
+    renderTimeline(track);
+    return;
+  }
+  if (decision) {
+    const sourceDetails = decision.contributors.map(item => {
+      const sample = state.detections.get(item.key);
+      return `  ${item.key} beam ${item.beamId}${sample ? `, SNR ${R.fmt(sample.data.snr_db, 1)} dB` : ", DetectionEvent not retained"}`;
+    }).join("\n") || "  none";
+    $("detail").textContent = `TRACKASSOCIATIONEVENT ${new Date(decision.time).toISOString()}\nassociation_id: ${decision.associationId}\ndecision / reason: ${decision.decision} / ${decision.reason}\nlifecycle: ${decision.key || "none"}\nfused range: ${R.fmt(decision.range, 1)} m\nfused azimuth / elevation: ${R.fmt(decision.azimuth, 2)} / ${R.fmt(decision.elevation, 2)} deg\nfused SNR: ${R.fmt(decision.snr, 2)} dB\ninnovation score: ${R.fmt(decision.innovation, 3)}\npassing candidates: ${R.integer(decision.candidates)}\nfollowing TargetTrack: ${decision.followingTrackTime ? new Date(decision.followingTrackTime).toISOString() : "not observed"}\ncontributors:\n${sourceDetails}\nconfidence: ${decision.truncated ? "REPORTED_TRUNCATED" : "REPORTED"}`;
+    renderTimeline(null);
+    return;
+  }
+  $("detail").textContent = state.associationSeen ? "Select a lifecycle or decision." : "TrackAssociationEvent is required; waiting for its writer.";
+  renderTimeline(null);
+}
+
+function render() {
+  $("activeCount").textContent = state.tracks.size;
+  $("detectionCount").textContent = state.detectionCount;
+  $("decisionCount").textContent = state.decisions.length;
+  $("truncatedCount").textContent = state.decisions.filter(item => item.truncated).length;
+  renderTracks();
+  renderDecisions();
   renderDetail();
 }
-function renderDetail(){const track=state.tracks.get(state.selected),assoc=state.associations.find(a=>a.id===state.selected);if(track){const a=track.associations[0];$("detail").textContent=`LIFECYCLE ${track.key}\nappeared: ${new Date(track.appeared).toISOString()}\nwriter: ${track.writer}\ntrack_id: ${track.id}\nretained decisions: ${track.associations.length}\nlatest source detections: ${a?.measurement.detections.join(", ")||"none observed"}\n\n${a?.authoritative?"Lineage was reported by TrackManager.":"No authoritative event observed; lineage is reconstructed."}`;renderTimeline(track);return;}if(assoc){$("detail").textContent=`DECISION ${new Date(assoc.t).toISOString()}\nsource: ${assoc.authoritative?"TrackAssociationEvent (authoritative)":"browser reconstruction"}\ndecision / reason: ${assoc.decision||"RECONSTRUCTED"} / ${assoc.reason||"N/A"}\nfused range: ${R.fmt(assoc.measurement.range,1)} m\nfused azimuth / elevation: ${R.fmt(assoc.measurement.azShip,2)}° / ${R.fmt(assoc.measurement.el,2)}°\nfused SNR: ${R.fmt(assoc.measurement.snr,2)} dB\nsource detections:\n  ${assoc.measurement.detections.join("\n  ")||"none"}\nselected lifecycle: ${assoc.selected||"none"}\nrelated track: ${assoc.relatedTrackId??"none"}\ninnovation score: ${R.fmt(assoc.candidates[0]?.score,3)}\nconfidence: ${assoc.confidence}`;$("timeline").innerHTML=`<div class="empty">Select an active track to see its lifecycle timeline.</div>`;return;}$("detail").textContent="Select an active lifecycle or retained association.";}
-function renderTimeline(track){const events=[...track.history.map(x=>({t:x.t,row:"track",cls:"lime",title:"TargetTrack publication"})),...track.associations.map(x=>({t:x.t,row:"likely",cls:"",title:`Likely measurement ${x.measurement.ids.join(",")}`}))];if(!events.length){$("timeline").innerHTML="";return;}const min=Math.min(...events.map(x=>x.t)),max=Math.max(Date.now(),...events.map(x=>x.t),min+1000),rows=[["Track publications","track"],["Likely accepted","likely"]];$("timeline").innerHTML=rows.map(([label,row])=>`<div class="timeline-row"><div class="timeline-label">${label}</div><div class="timeline-track">${events.filter(e=>e.row===row).map(e=>`<span class="tick ${e.cls}" style="left:${100*(e.t-min)/(max-min)}%" title="${R.esc(R.clock(e.t)+" "+e.title)}"></span>`).join("")}</div></div>`).join("");}
-document.addEventListener("click",e=>{const row=e.target.closest("tr[data-key]");if(row){state.selected=row.dataset.key;render();}});
-function makeClient(){return new R.WisClient({application:$("application").value,participant:"RadarParticipant",subscriber:"RadarSubscriber",readers,onSample:ingest,onStatus:status});}
-$("connect").onclick=async()=>{stopDemo();state.client=makeClient();try{await state.client.connect($("endpoint").value);}catch(e){status("error",e.message);}};
-function stopDemo(){if(state.demo){clearInterval(state.demo);state.demo=null;}}
-$("demo").onclick=()=>{stopDemo();state.client?.disconnect();status("live","Synthetic review stream");let k=0,id=7000;state.demo=setInterval(()=>{const t=Date.now(),heading=32+.006*k;ingest("ship",{source_id:0,timestamp:{epoch_millis:t},latitude_deg:36,longitude_deg:-74,heading_deg:heading,course_deg:35,speed_mps:8},{});for(let j=0;j<2;j++){const tid=1000+j,x=(j?24000:11500)+(j?20:38)*k,y=(j?48000:36500)+(j?-28:-12)*k,z=(j?5200:2100),vx=(j?100:190),vy=(j?-140:-60),vz=0,data={track_id:tid,timestamp:{epoch_millis:t},position:{x_east_m:x,y_north_m:y,z_up_m:z},velocity:{x_east_m:vx,y_north_m:vy,z_up_m:vz},acceleration:{x_east_m:0,y_north_m:0,z_up_m:0},classification:"CLASS_AIR_BREATHING",quality:88-j*7};ingest("track",data,{publication_handle:"demo-writer"});if(k%12===0){const p=polar({x,y,z}),azShip=R.wrap360(p.az-heading);for(let fragment=0;fragment<(j?1:2);fragment++)ingest("detection",{sensor_id:Math.floor(azShip/90),detection_id:id++,timestamp:{epoch_millis:t+fragment*8},range_m:p.range+(Math.random()-.5)*100,azimuth_deg:azShip+(Math.random()-.5)*1.2,elevation_deg:Math.round(p.el/11)*11+3,amplitude:.5,snr_db:14+Math.random()*8},{publication_handle:"demo-detection"});}}k++;},100);};
-$("csv").onclick=()=>R.downloadCsv("likely-track-lineage.csv",state.associations.map(a=>({batch_time:new Date(a.t).toISOString(),range_m:a.measurement.range,az_ship_deg:a.measurement.azShip,elevation_deg:a.measurement.el,detection_ids:a.measurement.ids.join(" "),candidate_tracks:a.candidates.map(c=>c.trackId).join(" "),selected_lifecycle:a.selected,confidence:a.confidence,following_update:a.following})));setInterval(()=>{processBatches();render();},100);render();if(new URLSearchParams(location.search).get("demo")==="1")$("demo").click();
-</script></body></html>
+
+document.addEventListener("click", event => {
+  const row = event.target.closest("tr[data-key]");
+  if (!row) return;
+  state.selected = row.dataset.key;
+  render();
+});
+
+function makeClient() {
+  return new R.WisClient({
+    application: $("application").value,
+    participant: "RadarParticipant",
+    subscriber: "RadarSubscriber",
+    readers,
+    onSample: ingest,
+    onStatus: status
+  });
+}
+
+function stopDemo() {
+  if (state.demo) clearInterval(state.demo);
+  state.demo = null;
+}
+
+$("connect").onclick = async () => {
+  stopDemo();
+  state.client = makeClient();
+  try { await state.client.connect($("endpoint").value); }
+  catch (error) { status("error", error.message); }
+};
+
+$("demo").onclick = () => {
+  stopDemo();
+  state.client?.disconnect();
+  status("live", "Synthetic authoritative association stream");
+  let tick = 0;
+  let detectionId = 7000;
+  let associationId = 1;
+  const trackerInstance = 900001;
+  state.demo = setInterval(() => {
+    const time = Date.now();
+    for (let index = 0; index < 2; index += 1) {
+      const trackId = 1000 + index;
+      const lifecycleId = index + 1;
+      const x = (index ? 24000 : 11500) + (index ? 20 : 38) * tick;
+      const y = (index ? 48000 : 36500) + (index ? -28 : -12) * tick;
+      const z = index ? 5200 : 2100;
+      const data = {
+        track_id: trackId,
+        timestamp: { epoch_millis: time },
+        position: { x_east_m: x, y_north_m: y, z_up_m: z },
+        velocity: { x_east_m: index ? 100 : 190, y_north_m: index ? -140 : -60, z_up_m: 0 },
+        acceleration: { x_east_m: 0, y_north_m: 0, z_up_m: 0 },
+        classification: "CLASS_AIR_BREATHING",
+        quality: 88 - index * 7
+      };
+      ingest("track", data, { publication_handle: "demo-track-writer" });
+
+      if (tick % 12 === 0) {
+        const measurement = polar({ x, y, z });
+        const contributors = [];
+        const count = index ? 1 : 2;
+        for (let fragment = 0; fragment < count; fragment += 1) {
+          const sensorId = Math.floor(measurement.azimuth / 90) % 4;
+          const id = detectionId++;
+          const beamId = 30000 + tick * 4 + fragment;
+          const detection = {
+            sensor_id: sensorId,
+            detection_id: id,
+            beam_id: beamId,
+            timestamp: { epoch_millis: time + fragment * 8 },
+            range_m: measurement.range + (Math.random() - .5) * 100,
+            azimuth_deg: measurement.azimuth + (Math.random() - .5),
+            elevation_deg: measurement.elevation,
+            amplitude: .5,
+            snr_db: 14 + Math.random() * 8
+          };
+          contributors.push({ sensor_id: sensorId, detection_id: id, beam_id: beamId, timestamp: detection.timestamp });
+          ingest("detection", detection, { publication_handle: "demo-detection-writer" });
+        }
+        ingest("association", {
+          tracker_id: 0,
+          association_id: associationId++,
+          timestamp: { epoch_millis: time + 10 },
+          tracker_instance_id: trackerInstance,
+          track_id: trackId,
+          track_lifecycle_id: lifecycleId,
+          related_track_id: -1,
+          related_track_lifecycle_id: 0,
+          decision: tick === 0 ? "TRACK_ASSOCIATION_INITIATE" : "TRACK_ASSOCIATION_UPDATE",
+          reason: "TRACK_ASSOCIATION_REASON_NONE",
+          has_measurement: true,
+          contributing_detections: contributors,
+          contributor_count: contributors.length,
+          contributors_truncated: false,
+          fused_range_m: measurement.range,
+          fused_azimuth_deg: measurement.azimuth,
+          fused_elevation_deg: measurement.elevation,
+          fused_snr_db: 18,
+          innovation_score: .18 + Math.random() * .4,
+          passing_candidate_count: 1,
+          track_confirmed: tick >= 24,
+          last_accepted_sim_millis: tick * 100
+        }, { publication_handle: "demo-association-writer" });
+      }
+    }
+    tick += 1;
+  }, 100);
+};
+
+$("csv").onclick = () => R.downloadCsv("track-association-decisions.csv", state.decisions.map(item => ({
+  time: new Date(item.time).toISOString(),
+  association_id: item.associationId,
+  decision: item.decision,
+  reason: item.reason,
+  lifecycle: item.key,
+  contributor_ids: item.contributors.map(value => value.key).join(" "),
+  contributor_beams: item.contributors.map(value => value.beamId).join(" "),
+  fused_range_m: item.range,
+  fused_azimuth_deg: item.azimuth,
+  fused_elevation_deg: item.elevation,
+  innovation_score: item.innovation,
+  passing_candidate_count: item.candidates,
+  following_track_time: item.followingTrackTime ? new Date(item.followingTrackTime).toISOString() : "",
+  contributors_truncated: item.truncated
+})));
+
+setInterval(render, 100);
+render();
+if (new URLSearchParams(location.search).get("demo") === "1") $("demo").click();
+</script>
+</body>
+</html>

@@ -231,9 +231,10 @@ Apply these rules to every prompt below:
   `sensor_id`, and `detection_id`. A track identity should include writer GUID,
   `track_id`, and the DDS instance lifecycle because numeric track IDs can be
   recycled.
-- Label results `EXACT`, `RECONSTRUCTED_HIGH`, `RECONSTRUCTED_MEDIUM`,
-  `RECONSTRUCTED_LOW`, or `UNRESOLVED`, and retain the evidence behind the
-  label.
+- Use authority-appropriate status labels and retain their evidence. Direct
+  schema joins use `EXACT`, `NOT_OBSERVED`, or `SCHEMA_ERROR`; reported tracker
+  decisions use `REPORTED` or `REPORTED_TRUNCATED`. Use `RECONSTRUCTED_*` only
+  in views whose question intentionally requires an inference.
 - Never equate “not observed by this view” with “not published” or “not
   received by another DDS reader.”
 
@@ -282,7 +283,9 @@ samples.
 
 Working state:
 - Treat DetectionEvent.beam_id as the authoritative producing-dwell identity.
-- Keep a rolling RawReturn metadata buffer for every array_id. Retain
+- Require beam_id. If it is absent, display SCHEMA_ERROR and do not infer a
+  replacement beam from timing or pointing.
+- Keep a rolling, optional RawReturn metadata buffer for every array_id. Retain
   array_id, beam_id, timestamp.epoch_millis, azimuth_deg, elevation_deg,
   range_bin_count, DDS source/reception order, and sample-loss indicators.
 - Do not copy iq_samples into the language-model context. It is not needed to
@@ -291,8 +294,8 @@ Working state:
   metadata.
 - Keep the latest BeamPatternStatus samples per array_id and beam_id. Project
   scalar pattern metrics; do not continuously copy azimuth_pattern_db.
-- Keep pending DetectionEvent rows briefly so RawReturn and DetectionEvent
-  delivery order cannot determine the join result.
+- Keep pending DetectionEvent rows briefly so BeamCommand and DetectionEvent
+  delivery order cannot determine whether the exact command was observed.
 - Separately retain completed enriched detection rows for the life of this
   view, subject to an explicitly displayed retention limit.
 
@@ -310,19 +313,21 @@ For a transition A -> B:
   rather than its first pulse.
 
 For every new DetectionEvent:
-1. Select the RawReturn stream where:
+1. Join BeamCommand exactly where:
+     BeamCommand.scheduler_id = DetectionEvent.sensor_id
+     BeamCommand.beam_id      = DetectionEvent.beam_id
+   Do not select a nearby command if the exact command was not observed.
+2. Optionally select RawReturn evidence where:
      RawReturn.array_id = DetectionEvent.sensor_id
-2. Join the producing dwell exactly where:
-     RawReturn.beam_id = DetectionEvent.beam_id
-   A missing RawReturn is an optional BEST_EFFORT evidence gap, not an
-   ambiguous beam attribution.
-3. When RawReturn is observed, locate its A -> B transition to explain when
-   DetectionProcessor completed A. Attribute the detection to A, never B.
+     RawReturn.beam_id  = DetectionEvent.beam_id
+   A missing RawReturn is a BEST_EFFORT evidence gap, not ambiguous beam
+   attribution.
+3. When matching RawReturn is observed, locate its A -> B transition to explain
+   when DetectionProcessor completed A. Attribute the detection to A, never B.
 4. Validate that A's RawReturn azimuth_deg and elevation_deg match the
    DetectionEvent pointing within configured numeric tolerances.
-5. Join the producing dwell to BeamCommand exactly on:
-     BeamCommand.scheduler_id = RawReturn.array_id
-     BeamCommand.beam_id      = A
+5. Validate the DetectionEvent pointing against the exact BeamCommand. A
+   disagreement is a validation warning; it does not change beam identity.
 6. Join BeamPatternStatus first by matching array_id and beam_id. Because
    pattern status is 20 Hz while commands are 100 Hz, fall back to the latest
    state for that array_id at or before the producing dwell and label that
@@ -389,16 +394,13 @@ and time. Selecting a retained row must open its evidence without rerunning
 the correlation from expired source buffers.
 
 Confidence:
-- EXACT: DetectionEvent.beam_id joins the BeamCommand on the same face and
-  the command pointing agrees. RawReturn may independently validate it.
-- RECONSTRUCTED_HIGH: the A -> B transition was observed, A joins exactly to
-  BeamCommand by face and beam_id, and pointing/timing agree, but the publisher
-  is an older DetectionEvent type without beam_id.
-- RECONSTRUCTED_MEDIUM: the producing dwell is identifiable but some raw
-  pulses or pattern evidence are missing.
-- RECONSTRUCTED_LOW: attribution depends mainly on time/pointing proximity or
-  a transition was partially missed.
-- UNRESOLVED: no single producing dwell is defensible.
+- EXACT: DetectionEvent.beam_id joins the BeamCommand on the same face.
+  Pointing and RawReturn are independent validation evidence and may raise a
+  warning without changing the declared beam identity.
+- COMMAND_NOT_OBSERVED: beam_id is authoritative, but the exact BeamCommand
+  was not retained after this view subscribed.
+- SCHEMA_ERROR: DetectionEvent.beam_id is absent or invalid. Do not attribute
+  the detection to any beam.
 - Never downgrade an exact DetectionEvent-to-BeamCommand join merely because
   this BEST_EFFORT reader missed the corresponding RawReturn.
 
@@ -662,8 +664,7 @@ identities and optional DetectionEvent lookup results.
 
 Do not rerun the range/cross-range gate in the view or replace the reported
 winner with a browser-computed candidate. If TrackAssociationEvent is absent,
-show NO_AUTHORITATIVE_ASSOCIATION_STREAM. A reconstruction may be offered only
-as an explicitly labeled compatibility fallback.
+show NO_AUTHORITATIVE_ASSOCIATION_STREAM and do not reconstruct decisions.
 ```
 
 The useful live question is now “which detections did the tracker actually
@@ -779,7 +780,7 @@ Use this custom AI view prompt:
 Build a live multi-topic view named "Track Coast and Loss Diagnosis".
 
 Do not produce a one-time answer. Subscribe continuously to:
-- Radar/TrackAssociationEvent
+- Radar/TrackAssociationEvent (required, RELIABLE)
 - Radar/TargetTrack
 - Radar/DetectionEvent
 - Radar/BeamCommand
@@ -824,8 +825,10 @@ For each active track lifecycle:
 8. On DDS disposal, freeze the lifecycle and all preceding evidence as a
    retained loss incident. Continue accepting a short grace window of
    late-arriving evidence before finalizing the diagnosis.
-9. Detect CMD_RESET separately. Disposal of all track instances immediately
-   after reset is an explicit reset, not a receiver failure.
+9. Use DROP or MERGE TrackAssociationEvent reason as the authoritative
+   lifecycle termination cause. A nearby CMD_RESET may corroborate a reported
+   RESET reason but must not manufacture one when association telemetry is
+   absent.
 
 Classify every missed update using this evidence:
 
@@ -854,7 +857,8 @@ another measurement, assignment to a competing lifecycle, or initiation of a
 replacement lifecycle.
 
 EXPLICIT_RESET:
-CMD_RESET immediately preceded broad track disposal.
+TrackAssociationEvent reports DROP/RESET. A nearby CMD_RESET is supporting
+context only.
 
 NORMAL_COAST_DROP:
 A confirmed track was disposed just over 12 seconds after its last reported
@@ -913,6 +917,8 @@ The first exact-join telemetry is now implemented:
 
 The recording/diagnostic WIS participant consumes this stream. Live views
 still need subscription-time and retention notices, but beam attribution and
-detection-to-track lineage no longer depend on reconstructed timing. A future
+detection-to-track lineage no longer depend on reconstructed timing. The HTML
+prototypes treat these fields and events as their required baseline and do not
+retain legacy reconstruction paths. A future
 recorder can persist `TrackAssociationEvent` unchanged for retrospective
 analysis.

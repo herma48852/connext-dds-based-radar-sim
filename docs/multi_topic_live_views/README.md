@@ -18,3 +18,9 @@ Section 4 for Windows and macOS launch commands.
 View 4.4 selects `RecordingDiagnosticsApp`; when connected, WIS creates the
 `Recording.DiagnosticTools` participant that consumes the authoritative
 `Radar/TrackAssociationEvent` stream.
+
+The prototypes use the current telemetry schema as their baseline:
+`DetectionEvent.beam_id` is required by 4.2, and `TrackAssociationEvent` is
+required by 4.4 and 4.6. RawReturn transitions may corroborate a beam join and
+DetectionEvent samples may enrich an association decision, but the pages do
+not reconstruct missing beam identities or tracker decisions.
