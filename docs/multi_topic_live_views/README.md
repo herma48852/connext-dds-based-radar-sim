@@ -1,0 +1,16 @@
+# Multi-topic live views
+
+These browser prototypes implement the live multi-topic view designs in
+[Section 4 of the Connext Studio guide](../CONNEXT_STUDIO.md#4-designing-hypothetical-live-multi-topic-custom-ai-views).
+
+| Section | View |
+|---|---|
+| 4.2 | [Detection to Beam](detection_to_beam_live_view.html) |
+| 4.3 | [RMA Outage Impact Monitor](rma_outage_impact_live_view.html) |
+| 4.4 | [Likely Detection-to-Track Lineage](likely_detection_track_lineage_live_view.html) |
+| 4.5 | [Own-Ship Motion Geometry Decomposition](own_ship_motion_geometry_live_view.html) |
+| 4.6 | [Track Coast and Loss Diagnosis](track_coast_loss_live_view.html) |
+
+The pages use the aggregate `RadarLiveViews` service configuration in
+[`config/radar_live_view_wis.xml`](../../config/radar_live_view_wis.xml). See
+Section 4 for Windows and macOS launch commands.

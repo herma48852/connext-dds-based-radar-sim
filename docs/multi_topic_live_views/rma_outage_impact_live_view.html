@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>RMA Outage Impact Monitor</title>
+  <link rel="stylesheet" href="radar_live_view_common.css">
+</head>
+<body><main class="app">
+  <header class="masthead"><div><div class="eyebrow">Connext multi-topic live view · 4.3</div><h1>RMA Outage Impact Monitor</h1><div class="subtitle">Turns observed calibration mask transitions into retained 15-second pre/post incidents, then compares pattern and detection performance against unaffected faces.</div></div><div class="status"><span id="statusDot" class="dot"></span><span id="statusText">Not connected</span></div></header>
+  <nav class="nav"><a href="detection_to_beam_live_view.html">4.2 Detection → Beam</a><a class="current" href="rma_outage_impact_live_view.html">4.3 RMA impact</a><a href="likely_detection_track_lineage_live_view.html">4.4 Likely lineage</a><a href="own_ship_motion_geometry_live_view.html">4.5 Motion geometry</a><a href="track_coast_loss_live_view.html">4.6 Coast/loss</a></nav>
+  <section class="toolbar"><div class="connection"><div class="field"><label>WIS endpoint</label><input id="endpoint" value="http://localhost:18080"></div><div class="field"><label>Application</label><input id="application" value="RmaOutageApp"></div></div><button id="connect" class="primary">Connect live</button><button id="demo">Demo stream</button><button id="csv">Export incidents</button></section>
+
+  <section class="panel"><div class="panel-head"><span>Current face state</span><span id="age" class="muted">waiting</span></div><div class="table-wrap"><table><thead><tr><th>Face</th><th>Mask</th><th>Health</th><th>Offline</th><th>Active elements</th><th>Gain loss</th><th>Beamwidth</th><th>Boresight</th><th>PSL</th><th>Search Hz</th><th>Yield</th><th>Median SNR</th></tr></thead><tbody id="faceRows"></tbody></table></div></section>
+
+  <section class="grid two" style="margin-top:12px"><div class="panel"><div class="panel-head">4 × 16 RMA mask</div><div class="panel-body"><div id="heatmap" class="heatmap"></div></div></div><div class="panel"><div class="panel-head">Selected incident evidence</div><div class="panel-body"><div id="summary" class="summary">The first authoritative CalibrationStatus mask transition observed after subscription creates an incident.</div></div></div></section>
+
+  <section class="grid two" style="margin-top:12px"><div class="panel"><div class="panel-head">Pattern metrics · last 30 seconds</div><div class="panel-body"><canvas id="patternPlot" class="plot"></canvas></div></div><div class="panel"><div class="panel-head">Detection yield · last 30 seconds</div><div class="panel-body"><canvas id="yieldPlot" class="plot"></canvas></div></div></section>
+
+  <section class="panel" style="margin-top:12px"><div class="panel-head"><span>Retained outage / restore incidents</span><span>15 s pre + 15 s post</span></div><div class="table-wrap"><table><thead><tr><th>Time</th><th>Face</th><th>Status</th><th>Transition</th><th>Command</th><th>Pattern delay</th><th>Δ gain</th><th>Δ width</th><th>Yield pre → post</th><th>Controlled Δ</th><th>SNR p10 / p50 / p90</th><th>Confidence</th></tr></thead><tbody id="incidentRows"></tbody></table></div></section>
+  <div class="limitations">CalibrationStatus.rma_offline_mask is authoritative. A preceding SystemCommand is supporting request evidence only. Zero detections does not prove the RawReturn stream stopped; with all RMAs offline the simulator still publishes thermal-noise returns.</div>
+</main>
+<script src="radar_live_view_common.js"></script>
+<script>
+"use strict";
+const R = RadarLive, FACES = ["Forward Starboard","Aft Starboard","Aft Port","Forward Port"], COLORS=["#5ce1dc","#b9ee64","#ffbe5c","#b49bff"];
+const state = { started: Date.now(), latest: Date.now(), faces: Array.from({length:4},()=>({cal:null,pattern:null})), patterns:[], commands:[], detections:[], commandsAll:[], incidents:[], selected:null, timer:null, client:null, demo:null };
+const status = R.statusBinder("statusDot","statusText"), $ = id => document.getElementById(id);
+const readers={command:"SystemCommandReader",calibration:"CalibrationStatusReader",pattern:"BeamPatternStatusReader",beam:"BeamCommandReader",detection:"DetectionEventReader"};
+
+function isSearch(mode){ return mode===0 || String(mode).includes("SEARCH"); }
+function health(value){ return R.enumName(value,"ARRAY_"); }
+function commandName(value){ return R.enumName(value,"CMD_"); }
+function faceMaskMatches(command, face){ const mask=Number(command?.target_face_mask)||0; return mask===0 ? face===0 : Boolean(mask & (1<<face)); }
+function add(topic,data,info={}){
+  if(!data) return; const t=R.epoch(data,info); state.latest=Math.max(state.latest,t);
+  if(topic==="command"){
+    const request={t,data};state.commandsAll.push(request);const name=commandName(data.command_type);
+    if(["RMA_OFFLINE","RMA_ONLINE","DEGRADE_ARRAY","RESTORE_ARRAY"].includes(name))for(let face=0;face<4;face++)if(faceMaskMatches(data,face)){const current=Number(state.faces[face].cal?.data?.rma_offline_mask)>>>0;const incident={id:`request-${data.command_id}-${face}-${t}`,face,t,requestedT:t,observed:false,oldMask:current,newMask:null,cal:null,request,patternDelay:null,baselineComplete:t-state.started>=15000,frozen:null};state.incidents.unshift(incident);state.selected=incident.id;}
+  }
+  if(topic==="calibration"){
+    const face=Number(data.array_id); if(face<0||face>3)return; const old=state.faces[face].cal, mask=Number(data.rma_offline_mask)>>>0;
+    state.faces[face].cal={t,data:{...data,rma_offline_mask:mask}};
+    if(old && (Number(old.data.rma_offline_mask)>>>0)!==mask) createIncident(face,old.data.rma_offline_mask,mask,t,data);
+  }
+  if(topic==="pattern"){
+    const face=Number(data.array_id); if(face<0||face>3)return; const row={t,face,data}; state.faces[face].pattern=row; state.patterns.push(row);
+    for(const incident of state.incidents) if(incident.observed && incident.face===face && incident.patternDelay==null && t>=incident.t && (Number(data.rma_offline_mask)>>>0)===incident.newMask) incident.patternDelay=t-incident.t;
+  }
+  if(topic==="beam" && isSearch(data.mode)) state.commands.push({t,face:Number(data.scheduler_id),data});
+  if(topic==="detection") state.detections.push({t,face:Number(data.sensor_id),data});
+  prune(t);
+}
+function prune(now){ const cutoff=now-65000; for(const list of [state.patterns,state.commands,state.detections,state.commandsAll]) R.trim(list,cutoff); }
+function createIncident(face,oldMask,newMask,t,cal){
+  const request=[...state.commandsAll].reverse().find(x=>x.t<=t&&t-x.t<=5000&&faceMaskMatches(x.data,face));
+  let incident=state.incidents.find(x=>x.face===face&&!x.observed&&x.request===request&&t-x.requestedT<=5000);
+  if(incident){incident.t=t;incident.observed=true;incident.oldMask=Number(oldMask)>>>0;incident.newMask=newMask;incident.cal=cal;incident.baselineComplete=t-state.started>=15000;}
+  else{incident={id:`${face}-${t}`,face,t,requestedT:request?.t??null,observed:true,oldMask:Number(oldMask)>>>0,newMask,cal,request,patternDelay:null,baselineComplete:t-state.started>=15000,frozen:null};state.incidents.unshift(incident);}
+  state.selected=incident.id;
+}
+function faceStats(face,from,to){
+  const beams=state.commands.filter(x=>x.face===face&&x.t>=from&&x.t<to), dets=state.detections.filter(x=>x.face===face&&x.t>=from&&x.t<to), pats=state.patterns.filter(x=>x.face===face&&x.t>=from&&x.t<to);
+  const metric=key=>R.median(pats.map(x=>Number(x.data[key])));
+  return {beams:beams.length,dets:dets.length,yield:beams.length?dets.length/beams.length:NaN,snr:R.median(dets.map(x=>x.data.snr_db)),p10:R.quantile(dets.map(x=>x.data.snr_db),.1),p90:R.quantile(dets.map(x=>x.data.snr_db),.9),amp:R.median(dets.map(x=>x.data.amplitude)),gain:metric("gain_loss_db"),width:metric("beamwidth_3db_deg"),bore:metric("boresight_error_deg"),psl:metric("peak_sidelobe_level_db")};
+}
+function incidentStats(incident,now=state.latest){
+  if(!incident.observed)return{pre:{},post:{},controlled:NaN,status:"REQUESTED"};
+  if(incident.frozen)return incident.frozen; const end=Math.min(now,incident.t+15000), pre=faceStats(incident.face,incident.t-15000,incident.t),post=faceStats(incident.face,incident.t,end);
+  const controls=[]; for(let f=0;f<4;f++)if(f!==incident.face){const a=faceStats(f,incident.t-15000,incident.t),b=faceStats(f,incident.t,end);if(R.finite(a.yield)&&R.finite(b.yield))controls.push(b.yield-a.yield);}
+  const result={pre,post,controlled:(post.yield-pre.yield)-R.median(controls),status:!incident.baselineComplete?"INCOMPLETE":now-incident.t<600?"OBSERVED":now<incident.t+15000?"COLLECTING":"COMPLETE"}; if(now>=incident.t+15000)incident.frozen=result; return result;
+}
+function badge(value){const cls=value==="COMPLETE"?"good":value==="INCOMPLETE"?"bad":"warn";return `<span class="badge ${cls}">${value}</span>`;}
+function render(){
+  const now=state.latest||Date.now(); $("age").textContent=`${Math.round((now-state.started)/1000)} s observed`;
+  $("faceRows").innerHTML=state.faces.map((f,i)=>{const c=f.cal?.data,p=f.pattern?.data,s=faceStats(i,now-10000,now),off=R.popcount(c?.rma_offline_mask||0);return `<tr><td>${FACES[i]}</td><td>0x${(Number(c?.rma_offline_mask)||0).toString(16).padStart(4,"0")}</td><td>${health(c?.overall_status)}</td><td>${off}</td><td>${1024-64*off}</td><td>${R.fmt(p?.gain_loss_db,2)} dB</td><td>${R.fmt(p?.beamwidth_3db_deg,2)}°</td><td>${R.fmt(p?.boresight_error_deg,2)}°</td><td>${R.fmt(p?.peak_sidelobe_level_db,1)} dB</td><td>${R.fmt(s.beams/10,1)}</td><td>${R.fmt(s.yield,3)}</td><td>${R.fmt(s.snr,1)} dB</td></tr>`;}).join("");
+  $("heatmap").innerHTML=state.faces.map((f,face)=>`<div class="rowlabel">${FACES[face].split(" ").map(x=>x[0]).join("")}</div>`+Array.from({length:16},(_,rma)=>`<div class="cell ${((Number(f.cal?.data?.rma_offline_mask)||0)>>>rma)&1?"off":""}" title="Face ${face}, RMA ${rma}"></div>`).join("")).join("");
+  $("incidentRows").innerHTML=state.incidents.length?state.incidents.map(incident=>{const s=incidentStats(incident,now),selected=state.selected===incident.id?"selected":"",conf=s.status==="COMPLETE"&&s.pre.beams&&s.post.beams?"HIGH":s.pre.beams&&s.post.beams?"MEDIUM":"LOW",transition=incident.observed?`0x${incident.oldMask.toString(16)} → 0x${incident.newMask.toString(16)}`:"awaiting calibration";return `<tr class="${selected}" data-id="${incident.id}"><td>${R.clock(incident.t)}</td><td>${FACES[incident.face]}</td><td>${badge(s.status)}</td><td>${transition}</td><td>${incident.request?commandName(incident.request.data.command_type):"—"}</td><td>${incident.patternDelay==null?"pending":R.fmt(incident.patternDelay,0)+" ms"}</td><td>${R.fmt(s.post.gain-s.pre.gain,2)} dB</td><td>${R.fmt(s.post.width-s.pre.width,2)}°</td><td>${R.fmt(s.pre.yield,3)} → ${R.fmt(s.post.yield,3)}</td><td>${R.fmt(s.controlled,3)}</td><td>${R.fmt(s.post.p10,1)} / ${R.fmt(s.post.snr,1)} / ${R.fmt(s.post.p90,1)}</td><td>${conf}</td></tr>`;}).join(""):`<tr><td colspan="12" class="empty">Waiting for an observed mask transition</td></tr>`;
+  const chosen=state.incidents.find(x=>x.id===state.selected)||state.incidents[0];
+  if(chosen){const s=incidentStats(chosen,now),request=chosen.request?commandName(chosen.request.data.command_type):"no matching request observed";if(!chosen.observed)$("summary").innerHTML=`<strong>${FACES[chosen.face]} · REQUESTED</strong><br>${request} was observed at ${R.clock(chosen.requestedT)}. No CalibrationStatus mask transition has confirmed the requested state change, so no outage impact is claimed.`;else{const offline=R.popcount(chosen.newMask);$("summary").innerHTML=`<strong>${FACES[chosen.face]} · ${s.status}</strong><br>${request}${chosen.request?` preceded the transition by ${R.fmt((chosen.t-chosen.request.t)/1000,1)} s`:""}. Calibration changed 0x${chosen.oldMask.toString(16)} → 0x${chosen.newMask.toString(16)} (${offline} offline RMAs, ${1024-64*offline} active elements). Pattern convergence: ${chosen.patternDelay==null?"not yet observed":R.fmt(chosen.patternDelay,0)+" ms"}. Search yield ${R.fmt(s.pre.yield,3)} → ${R.fmt(s.post.yield,3)}; median SNR ${R.fmt(s.pre.snr,1)} → ${R.fmt(s.post.snr,1)} dB; controlled yield change ${R.fmt(s.controlled,3)}. ${chosen.baselineComplete?"Full baseline observed.":"Baseline incomplete: this view joined less than 15 seconds before the transition."}`;}}
+  const cutoff=now-30000; R.sparkline($("patternPlot"),FACES.map((_,face)=>({color:COLORS[face],values:state.patterns.filter(x=>x.face===face&&x.t>=cutoff).map(x=>({x:x.t,y:Number(x.data.gain_loss_db)}))})),{empty:"Waiting for BeamPatternStatus"});
+  const bins=Array.from({length:30},(_,i)=>{const a=cutoff+i*1000,b=a+1000;return {x:b,y:state.commands.filter(x=>x.t>=a&&x.t<b).length?state.detections.filter(x=>x.t>=a&&x.t<b).length/state.commands.filter(x=>x.t>=a&&x.t<b).length:NaN};}); R.sparkline($("yieldPlot"),[{color:"#ffbe5c",values:bins}],{min:0,empty:"Waiting for commands and detections"});
+}
+$("incidentRows").onclick=e=>{const tr=e.target.closest("tr[data-id]");if(tr){state.selected=tr.dataset.id;render();}};
+function makeClient(){return new R.WisClient({application:$("application").value,participant:"RadarParticipant",subscriber:"RadarSubscriber",readers,onSample:add,onStatus:status});}
+$("connect").onclick=async()=>{stopDemo(); state.client=makeClient(); state.started=Date.now();try{await state.client.connect($("endpoint").value);}catch(e){status("error",e.message);}};
+function stopDemo(){if(state.demo){clearInterval(state.demo);state.demo=null;}}
+$("demo").onclick=()=>{stopDemo();state.client?.disconnect();state.started=Date.now();status("live","Synthetic review stream");let tick=0,beam=1000,det=500;state.demo=setInterval(()=>{const t=Date.now();tick++;for(let f=0;f<4;f++){const degraded=f===0&&tick>=12&&tick<80,mask=degraded?0x000f:0;add("beam",{scheduler_id:f,beam_id:beam++,timestamp:{epoch_millis:t},mode:"BEAM_MODE_SEARCH"});add("pattern",{array_id:f,beam_id:beam,timestamp:{epoch_millis:t},rma_offline_mask:mask,gain_loss_db:degraded?1.7:.05,beamwidth_3db_deg:degraded?3.6:2.7,boresight_error_deg:degraded?.42:.02,peak_sidelobe_level_db:degraded?-10.8:-14.5});if(Math.random()<(degraded?.16:.42))add("detection",{sensor_id:f,detection_id:det++,timestamp:{epoch_millis:t},snr_db:(degraded?7:13)+Math.random()*5,amplitude:.3+Math.random()});}if(tick===12){add("command",{command_id:3,timestamp:{epoch_millis:t-160},command_type:"CMD_RMA_OFFLINE",target_face_mask:1});add("calibration",{array_id:0,timestamp:{epoch_millis:t},overall_status:"ARRAY_DEGRADED",failed_element_count:256,rma_offline_mask:15});}if(tick===80){add("command",{command_id:4,timestamp:{epoch_millis:t-120},command_type:"CMD_RMA_ONLINE",target_face_mask:1});add("calibration",{array_id:0,timestamp:{epoch_millis:t},overall_status:"ARRAY_NOMINAL",failed_element_count:0,rma_offline_mask:0});}for(let f=1;f<4;f++)if(tick===1)add("calibration",{array_id:f,timestamp:{epoch_millis:t},overall_status:"ARRAY_NOMINAL",failed_element_count:0,rma_offline_mask:0});if(tick===1)add("calibration",{array_id:0,timestamp:{epoch_millis:t},overall_status:"ARRAY_NOMINAL",failed_element_count:0,rma_offline_mask:0});},250);};
+$("csv").onclick=()=>R.downloadCsv("rma-outage-incidents.csv",state.incidents.map(i=>{const s=incidentStats(i);return {time:new Date(i.t).toISOString(),face:FACES[i.face],old_mask:i.oldMask,new_mask:i.newMask,status:s.status,pattern_delay_ms:i.patternDelay,pre_yield:s.pre.yield,post_yield:s.post.yield,controlled_change:s.controlled,pre_snr:s.pre.snr,post_snr:s.post.snr};}));
+state.timer=setInterval(render,500);render();if(new URLSearchParams(location.search).get("demo")==="1")$("demo").click();
+</script></body></html>

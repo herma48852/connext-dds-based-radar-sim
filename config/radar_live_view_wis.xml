@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Web Integration Service configuration for:
-    docs/detection_to_beam_live_view.html
+  Web Integration Service configuration for the Section 4 live views in
+  docs/multi_topic_live_views/. RadarLiveViews contains one application per
+  page; a browser enables only the readers in the application it selects.
 
   The domain is 92 to match scripts/windows/start-all.cmd and
   scripts/start-all.sh defaults.
@@ -28,12 +29,67 @@
           <member name="altitude_m" type="float64"/>
         </struct>
 
+        <struct name="Cartesian3D" extensibility="appendable">
+          <member name="x_east_m" type="float64"/>
+          <member name="y_north_m" type="float64"/>
+          <member name="z_up_m" type="float64"/>
+        </struct>
+
         <enum name="BeamMode">
           <enumerator name="BEAM_MODE_SEARCH"/>
           <enumerator name="BEAM_MODE_TRACK"/>
           <enumerator name="BEAM_MODE_CONFIRM"/>
           <enumerator name="BEAM_MODE_CALIBRATE"/>
         </enum>
+
+        <enum name="TrackClassification">
+          <enumerator name="CLASS_UNKNOWN"/>
+          <enumerator name="CLASS_AIR_BREATHING"/>
+          <enumerator name="CLASS_BALLISTIC"/>
+          <enumerator name="CLASS_SURFACE"/>
+          <enumerator name="CLASS_CLUTTER"/>
+        </enum>
+
+        <enum name="ArrayHealth">
+          <enumerator name="ARRAY_NOMINAL"/>
+          <enumerator name="ARRAY_DEGRADED"/>
+          <enumerator name="ARRAY_CRITICAL"/>
+          <enumerator name="ARRAY_OFFLINE"/>
+        </enum>
+
+        <enum name="CommandType">
+          <enumerator name="CMD_SET_MODE"/>
+          <enumerator name="CMD_SET_SECTOR"/>
+          <enumerator name="CMD_SELF_TEST"/>
+          <enumerator name="CMD_RESET"/>
+          <enumerator name="CMD_DEGRADE_ARRAY"/>
+          <enumerator name="CMD_RESTORE_ARRAY"/>
+          <enumerator name="CMD_RMA_OFFLINE"/>
+          <enumerator name="CMD_RMA_ONLINE"/>
+        </enum>
+
+        <enum name="TargetType">
+          <enumerator name="TARGET_FIGHTER"/>
+          <enumerator name="TARGET_BOMBER"/>
+          <enumerator name="TARGET_MISSILE"/>
+          <enumerator name="TARGET_SHIP"/>
+          <enumerator name="TARGET_DRONE"/>
+          <enumerator name="TARGET_DECOY"/>
+        </enum>
+
+        <struct name="ShipPosition" extensibility="appendable">
+          <member name="source_id" type="int32" key="true"/>
+          <member name="timestamp" type="nonBasic"
+                  nonBasicTypeName="radar::types::TimeStamp"/>
+          <member name="latitude_deg" type="float64"/>
+          <member name="longitude_deg" type="float64"/>
+          <member name="altitude_m" type="float64"/>
+          <member name="heading_deg" type="float64"/>
+          <member name="course_deg" type="float64"/>
+          <member name="speed_mps" type="float64"/>
+          <member name="pitch_deg" type="float64"/>
+          <member name="roll_deg" type="float64"/>
+        </struct>
 
         <struct name="BeamCommand" extensibility="appendable">
           <member name="scheduler_id" type="int32" key="true"/>
@@ -103,6 +159,65 @@
           <member name="amplitude" type="float64"/>
           <member name="snr_db" type="float64"/>
         </struct>
+
+        <struct name="TargetTrack" extensibility="appendable">
+          <member name="track_id" type="int32" key="true"/>
+          <member name="timestamp" type="nonBasic"
+                  nonBasicTypeName="radar::types::TimeStamp"/>
+          <member name="position" type="nonBasic"
+                  nonBasicTypeName="radar::types::Cartesian3D"/>
+          <member name="velocity" type="nonBasic"
+                  nonBasicTypeName="radar::types::Cartesian3D"/>
+          <member name="acceleration" type="nonBasic"
+                  nonBasicTypeName="radar::types::Cartesian3D"/>
+          <member name="covariance" type="float64" sequenceMaxLength="9"/>
+          <member name="classification" type="nonBasic"
+                  nonBasicTypeName="radar::types::TrackClassification"/>
+          <member name="quality" type="int32"/>
+        </struct>
+
+        <!-- The outage mask follows element_drift_db in the appendable type,
+             so this view must accept the complete 1024-value state sample. -->
+        <struct name="CalibrationStatus" extensibility="appendable">
+          <member name="array_id" type="int32" key="true"/>
+          <member name="timestamp" type="nonBasic"
+                  nonBasicTypeName="radar::types::TimeStamp"/>
+          <member name="temperature_c" type="float64"/>
+          <member name="element_drift_db" type="float32"
+                  sequenceMaxLength="1024"/>
+          <member name="overall_status" type="nonBasic"
+                  nonBasicTypeName="radar::types::ArrayHealth"/>
+          <member name="failed_element_count" type="int32"/>
+          <member name="rma_offline_mask" type="int32"/>
+        </struct>
+
+        <struct name="SystemCommand" extensibility="appendable">
+          <member name="command_id" type="int32" key="true"/>
+          <member name="timestamp" type="nonBasic"
+                  nonBasicTypeName="radar::types::TimeStamp"/>
+          <member name="command_type" type="nonBasic"
+                  nonBasicTypeName="radar::types::CommandType"/>
+          <member name="sector_center_deg" type="float64"/>
+          <member name="sector_width_deg" type="float64"/>
+          <member name="priority" type="int32"/>
+          <member name="parameters" type="string" stringMaxLength="128"/>
+          <member name="target_face_mask" type="int32"/>
+        </struct>
+
+        <struct name="TargetTruth" extensibility="appendable">
+          <member name="target_id" type="int32" key="true"/>
+          <member name="timestamp" type="nonBasic"
+                  nonBasicTypeName="radar::types::TimeStamp"/>
+          <member name="position" type="nonBasic"
+                  nonBasicTypeName="radar::types::Cartesian3D"/>
+          <member name="velocity" type="nonBasic"
+                  nonBasicTypeName="radar::types::Cartesian3D"/>
+          <member name="acceleration" type="nonBasic"
+                  nonBasicTypeName="radar::types::Cartesian3D"/>
+          <member name="rcs_dbsm" type="float64"/>
+          <member name="target_type" type="nonBasic"
+                  nonBasicTypeName="radar::types::TargetType"/>
+        </struct>
       </module>
     </module>
   </types>
@@ -136,6 +251,22 @@
       </datareader_qos>
     </qos_profile>
 
+    <qos_profile name="BestEffortRawVolatile">
+      <datareader_qos>
+        <reliability><kind>BEST_EFFORT_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>VOLATILE_DURABILITY_QOS</kind></durability>
+        <latency_budget>
+          <duration><sec>0</sec><nanosec>500000</nanosec></duration>
+        </latency_budget>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>64</depth></history>
+        <type_consistency><kind>ALLOW_TYPE_COERCION</kind></type_consistency>
+        <representation><value>
+          <element>XCDR_DATA_REPRESENTATION</element>
+          <element>XCDR2_DATA_REPRESENTATION</element>
+        </value></representation>
+      </datareader_qos>
+    </qos_profile>
+
     <qos_profile name="ReliableVolatile">
       <datareader_qos>
         <reliability>
@@ -164,6 +295,22 @@
       </datareader_qos>
     </qos_profile>
 
+    <qos_profile name="ReliableVolatile10ms">
+      <datareader_qos>
+        <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>VOLATILE_DURABILITY_QOS</kind></durability>
+        <latency_budget>
+          <duration><sec>0</sec><nanosec>10000000</nanosec></duration>
+        </latency_budget>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>64</depth></history>
+        <type_consistency><kind>ALLOW_TYPE_COERCION</kind></type_consistency>
+        <representation><value>
+          <element>XCDR_DATA_REPRESENTATION</element>
+          <element>XCDR2_DATA_REPRESENTATION</element>
+        </value></representation>
+      </datareader_qos>
+    </qos_profile>
+
     <qos_profile name="ReliableTransientLocal">
       <datareader_qos>
         <reliability>
@@ -187,6 +334,22 @@
         </representation>
       </datareader_qos>
     </qos_profile>
+
+    <qos_profile name="ReliableTransientLocal10ms">
+      <datareader_qos>
+        <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>TRANSIENT_LOCAL_DURABILITY_QOS</kind></durability>
+        <latency_budget>
+          <duration><sec>0</sec><nanosec>10000000</nanosec></duration>
+        </latency_budget>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>32</depth></history>
+        <type_consistency><kind>ALLOW_TYPE_COERCION</kind></type_consistency>
+        <representation><value>
+          <element>XCDR_DATA_REPRESENTATION</element>
+          <element>XCDR2_DATA_REPRESENTATION</element>
+        </value></representation>
+      </datareader_qos>
+    </qos_profile>
   </qos_library>
 
   <domain_library name="RadarLiveViewDomainLibrary">
@@ -199,6 +362,16 @@
                      type_ref="radar::types::BeamCommand"/>
       <register_type name="radar::types::BeamPatternStatus"
                      type_ref="radar::types::BeamPatternStatus"/>
+      <register_type name="radar::types::ShipPosition"
+                     type_ref="radar::types::ShipPosition"/>
+      <register_type name="radar::types::TargetTrack"
+                     type_ref="radar::types::TargetTrack"/>
+      <register_type name="radar::types::CalibrationStatus"
+                     type_ref="radar::types::CalibrationStatus"/>
+      <register_type name="radar::types::SystemCommand"
+                     type_ref="radar::types::SystemCommand"/>
+      <register_type name="radar::types::TargetTruth"
+                     type_ref="radar::types::TargetTruth"/>
 
       <topic name="Radar/DetectionEvent"
              register_type_ref="radar::types::DetectionEvent"/>
@@ -208,6 +381,16 @@
              register_type_ref="radar::types::BeamCommand"/>
       <topic name="Radar/BeamPatternStatus"
              register_type_ref="radar::types::BeamPatternStatus"/>
+      <topic name="Ship/ShipPosition"
+             register_type_ref="radar::types::ShipPosition"/>
+      <topic name="Radar/TargetTrack"
+             register_type_ref="radar::types::TargetTrack"/>
+      <topic name="Radar/CalibrationStatus"
+             register_type_ref="radar::types::CalibrationStatus"/>
+      <topic name="Radar/SystemCommand"
+             register_type_ref="radar::types::SystemCommand"/>
+      <topic name="TargetGen/TargetTruth"
+             register_type_ref="radar::types::TargetTruth"/>
     </domain>
   </domain_library>
 
@@ -258,6 +441,150 @@
               <element>32@builtin.udpv4://127.0.0.1</element>
             </initial_peers>
           </discovery>
+        </participant_qos>
+      </domain_participant>
+    </application>
+  </web_integration_service>
+
+  <!--
+    Aggregate configuration: one WIS process can serve every Section 4 page.
+    Each page selects its own application and enables only that application's
+    participant, subscriber, and readers through the REST API.
+  -->
+  <web_integration_service name="RadarLiveViews">
+    <application name="RadarLiveViewApp">
+      <domain_participant name="RadarParticipant"
+          domain_ref="RadarLiveViewDomainLibrary::RadarDomain92">
+        <subscriber name="RadarSubscriber">
+          <data_reader name="DetectionEventReader" topic_ref="Radar/DetectionEvent">
+            <datareader_qos base_name="RadarLiveViewQosLibrary::BestEffortVolatile"/>
+          </data_reader>
+          <data_reader name="RawReturnReader" topic_ref="Radar/RawReturn">
+            <datareader_qos base_name="RadarLiveViewQosLibrary::BestEffortRawVolatile"/>
+          </data_reader>
+          <data_reader name="BeamCommandReader" topic_ref="Radar/BeamCommand">
+            <datareader_qos base_name="RadarLiveViewQosLibrary::ReliableVolatile"/>
+          </data_reader>
+          <data_reader name="BeamPatternStatusReader" topic_ref="Radar/BeamPatternStatus">
+            <datareader_qos base_name="RadarLiveViewQosLibrary::ReliableTransientLocal"/>
+          </data_reader>
+        </subscriber>
+        <participant_qos>
+          <participant_name><name>Radar.WIS-DetectionBeam</name></participant_name>
+          <transport_builtin><mask>UDPv4</mask></transport_builtin>
+          <discovery><initial_peers><element>32@builtin.udpv4://127.0.0.1</element></initial_peers></discovery>
+        </participant_qos>
+      </domain_participant>
+    </application>
+
+    <application name="RmaOutageApp">
+      <domain_participant name="RadarParticipant"
+          domain_ref="RadarLiveViewDomainLibrary::RadarDomain92">
+        <subscriber name="RadarSubscriber">
+          <data_reader name="SystemCommandReader" topic_ref="Radar/SystemCommand">
+            <datareader_qos base_name="RadarLiveViewQosLibrary::ReliableVolatile10ms"/>
+          </data_reader>
+          <data_reader name="CalibrationStatusReader" topic_ref="Radar/CalibrationStatus">
+            <datareader_qos base_name="RadarLiveViewQosLibrary::ReliableTransientLocal"/>
+          </data_reader>
+          <data_reader name="BeamPatternStatusReader" topic_ref="Radar/BeamPatternStatus">
+            <datareader_qos base_name="RadarLiveViewQosLibrary::ReliableTransientLocal"/>
+          </data_reader>
+          <data_reader name="BeamCommandReader" topic_ref="Radar/BeamCommand">
+            <datareader_qos base_name="RadarLiveViewQosLibrary::ReliableVolatile"/>
+          </data_reader>
+          <data_reader name="DetectionEventReader" topic_ref="Radar/DetectionEvent">
+            <datareader_qos base_name="RadarLiveViewQosLibrary::BestEffortVolatile"/>
+          </data_reader>
+        </subscriber>
+        <participant_qos>
+          <participant_name><name>Radar.WIS-RmaImpact</name></participant_name>
+          <transport_builtin><mask>UDPv4</mask></transport_builtin>
+          <discovery><initial_peers><element>32@builtin.udpv4://127.0.0.1</element></initial_peers></discovery>
+        </participant_qos>
+      </domain_participant>
+    </application>
+
+    <application name="TrackLineageApp">
+      <domain_participant name="RadarParticipant"
+          domain_ref="RadarLiveViewDomainLibrary::RadarDomain92">
+        <subscriber name="RadarSubscriber">
+          <data_reader name="DetectionEventReader" topic_ref="Radar/DetectionEvent">
+            <datareader_qos base_name="RadarLiveViewQosLibrary::BestEffortVolatile"/>
+          </data_reader>
+          <data_reader name="TargetTrackReader" topic_ref="Radar/TargetTrack">
+            <datareader_qos base_name="RadarLiveViewQosLibrary::ReliableTransientLocal"/>
+          </data_reader>
+          <data_reader name="ShipPositionReader" topic_ref="Ship/ShipPosition">
+            <datareader_qos base_name="RadarLiveViewQosLibrary::ReliableTransientLocal10ms"/>
+          </data_reader>
+        </subscriber>
+        <participant_qos>
+          <participant_name><name>Radar.WIS-TrackLineage</name></participant_name>
+          <transport_builtin><mask>UDPv4</mask></transport_builtin>
+          <discovery><initial_peers><element>32@builtin.udpv4://127.0.0.1</element></initial_peers></discovery>
+        </participant_qos>
+      </domain_participant>
+    </application>
+
+    <application name="MotionGeometryApp">
+      <domain_participant name="RadarParticipant"
+          domain_ref="RadarLiveViewDomainLibrary::RadarDomain92">
+        <subscriber name="RadarSubscriber">
+          <data_reader name="ShipPositionReader" topic_ref="Ship/ShipPosition">
+            <datareader_qos base_name="RadarLiveViewQosLibrary::ReliableTransientLocal10ms"/>
+          </data_reader>
+          <data_reader name="DetectionEventReader" topic_ref="Radar/DetectionEvent">
+            <datareader_qos base_name="RadarLiveViewQosLibrary::BestEffortVolatile"/>
+          </data_reader>
+          <data_reader name="TargetTrackReader" topic_ref="Radar/TargetTrack">
+            <datareader_qos base_name="RadarLiveViewQosLibrary::ReliableTransientLocal"/>
+          </data_reader>
+          <data_reader name="TargetTruthReader" topic_ref="TargetGen/TargetTruth">
+            <datareader_qos base_name="RadarLiveViewQosLibrary::BestEffortVolatile"/>
+          </data_reader>
+        </subscriber>
+        <participant_qos>
+          <participant_name><name>Radar.WIS-MotionGeometry</name></participant_name>
+          <transport_builtin><mask>UDPv4</mask></transport_builtin>
+          <discovery><initial_peers><element>32@builtin.udpv4://127.0.0.1</element></initial_peers></discovery>
+        </participant_qos>
+      </domain_participant>
+    </application>
+
+    <application name="TrackLossApp">
+      <domain_participant name="RadarParticipant"
+          domain_ref="RadarLiveViewDomainLibrary::RadarDomain92">
+        <subscriber name="RadarSubscriber">
+          <data_reader name="TargetTrackReader" topic_ref="Radar/TargetTrack">
+            <datareader_qos base_name="RadarLiveViewQosLibrary::ReliableTransientLocal"/>
+          </data_reader>
+          <data_reader name="DetectionEventReader" topic_ref="Radar/DetectionEvent">
+            <datareader_qos base_name="RadarLiveViewQosLibrary::BestEffortVolatile"/>
+          </data_reader>
+          <data_reader name="BeamCommandReader" topic_ref="Radar/BeamCommand">
+            <datareader_qos base_name="RadarLiveViewQosLibrary::ReliableVolatile"/>
+          </data_reader>
+          <data_reader name="RawReturnReader" topic_ref="Radar/RawReturn">
+            <datareader_qos base_name="RadarLiveViewQosLibrary::BestEffortRawVolatile"/>
+          </data_reader>
+          <data_reader name="BeamPatternStatusReader" topic_ref="Radar/BeamPatternStatus">
+            <datareader_qos base_name="RadarLiveViewQosLibrary::ReliableTransientLocal"/>
+          </data_reader>
+          <data_reader name="CalibrationStatusReader" topic_ref="Radar/CalibrationStatus">
+            <datareader_qos base_name="RadarLiveViewQosLibrary::ReliableTransientLocal"/>
+          </data_reader>
+          <data_reader name="SystemCommandReader" topic_ref="Radar/SystemCommand">
+            <datareader_qos base_name="RadarLiveViewQosLibrary::ReliableVolatile10ms"/>
+          </data_reader>
+          <data_reader name="ShipPositionReader" topic_ref="Ship/ShipPosition">
+            <datareader_qos base_name="RadarLiveViewQosLibrary::ReliableTransientLocal10ms"/>
+          </data_reader>
+        </subscriber>
+        <participant_qos>
+          <participant_name><name>Radar.WIS-TrackLoss</name></participant_name>
+          <transport_builtin><mask>UDPv4</mask></transport_builtin>
+          <discovery><initial_peers><element>32@builtin.udpv4://127.0.0.1</element></initial_peers></discovery>
         </participant_qos>
       </domain_participant>
     </application>

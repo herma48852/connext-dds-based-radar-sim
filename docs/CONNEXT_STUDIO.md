@@ -168,6 +168,10 @@ subscribe to several topics and maintain state across their live samples. They
 are forward-looking design prompts, not descriptions of a currently available
 Studio feature.
 
+Runnable prototypes for Sections 4.2 through 4.6 and their shared browser
+assets are grouped in
+[`multi_topic_live_views/`](multi_topic_live_views/README.md).
+
 These prompts do not ask an AI to answer a question once. Each prompt asks it
 to construct a continuously updating view: subscribe before the event, perform
 deterministic stream processing, retain the resulting rows, render tables and
@@ -397,12 +401,13 @@ attribution into an exact join.
 
 #### Test the HTML prototype with Web Integration Service
 
-[`detection_to_beam_live_view.html`](detection_to_beam_live_view.html) is a
+[`detection_to_beam_live_view.html`](multi_topic_live_views/detection_to_beam_live_view.html) is a
 standalone implementation of this view. The supplied
-[`radar_live_view_wis.xml`](../config/radar_live_view_wis.xml) creates the four
-DDS DataReaders on domain 92, uses the simulator's matching QoS, and projects
-`RawReturn` and `BeamPatternStatus` so their large arrays are not serialized to
-JSON.
+[`radar_live_view_wis.xml`](../config/radar_live_view_wis.xml) contains an
+aggregate `RadarLiveViews` service configuration with one application per
+Section 4 solution. Each page enables only its own application and readers on
+domain 92. `RawReturn` and `BeamPatternStatus` are projected so their large
+arrays are not serialized to JSON.
 
 From the repository root, start RTI Web Integration Service from Windows
 Command Prompt (`cmd.exe`):
@@ -413,7 +418,7 @@ if not defined RTI_HOME set "RTI_HOME=%NDDSHOME%"
 if not defined RTI_HOME set "RTI_HOME=C:\Program Files\rti_connext_dds-7.7.0"
 "%RTI_HOME%\bin\rtiwebintegrationservice.bat" ^
   -cfgFile config\radar_live_view_wis.xml ^
-  -cfgName RadarLiveView ^
+  -cfgName RadarLiveViews ^
   -enableWebSockets ^
   -documentRoot docs ^
   -listeningPorts 18080
@@ -426,7 +431,7 @@ syntax instead:
 $rtiHome = if ($env:CONNEXTDDS_DIR) { $env:CONNEXTDDS_DIR } elseif ($env:NDDSHOME) { $env:NDDSHOME } else { 'C:\Program Files\rti_connext_dds-7.7.0' }
 & "$rtiHome\bin\rtiwebintegrationservice.bat" `
   -cfgFile config\radar_live_view_wis.xml `
-  -cfgName RadarLiveView `
+  -cfgName RadarLiveViews `
   -enableWebSockets `
   -documentRoot docs `
   -listeningPorts 18080
@@ -437,20 +442,38 @@ Or on macOS:
 ```bash
 "$NDDSHOME/bin/rtiwebintegrationservice" \
   -cfgFile config/radar_live_view_wis.xml \
-  -cfgName RadarLiveView \
+  -cfgName RadarLiveViews \
   -enableWebSockets \
   -documentRoot docs \
   -listeningPorts 18080
 ```
 
 Run the interactive demo with its default domain 92 if it is not already
-running, then open
-`http://localhost:18080/detection_to_beam_live_view.html`. Select **Connect
-live**, leave the supplied entity names unchanged, and select **Connect and
-bind readers**. The page enables the configured participant, subscriber, and
-readers before binding them, so either launch order works. The table contains
-only detections received after the live subscription begins; use **Demo
-stream** when testing the UI without DDS traffic.
+running, then open one or more of these pages:
+
+- [`detection_to_beam_live_view.html`](multi_topic_live_views/detection_to_beam_live_view.html) — 4.2
+  detection-to-beam attribution;
+- [`rma_outage_impact_live_view.html`](multi_topic_live_views/rma_outage_impact_live_view.html) — 4.3
+  pre/post RMA outage incidents;
+- [`likely_detection_track_lineage_live_view.html`](multi_topic_live_views/likely_detection_track_lineage_live_view.html)
+  — 4.4 reconstructed likely lineage;
+- [`own_ship_motion_geometry_live_view.html`](multi_topic_live_views/own_ship_motion_geometry_live_view.html)
+  — 4.5 own-ship/contact motion decomposition;
+- [`track_coast_loss_live_view.html`](multi_topic_live_views/track_coast_loss_live_view.html) — 4.6
+  coast warning and retained loss diagnosis.
+
+For example, use
+`http://localhost:18080/multi_topic_live_views/rma_outage_impact_live_view.html`.
+Select **Connect live** and leave the supplied entity names unchanged. The
+page enables the configured participant, subscriber, and readers before binding them, so
+either launch order works. Volatile evidence begins when the page subscribes;
+use **Demo stream** to review any UI without DDS traffic.
+
+One XML file may contain multiple named `web_integration_service` sections,
+but `-cfgName` selects one section per WIS process. To make all five pages
+available from one process, `RadarLiveViews` instead contains five separate
+`application` sections. The older `RadarLiveView` service configuration is
+retained as a 4.2-only compatibility option.
 
 The XML domain is intentionally fixed at 92 to match `start-all`. If the
 simulation is launched with a different domain, change `domain_id` in the XML
