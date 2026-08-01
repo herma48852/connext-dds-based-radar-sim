@@ -43,9 +43,17 @@ private:
 void TrackManager::start() {
     auto det_topic   = radds::make_topic<types::DetectionEvent>(participant_, dds_names::TOPIC_DETECTION_EVENT);
     auto track_topic = radds::make_topic<types::TargetTrack>(participant_, dds_names::TOPIC_TARGET_TRACK);
+    auto association_topic =
+        radds::make_topic<types::TrackAssociationEvent>(
+            participant_, dds_names::TOPIC_TRACK_ASSOCIATION);
 
     reader_ = radds::make_reader<types::DetectionEvent>(subscriber_, det_topic, dds_names::PROFILE_DETECTION_EVENT);
     writer_ = radds::make_writer<types::TargetTrack>(publisher_, track_topic, dds_names::PROFILE_TARGET_TRACK);
+    association_writer_ =
+        radds::make_writer<types::TrackAssociationEvent>(
+            publisher_, association_topic,
+            dds_names::PROFILE_TRACK_ASSOCIATION);
+    tracker_instance_id_ = SimClock::stamp().epoch_millis;
 
     reader_.set_listener(
         std::make_shared<ForwardingListener<types::DetectionEvent, TrackManager,
@@ -63,6 +71,8 @@ void TrackManager::stop() {
     // Dispose every keyed instance while the writer is still alive. Remote
     // HMIs can then remove this publisher's rows immediately instead of
     // relying on a no-writers notification or the stale-reception backstop.
+    publish_lifecycle_drops(
+        types::TrackAssociationReason::TRACK_ASSOCIATION_REASON_SHUTDOWN);
     if (writer_ != dds::core::null && bus_.dispose_enabled.load()) {
         for (const auto& [id, handle] : handles_) {
             (void)id;
@@ -71,6 +81,117 @@ void TrackManager::stop() {
     }
     handles_.clear();
     core_.reset();
+}
+
+void TrackManager::publish_association_events() {
+    if (association_writer_ == dds::core::null)
+        return;
+
+    for (const auto& event : core_.association_events()) {
+        types::TrackAssociationEvent msg;
+        msg.tracker_id = 0;
+        msg.association_id = next_association_id_++;
+        msg.timestamp = SimClock::stamp();
+        msg.tracker_instance_id = tracker_instance_id_;
+        msg.track_id = static_cast<int32_t>(event.track_id);
+        msg.track_lifecycle_id = event.track_lifecycle_id;
+        msg.related_track_id =
+            static_cast<int32_t>(event.related_track_id);
+        msg.related_track_lifecycle_id =
+            event.related_track_lifecycle_id;
+
+        switch (event.decision) {
+        case CoreAssociationDecision::Initiate:
+            msg.decision = types::TrackAssociationDecision::TRACK_ASSOCIATION_INITIATE;
+            break;
+        case CoreAssociationDecision::Update:
+            msg.decision = types::TrackAssociationDecision::TRACK_ASSOCIATION_UPDATE;
+            break;
+        case CoreAssociationDecision::Reject:
+            msg.decision = types::TrackAssociationDecision::TRACK_ASSOCIATION_REJECT;
+            break;
+        case CoreAssociationDecision::Merge:
+            msg.decision = types::TrackAssociationDecision::TRACK_ASSOCIATION_MERGE;
+            break;
+        case CoreAssociationDecision::Drop:
+            msg.decision = types::TrackAssociationDecision::TRACK_ASSOCIATION_DROP;
+            break;
+        }
+        switch (event.reason) {
+        case CoreAssociationReason::None:
+            msg.reason = types::TrackAssociationReason::TRACK_ASSOCIATION_REASON_NONE;
+            break;
+        case CoreAssociationReason::Capacity:
+            msg.reason = types::TrackAssociationReason::TRACK_ASSOCIATION_REASON_CAPACITY;
+            break;
+        case CoreAssociationReason::Duplicate:
+            msg.reason = types::TrackAssociationReason::TRACK_ASSOCIATION_REASON_DUPLICATE;
+            break;
+        case CoreAssociationReason::CoastTimeout:
+            msg.reason = types::TrackAssociationReason::TRACK_ASSOCIATION_REASON_COAST_TIMEOUT;
+            break;
+        case CoreAssociationReason::Reset:
+            msg.reason = types::TrackAssociationReason::TRACK_ASSOCIATION_REASON_RESET;
+            break;
+        case CoreAssociationReason::Shutdown:
+            msg.reason = types::TrackAssociationReason::TRACK_ASSOCIATION_REASON_SHUTDOWN;
+            break;
+        }
+
+        msg.has_measurement = event.has_measurement;
+        const auto& contributors = event.measurement.contributors;
+        const std::size_t retained = std::min<std::size_t>(
+            contributors.size(), types::MAX_ASSOCIATION_DETECTIONS);
+        msg.contributing_detections.resize(retained);
+        for (std::size_t i = 0; i < retained; ++i) {
+            const auto& source = contributors[i];
+            auto& destination = msg.contributing_detections[i];
+            destination.sensor_id = source.sensor_id;
+            destination.detection_id = source.detection_id;
+            destination.beam_id = source.beam_id;
+            destination.timestamp.epoch_millis = source.epoch_millis;
+            destination.timestamp.sim_millis =
+                static_cast<int32_t>(source.sim_millis);
+        }
+        msg.contributor_count =
+            static_cast<int32_t>(contributors.size());
+        msg.contributors_truncated = contributors.size() > retained;
+        msg.fused_range_m = event.measurement.range_m;
+        msg.fused_azimuth_deg = event.measurement.azimuth_deg;
+        msg.fused_elevation_deg = event.measurement.elevation_deg;
+        msg.fused_snr_db = event.measurement.snr_db;
+        msg.innovation_score = event.innovation_score;
+        msg.passing_candidate_count = event.passing_candidate_count;
+        msg.track_confirmed = event.track_confirmed;
+        msg.last_accepted_sim_millis =
+            event.last_accepted_sim_millis;
+        association_writer_.write(msg);
+    }
+}
+
+void TrackManager::publish_lifecycle_drops(
+        types::TrackAssociationReason reason) {
+    if (association_writer_ == dds::core::null)
+        return;
+    for (const auto& track : core_.tracks()) {
+        types::TrackAssociationEvent msg;
+        msg.tracker_id = 0;
+        msg.association_id = next_association_id_++;
+        msg.timestamp = SimClock::stamp();
+        msg.tracker_instance_id = tracker_instance_id_;
+        msg.track_id = static_cast<int32_t>(track.id);
+        msg.track_lifecycle_id = track.lifecycle_id;
+        msg.related_track_id = -1;
+        msg.related_track_lifecycle_id = -1;
+        msg.decision = types::TrackAssociationDecision::TRACK_ASSOCIATION_DROP;
+        msg.reason = reason;
+        msg.has_measurement = false;
+        msg.contributor_count = 0;
+        msg.contributors_truncated = false;
+        msg.track_confirmed = track.confirmed;
+        msg.last_accepted_sim_millis = track.last_update_ms;
+        association_writer_.write(msg);
+    }
 }
 
 void TrackManager::on_detection(const types::DetectionEvent& det) {
@@ -99,6 +220,8 @@ void TrackManager::update_loop() {
             // Dispose every live instance so subscribers (HMI-UI, Studio)
             // watch the tracks vanish instead of timing out.
             RADAR_LOG << "[TrackManager] reset consumed — tracks cleared" << std::endl;
+            publish_lifecycle_drops(
+                types::TrackAssociationReason::TRACK_ASSOCIATION_REASON_RESET);
             if (bus_.dispose_enabled.load())
                 for (auto& [id, h] : handles_) writer_.dispose_instance(h);
             handles_.clear();
@@ -115,9 +238,13 @@ void TrackManager::update_loop() {
         std::vector<FaceDetection> face_detections;
         face_detections.reserve(batch.size());
         for (const auto& d : batch) {
-            face_detections.push_back(FaceDetection{
+            FaceDetection input{
                 d.sensor_id, d.timestamp.sim_millis,
-                d.range_m, d.azimuth_deg, d.elevation_deg, d.snr_db});
+                d.range_m, d.azimuth_deg, d.elevation_deg, d.snr_db};
+            input.contributors.push_back(DetectionIdentity{
+                d.sensor_id, d.detection_id, d.beam_id,
+                d.timestamp.epoch_millis, d.timestamp.sim_millis});
+            face_detections.push_back(std::move(input));
         }
         const auto fused_detections =
             fuse_resolution_cell_detections(face_detections);
@@ -128,7 +255,7 @@ void TrackManager::update_loop() {
             dets.push_back(
                 CoreDetection{
                     d.range_m, d.azimuth_deg, d.elevation_deg,
-                    d.snr_db});
+                    d.snr_db, d.contributors});
         }
 
         const auto ship = bus_.ship();
@@ -136,6 +263,7 @@ void TrackManager::update_loop() {
 
         // TrackerCore does association/filter/coast; we dispose the dropped.
         const auto dropped = core_.update(dets, ship.heading_deg, now_ms);
+        publish_association_events();
         for (const int64_t id : dropped) {
             auto h = handles_.find(id);
             if (h != handles_.end()) {

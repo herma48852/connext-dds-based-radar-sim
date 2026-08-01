@@ -7,10 +7,14 @@ These browser prototypes implement the live multi-topic view designs in
 |---|---|
 | 4.2 | [Detection to Beam](detection_to_beam_live_view.html) |
 | 4.3 | [RMA Outage Impact Monitor](rma_outage_impact_live_view.html) |
-| 4.4 | [Likely Detection-to-Track Lineage](likely_detection_track_lineage_live_view.html) |
+| 4.4 | [Track Association Diagnostics](likely_detection_track_lineage_live_view.html) |
 | 4.5 | [Own-Ship Motion Geometry Decomposition](own_ship_motion_geometry_live_view.html) |
 | 4.6 | [Track Coast and Loss Diagnosis](track_coast_loss_live_view.html) |
 
 The pages use the aggregate `RadarLiveViews` service configuration in
 [`config/radar_live_view_wis.xml`](../../config/radar_live_view_wis.xml). See
 Section 4 for Windows and macOS launch commands.
+
+View 4.4 selects `RecordingDiagnosticsApp`; when connected, WIS creates the
+`Recording.DiagnosticTools` participant that consumes the authoritative
+`Radar/TrackAssociationEvent` stream.

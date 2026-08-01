@@ -36,6 +36,10 @@ module types {
     const long MAX_TARGET_SCENARIO_TEMPLATES = 32;
     const long MAX_TARGET_SCENARIO_INSTANCES = 256;
     const long MAX_TARGET_CONTROL_TARGETS = 256;
+    // A resolution-cell fusion normally combines one or two plots. Keep the
+    // diagnostic lineage payload bounded even when a malformed publisher
+    // floods one cell; contributor_count/truncated make overflow explicit.
+    const long MAX_ASSOCIATION_DETECTIONS = 32;
 
     // Four fixed ship-relative array faces, numbered clockwise from the
     // forward-starboard quadrant. Face-local topics keep their existing
@@ -95,6 +99,26 @@ module types {
         CLASS_BALLISTIC,      // ballistic trajectory
         CLASS_SURFACE,        // surface contact
         CLASS_CLUTTER         // assessed false alarm
+    };
+
+    // Authoritative TrackManager decision telemetry. Association is emitted
+    // after the production gate/filter path, so diagnostic consumers do not
+    // need to duplicate tracker algorithms or private state.
+    enum TrackAssociationDecision {
+        TRACK_ASSOCIATION_INITIATE,
+        TRACK_ASSOCIATION_UPDATE,
+        TRACK_ASSOCIATION_REJECT,
+        TRACK_ASSOCIATION_MERGE,
+        TRACK_ASSOCIATION_DROP
+    };
+
+    enum TrackAssociationReason {
+        TRACK_ASSOCIATION_REASON_NONE,
+        TRACK_ASSOCIATION_REASON_CAPACITY,
+        TRACK_ASSOCIATION_REASON_DUPLICATE,
+        TRACK_ASSOCIATION_REASON_COAST_TIMEOUT,
+        TRACK_ASSOCIATION_REASON_RESET,
+        TRACK_ASSOCIATION_REASON_SHUTDOWN
     };
 
     enum ArrayHealth {
@@ -235,6 +259,7 @@ module types {
         double        elevation_deg;  // ship-relative elevation [deg]
         double        amplitude;      // linear amplitude of the return
         double        snr_db;         // signal-to-noise ratio [dB]
+        long          beam_id;        // producing RawReturn dwell id
     };
 
     // Correlated, filtered target track maintained by the TrackManager.
@@ -248,6 +273,49 @@ module types {
         sequence<double, COVARIANCE_SIZE> covariance; // 3x3 pos covariance
         TrackClassification     classification;
         long                    quality;       // track quality score 0..100
+    };
+
+    // Stable identity for every source plot absorbed by a fused tracker
+    // measurement. It remains meaningful after the keyed DetectionEvent
+    // instance has advanced to newer data.
+    @appendable
+    struct AssociationDetectionIdentity {
+        long      sensor_id;
+        long      detection_id;
+        long      beam_id;
+        TimeStamp timestamp;
+    };
+
+    // One event per authoritative tracker decision. tracker_id is a bounded
+    // DDS key (one TrackManager instance in this simulation); association_id
+    // is deliberately non-key. Numeric TargetTrack ids are recycled, so a
+    // lifecycle is uniquely identified by tracker_instance_id plus
+    // track_lifecycle_id.
+    @appendable
+    struct TrackAssociationEvent {
+        @key long               tracker_id;
+        long long               association_id;
+        TimeStamp               timestamp;
+        long long               tracker_instance_id;
+        long                    track_id; // -1 for a rejected measurement
+        long long               track_lifecycle_id;
+        long                    related_track_id; // merged/dropped fragment
+        long long               related_track_lifecycle_id;
+        TrackAssociationDecision decision;
+        TrackAssociationReason   reason;
+        boolean                 has_measurement;
+        sequence<AssociationDetectionIdentity,
+                 MAX_ASSOCIATION_DETECTIONS> contributing_detections;
+        long                    contributor_count;
+        boolean                 contributors_truncated;
+        double                  fused_range_m;
+        double                  fused_azimuth_deg;
+        double                  fused_elevation_deg;
+        double                  fused_snr_db;
+        double                  innovation_score;
+        long                    passing_candidate_count;
+        boolean                 track_confirmed;
+        long long               last_accepted_sim_millis;
     };
 
     // Phased-array health and calibration report (1 Hz per face + changes).

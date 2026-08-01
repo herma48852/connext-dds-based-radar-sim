@@ -16,6 +16,8 @@
 #include <deque>
 #include <vector>
 
+#include "DetectionIdentity.hpp"
+
 namespace radar::app {
 
 struct CoreDetection {
@@ -23,10 +25,12 @@ struct CoreDetection {
     double azimuth_deg;    // ship-relative, 0 = bow, CW positive
     double elevation_deg;  // dwell elevation bar
     double snr_db = 12.0;  // integrated reported S/N; see EffectiveRangeModel
+    std::vector<DetectionIdentity> contributors;
 };
 
 struct CoreTrack {
     int64_t id;
+    int64_t lifecycle_id;     // monotonic; never recycled by reset/id reuse
     double x, y, z;          // ENU [m]
     double vx, vy, vz;       // ENU [m/s]
     bool   v_init;           // velocity seeded by cross-sweep hits
@@ -47,6 +51,38 @@ struct CoreTrack {
     std::deque<std::array<double,3>> history; // display trail (max 10)
 };
 
+enum class CoreAssociationDecision {
+    Initiate,
+    Update,
+    Reject,
+    Merge,
+    Drop
+};
+
+enum class CoreAssociationReason {
+    None,
+    Capacity,
+    Duplicate,
+    CoastTimeout,
+    Reset,
+    Shutdown
+};
+
+struct CoreAssociationEvent {
+    CoreAssociationDecision decision{CoreAssociationDecision::Reject};
+    CoreAssociationReason reason{CoreAssociationReason::None};
+    bool has_measurement{false};
+    CoreDetection measurement{};
+    int64_t track_id{-1};
+    int64_t track_lifecycle_id{-1};
+    int64_t related_track_id{-1};
+    int64_t related_track_lifecycle_id{-1};
+    double innovation_score{0.0};
+    int passing_candidate_count{0};
+    bool track_confirmed{false};
+    int64_t last_accepted_sim_millis{0};
+};
+
 class TrackerCore {
 public:
     // One 10 Hz cycle. dets are ship-relative polar; heading converts to ENU.
@@ -57,6 +93,9 @@ public:
     void reset();
 
     const std::vector<CoreTrack>& tracks() const { return tracks_; }
+    const std::vector<CoreAssociationEvent>& association_events() const {
+        return association_events_;
+    }
 
     // Classification ordinals (mirror types::TrackClassification)
     static constexpr int CLASS_UNKNOWN        = 0;
@@ -96,7 +135,9 @@ public:
 
 private:
     std::vector<CoreTrack> tracks_;
+    std::vector<CoreAssociationEvent> association_events_;
     int64_t next_track_id_{1000};
+    int64_t next_lifecycle_id_{1};
 };
 
 } // namespace radar::app

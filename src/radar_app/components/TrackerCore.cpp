@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 #include "EffectiveRangeModel.hpp"
 
@@ -146,11 +147,16 @@ void absorb_duplicate(CoreTrack& survivor, const CoreTrack& fragment) {
 
 void TrackerCore::reset() {
     tracks_.clear();
+    association_events_.clear();
     next_track_id_ = 1000;
+    // next_lifecycle_id_ intentionally survives reset. Numeric track ids are
+    // recycled, while diagnostic lineage must remain unique for this tracker
+    // process lifetime.
 }
 
 std::vector<int64_t> TrackerCore::update(const std::vector<CoreDetection>& dets,
                                          double ship_heading_deg, int64_t now_ms) {
+    association_events_.clear();
     for (const auto& det : dets) {
         const auto uncertainty =
             effective_range::measurement_uncertainty(
@@ -165,6 +171,7 @@ std::vector<int64_t> TrackerCore::update(const std::vector<CoreDetection>& dets,
         // range, matching the physical uncertainty of a beam-centered plot.
         CoreTrack* best = nullptr;
         double best_score = 1e30;
+        int passing_candidate_count = 0;
         for (auto& tr : tracks_) {
             const double dtg = std::max(0.02, (now_ms - tr.last_update_ms) / 1000.0);
             double px = tr.x, py = tr.y, pz = tr.z;
@@ -211,6 +218,7 @@ std::vector<int64_t> TrackerCore::update(const std::vector<CoreDetection>& dets,
                 cross_range_error >= cross_range_gate) {
                 continue;
             }
+            ++passing_candidate_count;
             const double score =
                 (range_error / range_gate)
                     * (range_error / range_gate)
@@ -309,6 +317,17 @@ std::vector<int64_t> TrackerCore::update(const std::vector<CoreDetection>& dets,
                 uncertainty.elevation_stddev_deg;
             best->last_detection_snr_db = det.snr_db;
             best->last_elevation_bar_deg = det.elevation_deg;
+            CoreAssociationEvent event;
+            event.decision = CoreAssociationDecision::Update;
+            event.has_measurement = true;
+            event.measurement = det;
+            event.track_id = best->id;
+            event.track_lifecycle_id = best->lifecycle_id;
+            event.innovation_score = best_score;
+            event.passing_candidate_count = passing_candidate_count;
+            event.track_confirmed = best->confirmed;
+            event.last_accepted_sim_millis = best->last_update_ms;
+            association_events_.push_back(std::move(event));
         } else if (tracks_.size() < (size_t)kMaxTracks) {
             double x, y, z;
             polar_to_enu(
@@ -326,9 +345,18 @@ std::vector<int64_t> TrackerCore::update(const std::vector<CoreDetection>& dets,
                     [cand](const CoreTrack& tr) { return tr.id == cand; });
                 if (!in_use) { new_id = cand; next_track_id_ += k + 1; break; }
             }
-            if (new_id < 0) continue; // pool exhausted; skip this blip
+            if (new_id < 0) {
+                CoreAssociationEvent event;
+                event.decision = CoreAssociationDecision::Reject;
+                event.reason = CoreAssociationReason::Capacity;
+                event.has_measurement = true;
+                event.measurement = det;
+                association_events_.push_back(std::move(event));
+                continue;
+            }
             CoreTrack t{};
             t.id = new_id;
+            t.lifecycle_id = next_lifecycle_id_++;
             t.x = x; t.y = y; t.z = z;
             t.vx = t.vy = t.vz = 0.0;
             t.bx = x; t.by = y; t.birth_ms = now_ms;
@@ -345,6 +373,22 @@ std::vector<int64_t> TrackerCore::update(const std::vector<CoreDetection>& dets,
             t.last_elevation_bar_deg = det.elevation_deg;
             t.scan_hit_times.push_back(now_ms);
             tracks_.push_back(t);
+            CoreAssociationEvent event;
+            event.decision = CoreAssociationDecision::Initiate;
+            event.has_measurement = true;
+            event.measurement = det;
+            event.track_id = t.id;
+            event.track_lifecycle_id = t.lifecycle_id;
+            event.track_confirmed = t.confirmed;
+            event.last_accepted_sim_millis = t.last_update_ms;
+            association_events_.push_back(std::move(event));
+        } else {
+            CoreAssociationEvent event;
+            event.decision = CoreAssociationDecision::Reject;
+            event.reason = CoreAssociationReason::Capacity;
+            event.has_measurement = true;
+            event.measurement = det;
+            association_events_.push_back(std::move(event));
         }
     }
 
@@ -382,7 +426,19 @@ std::vector<int64_t> TrackerCore::update(const std::vector<CoreDetection>& dets,
             if (prefer_j)
                 std::swap(tracks_[i], tracks_[j]);
             dropped.push_back(tracks_[j].id);
+            CoreAssociationEvent event;
+            event.decision = CoreAssociationDecision::Merge;
+            event.reason = CoreAssociationReason::Duplicate;
+            event.track_id = tracks_[i].id;
+            event.track_lifecycle_id = tracks_[i].lifecycle_id;
+            event.related_track_id = tracks_[j].id;
+            event.related_track_lifecycle_id =
+                tracks_[j].lifecycle_id;
             absorb_duplicate(tracks_[i], tracks_[j]);
+            event.track_confirmed = tracks_[i].confirmed;
+            event.last_accepted_sim_millis =
+                tracks_[i].last_update_ms;
+            association_events_.push_back(std::move(event));
             tracks_.erase(tracks_.begin()
                           + static_cast<std::ptrdiff_t>(j));
         }
@@ -395,6 +451,14 @@ std::vector<int64_t> TrackerCore::update(const std::vector<CoreDetection>& dets,
             it->confirmed ? kCoastMs : kTentativeCoastMs;
         if (now_ms - it->last_update_ms > coast_ms) {
             dropped.push_back(it->id);
+            CoreAssociationEvent event;
+            event.decision = CoreAssociationDecision::Drop;
+            event.reason = CoreAssociationReason::CoastTimeout;
+            event.track_id = it->id;
+            event.track_lifecycle_id = it->lifecycle_id;
+            event.track_confirmed = it->confirmed;
+            event.last_accepted_sim_millis = it->last_update_ms;
+            association_events_.push_back(std::move(event));
             it = tracks_.erase(it);
             continue;
         }

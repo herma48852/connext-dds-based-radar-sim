@@ -10,6 +10,7 @@ namespace radar::dds_names {
 // ---- Topics ---------------------------------------------------------------
 inline constexpr const char* TOPIC_DETECTION_EVENT   = "Radar/DetectionEvent";
 inline constexpr const char* TOPIC_TARGET_TRACK      = "Radar/TargetTrack";
+inline constexpr const char* TOPIC_TRACK_ASSOCIATION = "Radar/TrackAssociationEvent";
 inline constexpr const char* TOPIC_BEAM_COMMAND      = "Radar/BeamCommand";
 inline constexpr const char* TOPIC_BEAM_PATTERN_STATUS= "Radar/BeamPatternStatus";
 inline constexpr const char* TOPIC_CALIBRATION_STATUS= "Radar/CalibrationStatus";
@@ -33,6 +34,7 @@ inline constexpr const char* PROFILE_TARGET_CONTROL_PARTICIPANT =
     "RadarQosLibrary::TargetControlParticipantProfile";
 inline constexpr const char* PROFILE_DETECTION_EVENT     = "RadarQosLibrary::DetectionEventProfile";
 inline constexpr const char* PROFILE_TARGET_TRACK        = "RadarQosLibrary::TargetTrackProfile";
+inline constexpr const char* PROFILE_TRACK_ASSOCIATION   = "RadarQosLibrary::TrackAssociationEventProfile";
 inline constexpr const char* PROFILE_BEAM_COMMAND        = "RadarQosLibrary::BeamCommandProfile";
 inline constexpr const char* PROFILE_BEAM_PATTERN_STATUS = "RadarQosLibrary::BeamPatternStatusProfile";
 inline constexpr const char* PROFILE_CALIBRATION_STATUS  = "RadarQosLibrary::CalibrationStatusProfile";

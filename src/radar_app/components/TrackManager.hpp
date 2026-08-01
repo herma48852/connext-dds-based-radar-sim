@@ -2,7 +2,8 @@
 // TrackManager: DDS adapter over TrackerCore.
 //
 //   subscribes: Radar/DetectionEvent  (listener: enqueue)
-//   publishes : Radar/TargetTrack     (10 Hz, alpha-beta filtered)
+//   publishes : Radar/TargetTrack            (10 Hz, alpha-beta filtered)
+//               Radar/TrackAssociationEvent (authoritative decisions)
 //
 // All correlation/filter logic lives in TrackerCore (DDS-free; see
 // tests/tracker_replay.cpp for the offline harness). This class converts
@@ -31,16 +32,22 @@ public:
 private:
     void on_detection(const types::DetectionEvent& det);
     void update_loop();
+    void publish_association_events();
+    void publish_lifecycle_drops(types::TrackAssociationReason reason);
 
     DataBus& bus_;
     dds::sub::DataReader<types::DetectionEvent> reader_{dds::core::null};
     dds::pub::DataWriter<types::TargetTrack>    writer_{dds::core::null};
+    dds::pub::DataWriter<types::TrackAssociationEvent>
+        association_writer_{dds::core::null};
 
     // Listener thread -> update thread handoff (mutex; batch copy is cheap)
     mutable std::mutex pending_mutex_;
     std::vector<types::DetectionEvent> pending_;
 
     TrackerCore core_;
+    int64_t tracker_instance_id_{0};
+    int64_t next_association_id_{1};
 
     // track_id -> DDS instance handle (for dispose on drop/reset)
     std::unordered_map<int64_t, dds::core::InstanceHandle> handles_;

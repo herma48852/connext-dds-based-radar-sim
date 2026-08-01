@@ -1115,8 +1115,8 @@
         <p class="eyebrow">Live detection lineage</p>
         <h1>Which beam is producing each detection?</h1>
         <p>
-          Every incoming detection is correlated at arrival time with the completed
-          raw-return dwell, its exact beam command, and the applicable pattern state.
+          Every incoming detection joins directly by face and producing beam_id to
+          its exact beam command; raw dwell and pattern samples add validation evidence.
           Select any retained row to inspect the evidence.
         </p>
       </div>
@@ -1199,6 +1199,7 @@
         <div class="field">
           <select id="confidenceFilter" aria-label="Filter by confidence">
             <option value="">All confidence</option>
+            <option value="EXACT">Exact</option>
             <option value="RECONSTRUCTED_HIGH">High</option>
             <option value="RECONSTRUCTED_MEDIUM">Medium</option>
             <option value="RECONSTRUCTED_LOW">Low</option>
@@ -1258,8 +1259,8 @@
 
       <div class="footnote">
         <span>
-          Attribution is reconstructed because <code>DetectionEvent</code> does not carry
-          <code>beam_id</code>.
+          Current publishers carry <code>DetectionEvent.beam_id</code> for an exact command
+          join. Older publishers fall back to the observed RawReturn transition.
         </span>
         <span id="bufferStatus">Raw metadata buffer: 0 transitions · Commands: 0 · Patterns: 0</span>
       </div>
@@ -1496,6 +1497,7 @@
     }
 
     function confidenceClass(confidence) {
+      if (confidence === "EXACT") return "confidence-high";
       if (confidence === "RECONSTRUCTED_HIGH") return "confidence-high";
       if (confidence === "RECONSTRUCTED_MEDIUM") return "confidence-medium";
       if (confidence === "RECONSTRUCTED_LOW") return "confidence-low";
@@ -1696,6 +1698,7 @@
           elevation: Number(data.elevation_deg),
           amplitude: Number(data.amplitude),
           snr: Number(data.snr_db),
+          beamId: Number(data.beam_id),
           shipPosition: data.ship_position || null
         },
         info,
@@ -1783,23 +1786,29 @@
       const detection = pending.data;
       const transitionResult = findTransition(detection);
       const candidate = transitionResult.best;
-      const producingBeamId = candidate?.transition?.producing?.beamId;
-      const exactCommand = candidate
+      const declaredBeamId = Number.isFinite(detection.beamId)
+        ? detection.beamId
+        : null;
+      const producingBeamId = declaredBeamId ??
+        candidate?.transition?.producing?.beamId;
+      const exactCommand = Number.isFinite(producingBeamId)
         ? state.commands.get(commandKey(detection.sensorId, producingBeamId))
         : null;
 
-      if (!force && (!candidate || !exactCommand)) return;
+      if (!force && (!exactCommand || (declaredBeamId == null && !candidate))) return;
 
       clearTimeout(pending.timer);
       state.pendingDetections.delete(key);
       state.seenDetections.add(key);
 
-      let transition = candidate?.transition || null;
+      let transition = candidate?.transition?.producing?.beamId === producingBeamId
+        ? candidate.transition
+        : null;
       let command = exactCommand;
       let fallback = false;
       let fallbackAmbiguous = false;
 
-      if (!transition && force) {
+      if (declaredBeamId == null && !transition && force) {
         const result = fallbackCommand(detection);
         command = result.command;
         fallbackAmbiguous = result.ambiguous;
@@ -1832,7 +1841,26 @@
       let status = "NO_DEFENSIBLE_DWELL";
       const evidence = [];
 
-      if (transition) {
+      if (declaredBeamId != null && command) {
+        confidence = "EXACT";
+        status = "DETECTION_BEAM_COMMAND_EXACT";
+        evidence.push({
+          ok: true,
+          text: `DetectionEvent declares producing beam_id ${declaredBeamId} on face ${detection.sensorId}.`
+        });
+        evidence.push({
+          ok: true,
+          text: `Exact BeamCommand join on scheduler_id ${detection.sensorId} and beam_id ${declaredBeamId}.`
+        });
+        evidence.push({
+          ok: pointingOk,
+          text: `Detection/command pointing deltas are ${number(deltaAzimuth, 3)}° azimuth and ${number(deltaElevation, 3)}° elevation.`
+        });
+        if (transition) evidence.push({
+          ok: true,
+          text: `RawReturn independently observed transition ${transition.producing.beamId} → ${transition.nextBeamId}.`
+        });
+      } else if (transition) {
         evidence.push({
           ok: true,
           text: `Observed RawReturn transition ${transition.producing.beamId} → ${transition.nextBeamId} on face ${detection.sensorId}.`
@@ -1995,7 +2023,7 @@
       const now = performance.now();
       state.detectionTimes = state.detectionTimes.filter(time => now - time <= 10000);
       state.rawTimes = state.rawTimes.filter(time => now - time <= 1000);
-      const high = state.rows.filter(row => row.confidence === "RECONSTRUCTED_HIGH").length;
+      const high = state.rows.filter(row => row.confidence === "EXACT" || row.confidence === "RECONSTRUCTED_HIGH").length;
       const unresolved = state.rows.filter(row => row.confidence === "UNRESOLVED").length;
       el("rowCount").textContent = state.rows.length.toLocaleString();
       el("rateValue").textContent = (state.detectionTimes.length / 10).toFixed(1);

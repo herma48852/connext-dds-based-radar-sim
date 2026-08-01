@@ -34,6 +34,20 @@ int main() {
               fused.front().azimuth_deg < 91.125,
           "SNR weighting estimates bearing between adjacent beam centers");
 
+    auto provenance_pair = seam_pair;
+    provenance_pair[0].contributors.push_back(
+        {faces::kForwardStarboard, 41, 9001, 100000, 1000});
+    provenance_pair[1].contributors.push_back(
+        {faces::kAftStarboard, 42, 9002, 100004, 1004});
+    const auto provenance_fused =
+        fuse_resolution_cell_detections(provenance_pair);
+    check(provenance_fused.size() == 1 &&
+              provenance_fused.front().contributors.size() == 2,
+          "fusion preserves every contributing detection identity");
+    check(provenance_fused.front().contributors[0].detection_id == 41 &&
+              provenance_fused.front().contributors[1].beam_id == 9002,
+          "fusion provenance retains source detection and beam ids");
+
     auto same_face = seam_pair;
     same_face[1].face_id = faces::kForwardStarboard;
     check(fuse_resolution_cell_detections(same_face).size() == 1,

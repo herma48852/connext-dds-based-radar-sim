@@ -50,6 +50,23 @@
           <enumerator name="CLASS_CLUTTER"/>
         </enum>
 
+        <enum name="TrackAssociationDecision">
+          <enumerator name="TRACK_ASSOCIATION_INITIATE"/>
+          <enumerator name="TRACK_ASSOCIATION_UPDATE"/>
+          <enumerator name="TRACK_ASSOCIATION_REJECT"/>
+          <enumerator name="TRACK_ASSOCIATION_MERGE"/>
+          <enumerator name="TRACK_ASSOCIATION_DROP"/>
+        </enum>
+
+        <enum name="TrackAssociationReason">
+          <enumerator name="TRACK_ASSOCIATION_REASON_NONE"/>
+          <enumerator name="TRACK_ASSOCIATION_REASON_CAPACITY"/>
+          <enumerator name="TRACK_ASSOCIATION_REASON_DUPLICATE"/>
+          <enumerator name="TRACK_ASSOCIATION_REASON_COAST_TIMEOUT"/>
+          <enumerator name="TRACK_ASSOCIATION_REASON_RESET"/>
+          <enumerator name="TRACK_ASSOCIATION_REASON_SHUTDOWN"/>
+        </enum>
+
         <enum name="ArrayHealth">
           <enumerator name="ARRAY_NOMINAL"/>
           <enumerator name="ARRAY_DEGRADED"/>
@@ -158,6 +175,7 @@
           <member name="elevation_deg" type="float64"/>
           <member name="amplitude" type="float64"/>
           <member name="snr_db" type="float64"/>
+          <member name="beam_id" type="int32"/>
         </struct>
 
         <struct name="TargetTrack" extensibility="appendable">
@@ -174,6 +192,44 @@
           <member name="classification" type="nonBasic"
                   nonBasicTypeName="radar::types::TrackClassification"/>
           <member name="quality" type="int32"/>
+        </struct>
+
+        <struct name="AssociationDetectionIdentity" extensibility="appendable">
+          <member name="sensor_id" type="int32"/>
+          <member name="detection_id" type="int32"/>
+          <member name="beam_id" type="int32"/>
+          <member name="timestamp" type="nonBasic"
+                  nonBasicTypeName="radar::types::TimeStamp"/>
+        </struct>
+
+        <struct name="TrackAssociationEvent" extensibility="appendable">
+          <member name="tracker_id" type="int32" key="true"/>
+          <member name="association_id" type="int64"/>
+          <member name="timestamp" type="nonBasic"
+                  nonBasicTypeName="radar::types::TimeStamp"/>
+          <member name="tracker_instance_id" type="int64"/>
+          <member name="track_id" type="int32"/>
+          <member name="track_lifecycle_id" type="int64"/>
+          <member name="related_track_id" type="int32"/>
+          <member name="related_track_lifecycle_id" type="int64"/>
+          <member name="decision" type="nonBasic"
+                  nonBasicTypeName="radar::types::TrackAssociationDecision"/>
+          <member name="reason" type="nonBasic"
+                  nonBasicTypeName="radar::types::TrackAssociationReason"/>
+          <member name="has_measurement" type="boolean"/>
+          <member name="contributing_detections" type="nonBasic"
+                  nonBasicTypeName="radar::types::AssociationDetectionIdentity"
+                  sequenceMaxLength="32"/>
+          <member name="contributor_count" type="int32"/>
+          <member name="contributors_truncated" type="boolean"/>
+          <member name="fused_range_m" type="float64"/>
+          <member name="fused_azimuth_deg" type="float64"/>
+          <member name="fused_elevation_deg" type="float64"/>
+          <member name="fused_snr_db" type="float64"/>
+          <member name="innovation_score" type="float64"/>
+          <member name="passing_candidate_count" type="int32"/>
+          <member name="track_confirmed" type="boolean"/>
+          <member name="last_accepted_sim_millis" type="int64"/>
         </struct>
 
         <!-- The outage mask follows element_drift_db in the appendable type,
@@ -311,6 +367,19 @@
       </datareader_qos>
     </qos_profile>
 
+    <qos_profile name="ReliableAssociationVolatile">
+      <datareader_qos>
+        <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>VOLATILE_DURABILITY_QOS</kind></durability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>256</depth></history>
+        <type_consistency><kind>ALLOW_TYPE_COERCION</kind></type_consistency>
+        <representation><value>
+          <element>XCDR_DATA_REPRESENTATION</element>
+          <element>XCDR2_DATA_REPRESENTATION</element>
+        </value></representation>
+      </datareader_qos>
+    </qos_profile>
+
     <qos_profile name="ReliableTransientLocal">
       <datareader_qos>
         <reliability>
@@ -366,6 +435,8 @@
                      type_ref="radar::types::ShipPosition"/>
       <register_type name="radar::types::TargetTrack"
                      type_ref="radar::types::TargetTrack"/>
+      <register_type name="radar::types::TrackAssociationEvent"
+                     type_ref="radar::types::TrackAssociationEvent"/>
       <register_type name="radar::types::CalibrationStatus"
                      type_ref="radar::types::CalibrationStatus"/>
       <register_type name="radar::types::SystemCommand"
@@ -385,6 +456,8 @@
              register_type_ref="radar::types::ShipPosition"/>
       <topic name="Radar/TargetTrack"
              register_type_ref="radar::types::TargetTrack"/>
+      <topic name="Radar/TrackAssociationEvent"
+             register_type_ref="radar::types::TrackAssociationEvent"/>
       <topic name="Radar/CalibrationStatus"
              register_type_ref="radar::types::CalibrationStatus"/>
       <topic name="Radar/SystemCommand"
@@ -505,7 +578,7 @@
       </domain_participant>
     </application>
 
-    <application name="TrackLineageApp">
+    <application name="RecordingDiagnosticsApp">
       <domain_participant name="RadarParticipant"
           domain_ref="RadarLiveViewDomainLibrary::RadarDomain92">
         <subscriber name="RadarSubscriber">
@@ -515,12 +588,12 @@
           <data_reader name="TargetTrackReader" topic_ref="Radar/TargetTrack">
             <datareader_qos base_name="RadarLiveViewQosLibrary::ReliableTransientLocal"/>
           </data_reader>
-          <data_reader name="ShipPositionReader" topic_ref="Ship/ShipPosition">
-            <datareader_qos base_name="RadarLiveViewQosLibrary::ReliableTransientLocal10ms"/>
+          <data_reader name="TrackAssociationEventReader" topic_ref="Radar/TrackAssociationEvent">
+            <datareader_qos base_name="RadarLiveViewQosLibrary::ReliableAssociationVolatile"/>
           </data_reader>
         </subscriber>
         <participant_qos>
-          <participant_name><name>Radar.WIS-TrackLineage</name></participant_name>
+          <participant_name><name>Recording.DiagnosticTools</name></participant_name>
           <transport_builtin><mask>UDPv4</mask></transport_builtin>
           <discovery><initial_peers><element>32@builtin.udpv4://127.0.0.1</element></initial_peers></discovery>
         </participant_qos>
@@ -558,6 +631,9 @@
         <subscriber name="RadarSubscriber">
           <data_reader name="TargetTrackReader" topic_ref="Radar/TargetTrack">
             <datareader_qos base_name="RadarLiveViewQosLibrary::ReliableTransientLocal"/>
+          </data_reader>
+          <data_reader name="TrackAssociationEventReader" topic_ref="Radar/TrackAssociationEvent">
+            <datareader_qos base_name="RadarLiveViewQosLibrary::ReliableAssociationVolatile"/>
           </data_reader>
           <data_reader name="DetectionEventReader" topic_ref="Radar/DetectionEvent">
             <datareader_qos base_name="RadarLiveViewQosLibrary::BestEffortVolatile"/>

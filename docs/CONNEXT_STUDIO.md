@@ -35,13 +35,19 @@ Every component is a named participant:
 | `Radar.BeamScheduler` | publishes four keyed `Radar/BeamCommand` instances (100 Hz/face; 400 Hz aggregate) |
 | `Radar.Beamformer` | publishes four keyed `Radar/BeamPatternStatus` instances (20 Hz/face; 80 Hz aggregate); subscribes `Radar/BeamCommand`, `Radar/CalibrationStatus` |
 | `Radar.DetectionProcessor` | pub `Radar/RawReturn` and `Radar/DetectionEvent`; sub `Radar/BeamCommand`, `Radar/BeamPatternStatus`, `Radar/RawReturn`, `TargetGen/TargetTruth` |
-| `Radar.TrackManager` | publishes `Radar/TargetTrack` (10 Hz) |
+| `Radar.TrackManager` | subscribes `Radar/DetectionEvent`; publishes `Radar/TargetTrack` (10 Hz) and authoritative `Radar/TrackAssociationEvent` decisions |
 | `Radar.CalibrationMonitor` | publishes four keyed `Radar/CalibrationStatus` instances (1 Hz/face heartbeat + state changes) |
 | `Radar.CommandHandler` | subscribes `Radar/SystemCommand` (WaitSet) |
 | `Radar.ShipINS` | publishes `Ship/ShipPosition` (key 0) |
 | `Radar.CommandConsole` | publishes `Radar/SystemCommand` (UI buttons) |
 | `Radar.HMI-UI` | subscribes `Radar/TargetTrack`, `Radar/DetectionEvent`, `Ship/ShipPosition` (key 0), `Radar/CalibrationStatus`, `Radar/BeamPatternStatus` — the display endpoint |
 | `TargetGen.Generator` | publishes `TargetGen/TargetTruth` + `Ship/ShipPosition` (key 1) |
+
+When the Section 4.4 WIS view is connected, Studio also shows
+`Recording.DiagnosticTools`. This participant is created by WIS and consumes
+`Radar/TrackAssociationEvent`, `Radar/TargetTrack`, and
+`Radar/DetectionEvent`; it is the demo's explicit recording/diagnostic
+endpoint rather than part of the radar processing flow.
 
 Note the **loopback edge** inside `Radar.DetectionProcessor`
 (RawReturn out and back in)—four face-keyed 1 kHz post-beamforming receiver
@@ -246,8 +252,10 @@ The live processing chain is:
 SystemCommand -> CalibrationStatus -> BeamPatternStatus
                          |
                          v
-BeamCommand -> RawReturn -> DetectionEvent -> TargetTrack
-      ^              ShipPosition + TargetTruth
+BeamCommand -> RawReturn -> DetectionEvent -> TrackManager -> TargetTrack
+      ^              ShipPosition + TargetTruth       \
+                                                       -> TrackAssociationEvent
+                                                          -> Recording.DiagnosticTools
 ```
 
 ### 4.2 Which beam is producing each live detection?
@@ -273,6 +281,7 @@ detections observed since that time unless recording/replay supplies earlier
 samples.
 
 Working state:
+- Treat DetectionEvent.beam_id as the authoritative producing-dwell identity.
 - Keep a rolling RawReturn metadata buffer for every array_id. Retain
   array_id, beam_id, timestamp.epoch_millis, azimuth_deg, elevation_deg,
   range_bin_count, DDS source/reception order, and sample-loss indicators.
@@ -303,12 +312,12 @@ For a transition A -> B:
 For every new DetectionEvent:
 1. Select the RawReturn stream where:
      RawReturn.array_id = DetectionEvent.sensor_id
-2. Find the closest plausible A -> B transition around the detection event
-   time. Normally the transition timestamp is equal to or just before the
-   DetectionEvent timestamp. Permit an observed transition up to one 10 ms
-   dwell after the detection when the first B pulses may have been lost by
-   this view.
-3. Attribute the detection to A, never to B.
+2. Join the producing dwell exactly where:
+     RawReturn.beam_id = DetectionEvent.beam_id
+   A missing RawReturn is an optional BEST_EFFORT evidence gap, not an
+   ambiguous beam attribution.
+3. When RawReturn is observed, locate its A -> B transition to explain when
+   DetectionProcessor completed A. Attribute the detection to A, never B.
 4. Validate that A's RawReturn azimuth_deg and elevation_deg match the
    DetectionEvent pointing within configured numeric tolerances.
 5. Join the producing dwell to BeamCommand exactly on:
@@ -380,24 +389,27 @@ and time. Selecting a retained row must open its evidence without rerunning
 the correlation from expired source buffers.
 
 Confidence:
+- EXACT: DetectionEvent.beam_id joins the BeamCommand on the same face and
+  the command pointing agrees. RawReturn may independently validate it.
 - RECONSTRUCTED_HIGH: the A -> B transition was observed, A joins exactly to
-  BeamCommand by face and beam_id, and pointing/timing agree.
+  BeamCommand by face and beam_id, and pointing/timing agree, but the publisher
+  is an older DetectionEvent type without beam_id.
 - RECONSTRUCTED_MEDIUM: the producing dwell is identifiable but some raw
   pulses or pattern evidence are missing.
 - RECONSTRUCTED_LOW: attribution depends mainly on time/pointing proximity or
   a transition was partially missed.
 - UNRESOLVED: no single producing dwell is defensible.
-- Do not label attribution EXACT because DetectionEvent does not carry
-  beam_id.
+- Never downgrade an exact DetectionEvent-to-BeamCommand join merely because
+  this BEST_EFFORT reader missed the corresponding RawReturn.
 
 Never silently choose the nearest command when candidates are ambiguous.
 ```
 
-The key `RawReturn` transition fields are `array_id`, `beam_id`, and
-`timestamp.epoch_millis`. `azimuth_deg` and `elevation_deg` validate the
-result. Neither `range_bin_count` nor `iq_samples` is needed to identify the
-boundary. Adding `beam_id` to `DetectionEvent` would turn the central
-attribution into an exact join.
+The central join now uses `DetectionEvent.sensor_id + beam_id` to
+`BeamCommand.scheduler_id + beam_id`. The key RawReturn transition fields are
+still `array_id`, `beam_id`, and `timestamp.epoch_millis`; `azimuth_deg` and
+`elevation_deg` validate and explain the dwell boundary. Neither
+`range_bin_count` nor `iq_samples` is needed for attribution.
 
 #### Test the HTML prototype with Web Integration Service
 
@@ -446,7 +458,7 @@ running, then open one or more of these pages:
 - [`rma_outage_impact_live_view.html`](multi_topic_live_views/rma_outage_impact_live_view.html) — 4.3
   pre/post RMA outage incidents;
 - [`likely_detection_track_lineage_live_view.html`](multi_topic_live_views/likely_detection_track_lineage_live_view.html)
-  — 4.4 reconstructed likely lineage;
+  — 4.4 authoritative track-association diagnostics (`Recording.DiagnosticTools`);
 - [`own_ship_motion_geometry_live_view.html`](multi_topic_live_views/own_ship_motion_geometry_live_view.html)
   — 4.5 own-ship/contact motion decomposition;
 - [`track_coast_loss_live_view.html`](multi_topic_live_views/track_coast_loss_live_view.html) — 4.6
@@ -569,66 +581,59 @@ The operational question is now “what changed when the state changed while
 this view was watching?” A retained incident can be selected later, but the
 view cannot manufacture its missing pre-outage baseline after joining late.
 
-### 4.4 Which incoming detections are likely updating each live track?
+### 4.4 Which incoming detections did TrackManager associate with each live track?
 
-The current schema does not publish detection-to-track provenance. This view
-therefore maintains a live reconstruction and stores the inferred association
-at the time it is made. Its title and labels must say “likely” rather than
-presenting the result as authoritative tracker output.
+`Radar/TrackAssociationEvent` is the TrackManager's authoritative decision
+stream. It retains the exact source detection identities through
+resolution-cell fusion and publishes the selected lifecycle, fused
+measurement, innovation score, decision, and reason. The view therefore
+joins reported decisions instead of reimplementing private tracker gates.
+
+The supplied WIS application is `RecordingDiagnosticsApp`. Connecting the
+view creates the named `Recording.DiagnosticTools` DomainParticipant, making
+the diagnostic consumer and its effect on the topology visible in Studio.
 
 Use this custom AI view prompt:
 
 ```text
-Build a live multi-topic view named "Likely Detection-to-Track Lineage".
+Build a live multi-topic view named "Track Association Diagnostics".
 
 Do not produce a one-time answer. Subscribe continuously to:
-- Radar/DetectionEvent
+- Radar/TrackAssociationEvent (required, RELIABLE)
 - Radar/TargetTrack
-- Ship/ShipPosition filtered to source_id = 0
-- optionally TargetGen/TargetTruth for evaluation only
+- Radar/DetectionEvent (optional source-sample lookup; BEST_EFFORT)
 
-Track writer GUID, DDS instance state, and disposal. Define a track lifecycle
-as writer GUID + track_id + the interval from instance appearance until
-disposal. Never attach retained detections from an old lifecycle to a recycled
-numeric track_id.
+Use tracker_instance_id + track_lifecycle_id as the authoritative lifecycle
+identity. Display track_id for operators, but never join only on that recycled
+numeric value. Continue to observe TargetTrack DDS instance state and disposal
+so the current state table can remove dead instances.
 
 Maintain:
-- DetectionEvent samples in event-time order with a late-arrival grace period;
-- the latest own-ship state and an interpolation buffer;
-- active track state and prediction history;
-- compact retained fused-measurement and inferred-association rows;
-- at least six seconds of initiation evidence and more than twelve seconds of
-  confirmed-track coast evidence.
+- a retained decision table keyed by tracker_instance_id + association_id;
+- current lifecycle-to-TargetTrack state;
+- a short optional DetectionEvent cache keyed by sensor_id + detection_id;
+- initiation, update, merge, rejection, coast-timeout drop, and reset-drop
+  events for each lifecycle;
+- subscription start and retention boundaries.
 
-Every 100 ms, reproduce the TrackManager observation batch:
-1. Group detections into the same resolution cells when they are within:
-   - 30 ms in time;
-   - 1.5 range cells, approximately 225 m;
-   - 3.3 degrees in azimuth; and
-   - 0.1 degrees in elevation-bar center.
-2. Fuse each group using linear-power weighting derived from SNR. Retain every
-   contributing writer GUID, sensor_id, and detection_id in the view's fused
-   row.
-3. Interpolate own-ship heading to the measurement time.
-4. Convert the fused ship-relative measurement to ENU:
-     az_world         = az_ship + ship_heading
-     horizontal_range = range * cos(elevation)
-     east             = horizontal_range * sin(az_world)
-     north            = horizontal_range * cos(az_world)
-     up               = range * sin(elevation)
-5. Predict every candidate track to the batch time.
-6. Apply the simulator's association gates:
-   - range gate has a 375 m floor and widens with SNR-derived measurement and
-     motion uncertainty;
-   - azimuth gate has a 2.6 degree floor and widens with uncertainty;
-   - cross-range gate has a 150 m floor plus range-scaled angular and motion
-     uncertainty.
-7. Calculate the normalized range/cross-range innovation score and retain all
-   candidates that pass, not only the winner.
-8. Choose the lowest-score candidate as the view's likely association.
-9. Compare that association with the following live TargetTrack updates.
-10. Reconstruct initiation evidence: three independent visits separated by at
-    least 600 ms inside a six-second window are required for confirmation.
+For each TrackAssociationEvent:
+1. Materialize the row immediately; do not wait for a TargetTrack sample.
+2. Copy every contributing detection identity, including sensor_id,
+   detection_id, beam_id, and source timestamp.
+3. Copy the fused range, azimuth, elevation, SNR, innovation score, passing
+   candidate count, selected lifecycle, confirmation state, and last accepted
+   simulation time.
+4. Interpret decision and reason together. In particular, distinguish
+   capacity rejection, duplicate merge, coast timeout, reset, and orderly
+   TrackManager shutdown.
+5. If contributors_truncated is true, show REPORTED_TRUNCATED and display
+   contributor_count versus the retained bounded sequence length.
+6. Join the selected lifecycle to subsequent TargetTrack state. This enriches
+   the decision with the public track state; it does not determine or validate
+   the association.
+7. Optionally join each contributor to a cached DetectionEvent for amplitude,
+   ship position, and browser-observed DDS metadata. A missing optional sample
+   must be labeled NOT_OBSERVED, not treated as missing tracker evidence.
 
 Render two continuously updating tables.
 
@@ -636,45 +641,35 @@ Active track table:
 - lifecycle-scoped track identity and track_id
 - last TargetTrack timestamp
 - position, velocity, classification, quality
-- likely most recent fused measurement
+- most recent reported fused measurement
 - contributing detection IDs
-- association score
-- time since likely accepted measurement
-- lineage confidence and ambiguity status
+- innovation score and passing candidate count
+- time since accepted measurement
+- decision and reason
 
-Retained association table:
-- batch time
+Retained decision table:
+- association_id and event time
 - fused measurement values
-- all contributing detection identities
-- candidate track lifecycles and scores
-- selected likely track or INITIATION/REJECTED
+- all contributing detection and beam identities
+- selected and related lifecycle identities
+- decision, reason, innovation score, and passing candidate count
 - following TargetTrack update time
-- confidence and evidence
+- REPORTED or REPORTED_TRUNCATED status
 
-Selecting a track must show a live lineage timeline from initiation through
-updates and coast. Selecting a retained association must show its source
-detections and all passing candidate tracks.
+Selecting a track must show its reported lifecycle from initiation through
+updates, merge, and drop. Selecting a decision must show its exact contributor
+identities and optional DetectionEvent lookup results.
 
-Confidence:
-- RECONSTRUCTED_HIGH: the view observed every contributing detection, one
-  candidate clearly passed with the lowest score, and the following track
-  update was consistent.
-- RECONSTRUCTED_MEDIUM: the association is unique but BEST_EFFORT loss or
-  state interpolation weakens the evidence.
-- RECONSTRUCTED_LOW: multiple candidates passed, the following track update
-  was ambiguous, or batch membership is uncertain.
-- UNRESOLVED: no defensible association can be reconstructed.
-
-Never label lineage EXACT. Detection IDs are discarded before tracker output,
-TargetTrack contains no contributing IDs, and this view's BEST_EFFORT reader
-may observe a different subset than TrackManager. TargetTruth may evaluate an
-inference, but it must not be presented as evidence used by the operational
-tracker.
+Do not rerun the range/cross-range gate in the view or replace the reported
+winner with a browser-computed candidate. If TrackAssociationEvent is absent,
+show NO_AUTHORITATIVE_ASSOCIATION_STREAM. A reconstruction may be offered only
+as an explicitly labeled compatibility fallback.
 ```
 
-The useful live question is “which detections are most likely feeding this
-track now?” Earlier retained associations remain inspectable only because the
-view materialized them while their source samples were available.
+The useful live question is now “which detections did the tracker actually
+use, and what decision did it make?” Earlier decisions remain inspectable only
+if the view or a recorder observed them because the reliable diagnostic topic
+is intentionally VOLATILE.
 
 ### 4.5 How much of live contact motion is caused by own-ship motion?
 
@@ -784,6 +779,7 @@ Use this custom AI view prompt:
 Build a live multi-topic view named "Track Coast and Loss Diagnosis".
 
 Do not produce a one-time answer. Subscribe continuously to:
+- Radar/TrackAssociationEvent
 - Radar/TargetTrack
 - Radar/DetectionEvent
 - Radar/BeamCommand
@@ -794,17 +790,20 @@ Do not produce a one-time answer. Subscribe continuously to:
 - Ship/ShipPosition filtered to source_id = 0
 - TargetGen/TargetTruth when truth-assisted diagnosis is desired
 
-Track DDS writer GUID, instance lifecycle, validity, and disposal. Retain at
+Use tracker_instance_id + track_lifecycle_id from TrackAssociationEvent as the
+authoritative lifecycle identity. Also track TargetTrack DDS writer GUID,
+validity, and disposal. Retain at
 least the preceding 20 seconds of compact evidence because a confirmed track
 can coast for approximately 12 seconds after its last accepted measurement.
 Do not retain the complete high-rate RawReturn.iq_samples stream in the
 language-model context. Derive and retain per-dwell health and expected-range-
 cell features deterministically.
 
-Reuse the live detection-fusion and likely-association reconstruction from the
-"Likely Detection-to-Track Lineage" view. The timestamp on a repeatedly
-published TargetTrack is not proof of a new accepted detection. Maintain a
-separate inferred last_accepted_measurement_time.
+Reuse the authoritative decisions from the "Track Association Diagnostics"
+view. The timestamp on a repeatedly published TargetTrack is not proof of a
+new accepted detection. Set last_accepted_measurement_time only from an
+INITIATE or UPDATE TrackAssociationEvent; use its exact contributing
+detections for optional source-sample lookup.
 
 For each active track lifecycle:
 1. Predict its current ship-relative range, bearing, and elevation.
@@ -818,8 +817,9 @@ For each active track lifecycle:
    cell and neighboring cells across the dwell. Retain peak magnitude,
    local-maximum result, and comparison with the fixed 0.26 threshold rather
    than retaining all I/Q.
-6. Look for a DetectionEvent and a likely track association after the dwell.
-7. Update coast age, number of expected visits since the last likely accepted
+6. Look for a DetectionEvent and the reported TrackAssociationEvent decision
+   after the dwell.
+7. Update coast age, number of expected visits since the last accepted
    measurement, current diagnosis, and confidence.
 8. On DDS disposal, freeze the lifecycle and all preceding evidence as a
    retained loss incident. Continue accepting a short grace window of
@@ -849,16 +849,17 @@ or 0.26 threshold test because of range, target RCS, beam offset, gain loss, or
 noise. Consider the target-dependent effective-range model.
 
 TRACKER_ASSOCIATION:
-Detections continued but were outside the reconstructed gates, fused into
-another measurement, assigned to a competing track, or initiated a
+Detections continued but TrackAssociationEvent reports rejection, fusion into
+another measurement, assignment to a competing lifecycle, or initiation of a
 replacement lifecycle.
 
 EXPLICIT_RESET:
 CMD_RESET immediately preceded broad track disposal.
 
 NORMAL_COAST_DROP:
-A confirmed track was disposed just over 12 seconds after its last likely
-accepted measurement. Preserve the upstream reason that caused the coast;
+A confirmed track was disposed just over 12 seconds after its last reported
+accepted measurement, with reason COAST_TIMEOUT. Preserve the upstream reason
+that caused the coast;
 "normal coast/drop" describes tracker behavior, not the original missed
 measurement.
 
@@ -873,10 +874,10 @@ multiple explanations remain equally plausible.
 
 Render:
 - an active-track table with lifecycle, track_id, quality, predicted geometry,
-  last likely accepted measurement, coast age, estimated time to drop,
+  last accepted measurement, coast age, estimated time to drop,
   expected/missed visits, current diagnosis, and confidence;
 - a live timeline for the selected track showing commands, calibration and
-  pattern state, raw-dwell health, detections, inferred associations, track
+  pattern state, raw-dwell health, detections, reported associations, track
   publications, commands, and disposal;
 - alert cards when a track begins coasting, changes diagnosis, approaches the
   coast limit, or is disposed;
@@ -897,22 +898,21 @@ This changes the old retrospective question into two live behaviors: an early
 warning for a currently coasting track and a retained incident created when a
 track disappears.
 
-### 4.7 Telemetry that would make live views exact
+### 4.7 Exact telemetry status and remaining extensions
 
-Stateful multi-topic views can provide strong operational reconstructions, but
-retaining more samples does not remove schema ambiguity. Three bounded
-telemetry additions would convert the most important inferences into exact
-live joins:
+The first exact-join telemetry is now implemented:
 
-1. Add the producing `beam_id` to `DetectionEvent`.
-2. Publish a bounded `TrackAssociationEvent` containing the lifecycle-scoped
-   track identity, contributing detection identities, fused measurement,
-   innovation score, and decision such as initiate, update, reject, merge,
-   coast, or drop.
-3. Publish a track lifecycle event with the last accepted measurement time and
-   a drop reason distinguishing coast timeout, reset, duplicate merge, and
-   capacity rejection.
+1. `DetectionEvent.beam_id` identifies the producing dwell directly.
+2. Reliable, volatile `Radar/TrackAssociationEvent` publishes a bounded
+   contributor sequence, fused measurement, innovation score, candidate
+   count, decision, and lifecycle-scoped track identity.
+3. The same decision stream carries lifecycle initiation, duplicate merge,
+   coast-timeout drop, reset drop, and shutdown drop, including last accepted
+   simulation time and an explicit reason. This avoids a second lifecycle
+   topic while keeping the event key space bounded.
 
-With those additions, the live views would still need subscription-time and
-retention notices, but beam attribution and detection-to-track lineage would
-no longer depend on reconstructed timing.
+The recording/diagnostic WIS participant consumes this stream. Live views
+still need subscription-time and retention notices, but beam attribution and
+detection-to-track lineage no longer depend on reconstructed timing. A future
+recorder can persist `TrackAssociationEvent` unchanged for retrospective
+analysis.

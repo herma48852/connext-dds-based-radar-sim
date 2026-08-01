@@ -108,6 +108,23 @@
       </datareader_qos>
     </qos_profile>
 
+    <!-- TrackAssociationEvent: authoritative, bounded tracker-decision
+         telemetry for recording and live diagnostics. Reliable delivery is
+         required because a missing event breaks lineage; volatile durability
+         intentionally limits the view to the current live session. -->
+    <qos_profile name="TrackAssociationEventProfile">
+      <datawriter_qos>
+        <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>VOLATILE_DURABILITY_QOS</kind></durability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>256</depth></history>
+      </datawriter_qos>
+      <datareader_qos>
+        <reliability><kind>RELIABLE_RELIABILITY_QOS</kind></reliability>
+        <durability><kind>VOLATILE_DURABILITY_QOS</kind></durability>
+        <history><kind>KEEP_LAST_HISTORY_QOS</kind><depth>256</depth></history>
+      </datareader_qos>
+    </qos_profile>
+
     <!-- TargetTrack: 10 Hz correlated tracks. Reliable, last-value cached
          for late joiners, deadline detects a stalled TrackManager. -->
     <qos_profile name="TargetTrackProfile">

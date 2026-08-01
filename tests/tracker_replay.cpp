@@ -332,6 +332,12 @@ int main(int argc, char** argv) {
             10, center_plot);
         confirmation_core.update(
             one_dwell_burst, 0.0, 0);
+        check(confirmation_core.association_events().size() == 10 &&
+                  confirmation_core.association_events().front().decision ==
+                      radar::app::CoreAssociationDecision::Initiate,
+              "tracker reports the authoritative initiation and dwell updates");
+        const int64_t first_lifecycle_id =
+            confirmation_core.tracks().front().lifecycle_id;
         check(confirmation_core.tracks().size() == 1 &&
                   !confirmation_core.tracks().front().confirmed,
               "ten reports from one dwell cannot confirm a track");
@@ -357,6 +363,23 @@ int main(int argc, char** argv) {
                 {}, 0.0, 2400 + TrackerCore::kCoastMs + 1);
         check(after_boundary.size() == 1 && coast_core.tracks().empty(),
               "track drops immediately after the 12 second coast boundary");
+        check(coast_core.association_events().size() == 1 &&
+                  coast_core.association_events().front().decision ==
+                      radar::app::CoreAssociationDecision::Drop &&
+                  coast_core.association_events().front().reason ==
+                      radar::app::CoreAssociationReason::CoastTimeout,
+              "tracker reports the authoritative coast-timeout drop");
+
+        TrackerCore lifecycle_core;
+        lifecycle_core.update({center_plot}, 0.0, 0);
+        const int64_t lifecycle_before_reset =
+            lifecycle_core.tracks().front().lifecycle_id;
+        lifecycle_core.reset();
+        lifecycle_core.update({center_plot}, 0.0, 100);
+        check(lifecycle_core.tracks().front().lifecycle_id >
+                  lifecycle_before_reset &&
+                  first_lifecycle_id > 0,
+              "track lifecycle identity is not recycled across reset");
 
         TrackerCore cell_transition_core;
         const CoreDetection beam_cell_a{

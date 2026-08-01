@@ -419,7 +419,7 @@ void DetectionProcessor::publish_completed_dwell(
         receive_aperture_online_[face_index].load(
                 std::memory_order_acquire),
         static_cast<float>(kCfarThreshold),
-        [this, face_index, azimuth_deg, elevation_deg,
+        [this, face_index, beam_id, azimuth_deg, elevation_deg,
          &geo](int i, float amplitude) {
             const double range_m =
                 detection_model::range_m_for_bin(i);
@@ -438,6 +438,7 @@ void DetectionProcessor::publish_completed_dwell(
             det.elevation_deg = elevation_deg;
             det.amplitude     = amplitude;
             det.snr_db        = snr_db;
+            det.beam_id       = beam_id;
             det_writer_.write(det);
             // PPI blips reach the UI via HmiUi's DetectionEvent subscription.
         });

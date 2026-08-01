@@ -331,12 +331,16 @@ Both `Radar.DetectionProcessor` and the **HMI-UI** consume that response from
 display endpoint: it subscribes to `Radar/TargetTrack`,
 `Radar/DetectionEvent`, `Ship/ShipPosition`, `Radar/CalibrationStatus`, and
 `Radar/BeamPatternStatus` (the B-scope degradation overlay),
-so every panel renders data that arrived over the bus — no dangling
-publishers anywhere in the system. Its listener callbacks only convert
+so every panel renders data that arrived over the bus. Its listener callbacks only convert
 samples into view structs in a `DataBus` (lock-free SPSC queues +
 mutex-protected stores), which the render thread drains at display rate:
 the GUI can never stall a DDS receive thread, and DDS threads never touch
-OpenGL. (Connext Studio joins the same domain from a
+OpenGL. `Radar.TrackManager` also publishes the bounded, authoritative
+`Radar/TrackAssociationEvent` diagnostic stream. Connecting the Section 4.4
+WIS view creates `Recording.DiagnosticTools`, an external DomainParticipant
+that consumes that stream without inserting diagnostics into the operational
+processing path. When the diagnostic view is not connected, this intentionally
+optional publisher has no reader. (Connext Studio joins the same domain from a
 separate workspace and can read every topic shown; see
 [docs/CONNEXT_STUDIO.md](docs/CONNEXT_STUDIO.md). Not shown: the
 on-demand diagnostic endpoints `target_gen` creates with

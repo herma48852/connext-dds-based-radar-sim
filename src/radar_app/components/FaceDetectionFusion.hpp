@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <vector>
 
+#include "DetectionIdentity.hpp"
 #include "RadarFaces.hpp"
 #include "RadarRfModel.hpp"
 
@@ -26,6 +27,7 @@ struct FaceDetection {
     double azimuth_deg;
     double elevation_deg;
     double snr_db;
+    std::vector<DetectionIdentity> contributors;
 };
 
 inline double wrapped_azimuth_separation_deg(
@@ -85,6 +87,10 @@ inline std::vector<FaceDetection> fuse_resolution_cell_detections(
             output.face_id = detection.face_id;
             output.sim_millis = detection.sim_millis;
         }
+        output.contributors.insert(
+            output.contributors.end(),
+            detection.contributors.begin(),
+            detection.contributors.end());
     };
 
     std::vector<Cluster> clusters;
@@ -112,6 +118,7 @@ inline std::vector<FaceDetection> fuse_resolution_cell_detections(
         }
         if (!fused) {
             Cluster cluster{detection, 0.0, 0.0, 0.0, 0.0, 0.0};
+            cluster.representative.contributors.clear();
             add_to_cluster(cluster, detection);
             clusters.push_back(cluster);
         }
