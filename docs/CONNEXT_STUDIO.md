@@ -409,44 +409,34 @@ Section 4 solution. Each page enables only its own application and readers on
 domain 92. `RawReturn` and `BeamPatternStatus` are projected so their large
 arrays are not serialized to JSON.
 
-From the repository root, start RTI Web Integration Service from Windows
-Command Prompt (`cmd.exe`):
+From the repository root, start RTI Web Integration Service with the launcher
+for the current shell.
+
+Windows Command Prompt (`cmd.exe`):
 
 ```bat
-set "RTI_HOME=%CONNEXTDDS_DIR%"
-if not defined RTI_HOME set "RTI_HOME=%NDDSHOME%"
-if not defined RTI_HOME set "RTI_HOME=C:\Program Files\rti_connext_dds-7.7.0"
-"%RTI_HOME%\bin\rtiwebintegrationservice.bat" ^
-  -cfgFile config\radar_live_view_wis.xml ^
-  -cfgName RadarLiveViews ^
-  -enableWebSockets ^
-  -documentRoot docs ^
-  -listeningPorts 18080
+scripts\windows\start-wis.cmd
 ```
 
-In Windows PowerShell, use PowerShell's environment-variable and continuation
-syntax instead:
+Windows PowerShell:
 
 ```powershell
-$rtiHome = if ($env:CONNEXTDDS_DIR) { $env:CONNEXTDDS_DIR } elseif ($env:NDDSHOME) { $env:NDDSHOME } else { 'C:\Program Files\rti_connext_dds-7.7.0' }
-& "$rtiHome\bin\rtiwebintegrationservice.bat" `
-  -cfgFile config\radar_live_view_wis.xml `
-  -cfgName RadarLiveViews `
-  -enableWebSockets `
-  -documentRoot docs `
-  -listeningPorts 18080
+.\scripts\windows\start-wis.ps1
 ```
 
-Or on macOS:
+macOS:
 
 ```bash
-"$NDDSHOME/bin/rtiwebintegrationservice" \
-  -cfgFile config/radar_live_view_wis.xml \
-  -cfgName RadarLiveViews \
-  -enableWebSockets \
-  -documentRoot docs \
-  -listeningPorts 18080
+./scripts/start-wis.sh
 ```
+
+All three launchers use `CONNEXTDDS_DIR` or `NDDSHOME`, select the aggregate
+`RadarLiveViews` configuration, serve `docs`, and listen on port 18080. They
+resolve repository paths themselves, so they do not depend on the caller's
+working directory. Use `scripts\windows\start-wis.cmd -Help`, PowerShell
+`Get-Help .\scripts\windows\start-wis.ps1 -Detailed`, or
+`./scripts/start-wis.sh --help` for configuration, port, document-root,
+verbosity, and built-in-topic overrides.
 
 Run the interactive demo with its default domain 92 if it is not already
 running, then open one or more of these pages:
