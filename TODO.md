@@ -375,6 +375,17 @@ transport swap (DDS is the demo's purpose).
    Stage 3 15–30 min soak.
 2. Optional polish: dead-reckoning publish (above); track-table AZ
    column is RELATIVE bearing — label it or convert to true.
+3. **Lower priority — make DEGRADE ARRAY reduce sensitivity:** the scenario
+   currently injects approximately 12% sparse element failures into
+   `CalibrationStatus` for health/display purposes, but leaves
+   `rma_offline_mask` unchanged, so Beamformer and DetectionProcessor retain
+   nominal receive gain. Feed the per-element degradation into effective
+   aperture gain and the published beam pattern while keeping manual RMA
+   outages independent. For the same inbound target profile and geometry,
+   acceptance should show a shorter expected threshold-crossing slant range
+   than nominal. Validate over repeated controlled runs or an analytical
+   range calculation rather than requiring every noisy first DetectionEvent
+   to occur closer.
 
 ### Operational notes
 
