@@ -24,6 +24,19 @@ int main() {
     check(nominal == start + 10ms,
           "on-time loop preserves its fixed-rate deadline");
 
+    // A coarse timer may wake just after a deadline. Keep the phase and let
+    // the loop make up this small delay instead of permanently lowering its
+    // average rate by scheduling a fresh full period from the late wake-up.
+    const auto jittered = radar::advance_periodic_deadline(
+        start + 20ms, 10ms, start + 31ms);
+    check(jittered == start + 30ms,
+          "ordinary wake-up jitter preserves the original deadline phase");
+
+    const auto recovered = radar::advance_periodic_deadline(
+        jittered, 10ms, start + 31ms);
+    check(recovered == start + 40ms,
+          "one bounded catch-up restores the normal cadence");
+
     // Simulate an overnight machine sleep. The old next += period behavior
     // left the deadline eight hours behind and replayed 2.88 million 10 ms
     // ticks at maximum speed after wake.

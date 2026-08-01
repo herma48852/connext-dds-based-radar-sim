@@ -1,0 +1,265 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Web Integration Service configuration for:
+    docs/detection_to_beam_live_view.html
+
+  The domain is 92 to match scripts/windows/start-all.cmd and
+  scripts/start-all.sh defaults.
+
+  RawReturn and BeamPatternStatus are appendable DDS types. Their reader-side
+  definitions below intentionally stop before the large trailing sequences.
+  XTypes assignability lets these projections match the complete writers while
+  preventing iq_samples and azimuth_pattern_db from being serialized to JSON.
+-->
+<dds xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:noNamespaceSchemaLocation="http://community.rti.com/schema/latest/rti_web_integration_service.xsd">
+
+  <types>
+    <module name="radar">
+      <module name="types">
+        <struct name="TimeStamp">
+          <member name="epoch_millis" type="int64"/>
+          <member name="sim_millis" type="int32"/>
+        </struct>
+
+        <struct name="GeoPosition" extensibility="appendable">
+          <member name="latitude_deg" type="float64"/>
+          <member name="longitude_deg" type="float64"/>
+          <member name="altitude_m" type="float64"/>
+        </struct>
+
+        <enum name="BeamMode">
+          <enumerator name="BEAM_MODE_SEARCH"/>
+          <enumerator name="BEAM_MODE_TRACK"/>
+          <enumerator name="BEAM_MODE_CONFIRM"/>
+          <enumerator name="BEAM_MODE_CALIBRATE"/>
+        </enum>
+
+        <struct name="BeamCommand" extensibility="appendable">
+          <member name="scheduler_id" type="int32" key="true"/>
+          <member name="beam_id" type="int32"/>
+          <member name="timestamp"
+                  type="nonBasic"
+                  nonBasicTypeName="radar::types::TimeStamp"/>
+          <member name="azimuth_deg" type="float64"/>
+          <member name="elevation_deg" type="float64"/>
+          <member name="dwell_time_us" type="int32"/>
+          <member name="mode"
+                  type="nonBasic"
+                  nonBasicTypeName="radar::types::BeamMode"/>
+          <member name="priority" type="int32"/>
+        </struct>
+
+        <!--
+          Appendable prefix projection. The complete writer type continues with
+          azimuth_pattern_db and RF configuration fields that view 4.2 does not
+          consume.
+        -->
+        <struct name="BeamPatternStatus" extensibility="appendable">
+          <member name="array_id" type="int32" key="true"/>
+          <member name="timestamp"
+                  type="nonBasic"
+                  nonBasicTypeName="radar::types::TimeStamp"/>
+          <member name="beam_id" type="int32"/>
+          <member name="rma_offline_mask" type="int32"/>
+          <member name="commanded_azimuth_deg" type="float64"/>
+          <member name="boresight_error_deg" type="float64"/>
+          <member name="gain_loss_db" type="float64"/>
+          <member name="beamwidth_3db_deg" type="float64"/>
+          <member name="peak_sidelobe_level_db" type="float64"/>
+          <member name="left_sidelobe_offset_deg" type="float64"/>
+          <member name="right_sidelobe_offset_deg" type="float64"/>
+          <member name="pattern_start_offset_deg" type="float64"/>
+          <member name="pattern_step_deg" type="float64"/>
+        </struct>
+
+        <!--
+          Appendable prefix projection. The complete writer type's next and
+          final member is sequence<float, 2048> iq_samples.
+        -->
+        <struct name="RawReturn" extensibility="appendable">
+          <member name="array_id" type="int32" key="true"/>
+          <member name="beam_id" type="int32"/>
+          <member name="timestamp"
+                  type="nonBasic"
+                  nonBasicTypeName="radar::types::TimeStamp"/>
+          <member name="azimuth_deg" type="float64"/>
+          <member name="elevation_deg" type="float64"/>
+          <member name="range_bin_count" type="int32"/>
+        </struct>
+
+        <struct name="DetectionEvent" extensibility="appendable">
+          <member name="sensor_id" type="int32" key="true"/>
+          <member name="detection_id" type="int32"/>
+          <member name="timestamp"
+                  type="nonBasic"
+                  nonBasicTypeName="radar::types::TimeStamp"/>
+          <member name="ship_position"
+                  type="nonBasic"
+                  nonBasicTypeName="radar::types::GeoPosition"/>
+          <member name="range_m" type="float64"/>
+          <member name="azimuth_deg" type="float64"/>
+          <member name="elevation_deg" type="float64"/>
+          <member name="amplitude" type="float64"/>
+          <member name="snr_db" type="float64"/>
+        </struct>
+      </module>
+    </module>
+  </types>
+
+  <qos_library name="RadarLiveViewQosLibrary">
+    <qos_profile name="BestEffortVolatile">
+      <datareader_qos>
+        <reliability>
+          <kind>BEST_EFFORT_RELIABILITY_QOS</kind>
+        </reliability>
+        <durability>
+          <kind>VOLATILE_DURABILITY_QOS</kind>
+        </durability>
+        <!-- DetectionEvent offers 1 ms; RawReturn offers 0.5 ms. -->
+        <latency_budget>
+          <duration><sec>0</sec><nanosec>1000000</nanosec></duration>
+        </latency_budget>
+        <history>
+          <kind>KEEP_LAST_HISTORY_QOS</kind>
+          <depth>64</depth>
+        </history>
+        <type_consistency>
+          <kind>ALLOW_TYPE_COERCION</kind>
+        </type_consistency>
+        <representation>
+          <value>
+            <element>XCDR_DATA_REPRESENTATION</element>
+            <element>XCDR2_DATA_REPRESENTATION</element>
+          </value>
+        </representation>
+      </datareader_qos>
+    </qos_profile>
+
+    <qos_profile name="ReliableVolatile">
+      <datareader_qos>
+        <reliability>
+          <kind>RELIABLE_RELIABILITY_QOS</kind>
+        </reliability>
+        <durability>
+          <kind>VOLATILE_DURABILITY_QOS</kind>
+        </durability>
+        <!-- BeamCommand offers a 5 ms latency budget. -->
+        <latency_budget>
+          <duration><sec>0</sec><nanosec>5000000</nanosec></duration>
+        </latency_budget>
+        <history>
+          <kind>KEEP_LAST_HISTORY_QOS</kind>
+          <depth>64</depth>
+        </history>
+        <type_consistency>
+          <kind>ALLOW_TYPE_COERCION</kind>
+        </type_consistency>
+        <representation>
+          <value>
+            <element>XCDR_DATA_REPRESENTATION</element>
+            <element>XCDR2_DATA_REPRESENTATION</element>
+          </value>
+        </representation>
+      </datareader_qos>
+    </qos_profile>
+
+    <qos_profile name="ReliableTransientLocal">
+      <datareader_qos>
+        <reliability>
+          <kind>RELIABLE_RELIABILITY_QOS</kind>
+        </reliability>
+        <durability>
+          <kind>TRANSIENT_LOCAL_DURABILITY_QOS</kind>
+        </durability>
+        <history>
+          <kind>KEEP_LAST_HISTORY_QOS</kind>
+          <depth>32</depth>
+        </history>
+        <type_consistency>
+          <kind>ALLOW_TYPE_COERCION</kind>
+        </type_consistency>
+        <representation>
+          <value>
+            <element>XCDR_DATA_REPRESENTATION</element>
+            <element>XCDR2_DATA_REPRESENTATION</element>
+          </value>
+        </representation>
+      </datareader_qos>
+    </qos_profile>
+  </qos_library>
+
+  <domain_library name="RadarLiveViewDomainLibrary">
+    <domain name="RadarDomain92" domain_id="92">
+      <register_type name="radar::types::DetectionEvent"
+                     type_ref="radar::types::DetectionEvent"/>
+      <register_type name="radar::types::RawReturn"
+                     type_ref="radar::types::RawReturn"/>
+      <register_type name="radar::types::BeamCommand"
+                     type_ref="radar::types::BeamCommand"/>
+      <register_type name="radar::types::BeamPatternStatus"
+                     type_ref="radar::types::BeamPatternStatus"/>
+
+      <topic name="Radar/DetectionEvent"
+             register_type_ref="radar::types::DetectionEvent"/>
+      <topic name="Radar/RawReturn"
+             register_type_ref="radar::types::RawReturn"/>
+      <topic name="Radar/BeamCommand"
+             register_type_ref="radar::types::BeamCommand"/>
+      <topic name="Radar/BeamPatternStatus"
+             register_type_ref="radar::types::BeamPatternStatus"/>
+    </domain>
+  </domain_library>
+
+  <web_integration_service name="RadarLiveView">
+    <application name="RadarLiveViewApp">
+      <domain_participant name="RadarParticipant"
+                          domain_ref="RadarLiveViewDomainLibrary::RadarDomain92">
+        <subscriber name="RadarSubscriber">
+          <data_reader name="DetectionEventReader"
+                       topic_ref="Radar/DetectionEvent">
+            <datareader_qos
+                base_name="RadarLiveViewQosLibrary::BestEffortVolatile"/>
+          </data_reader>
+
+          <data_reader name="RawReturnReader"
+                       topic_ref="Radar/RawReturn">
+            <datareader_qos
+                base_name="RadarLiveViewQosLibrary::BestEffortVolatile"/>
+          </data_reader>
+
+          <data_reader name="BeamCommandReader"
+                       topic_ref="Radar/BeamCommand">
+            <datareader_qos
+                base_name="RadarLiveViewQosLibrary::ReliableVolatile"/>
+          </data_reader>
+
+          <data_reader name="BeamPatternStatusReader"
+                       topic_ref="Radar/BeamPatternStatus">
+            <datareader_qos
+                base_name="RadarLiveViewQosLibrary::ReliableTransientLocal"/>
+          </data_reader>
+        </subscriber>
+
+        <participant_qos>
+          <participant_name>
+            <name>Radar.WIS-LiveView</name>
+          </participant_name>
+          <transport_builtin>
+            <mask>UDPv4</mask>
+          </transport_builtin>
+          <discovery>
+            <initial_peers>
+              <!--
+                start-all creates ten local participants before WIS joins.
+                Probe an explicit range instead of the implicit 0..4 range so
+                launch order does not prevent discovery.
+              -->
+              <element>32@builtin.udpv4://127.0.0.1</element>
+            </initial_peers>
+          </discovery>
+        </participant_qos>
+      </domain_participant>
+    </application>
+  </web_integration_service>
+</dds>

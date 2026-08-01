@@ -1,0 +1,2653 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Detection-to-Beam Correlation</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #eef6fb;
+      --muted: #8498a7;
+      --muted-2: #607481;
+      --panel: rgba(12, 28, 38, 0.92);
+      --panel-solid: #0c1c26;
+      --panel-2: #102632;
+      --line: rgba(142, 177, 194, 0.14);
+      --line-strong: rgba(142, 177, 194, 0.28);
+      --cyan: #63e6e2;
+      --cyan-dim: rgba(99, 230, 226, 0.12);
+      --lime: #b7ef61;
+      --orange: #ffb86a;
+      --red: #ff6b75;
+      --blue: #6bb8ff;
+      --purple: #b99aff;
+      --shadow: 0 24px 70px rgba(0, 0, 0, 0.34);
+      --radius: 18px;
+      --mono: "SFMono-Regular", "Cascadia Code", "Roboto Mono", Consolas, monospace;
+      --sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      min-width: 320px;
+      background: #071219;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: var(--sans);
+      background:
+        radial-gradient(circle at 12% -10%, rgba(49, 174, 184, 0.17), transparent 34rem),
+        radial-gradient(circle at 94% 4%, rgba(103, 105, 208, 0.12), transparent 30rem),
+        linear-gradient(180deg, #081720 0%, #071219 50%, #061015 100%);
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    button {
+      color: inherit;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      display: flex;
+      min-height: 64px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 10px clamp(18px, 3vw, 42px);
+      border-bottom: 1px solid var(--line);
+      background: rgba(7, 18, 25, 0.88);
+      backdrop-filter: blur(18px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      position: relative;
+      width: 34px;
+      height: 34px;
+      flex: 0 0 auto;
+      border: 1px solid rgba(99, 230, 226, 0.55);
+      border-radius: 50%;
+      box-shadow: inset 0 0 0 7px rgba(99, 230, 226, 0.035);
+    }
+
+    .brand-mark::before,
+    .brand-mark::after {
+      position: absolute;
+      content: "";
+      background: var(--cyan);
+      opacity: 0.88;
+    }
+
+    .brand-mark::before {
+      top: 4px;
+      bottom: 4px;
+      left: 50%;
+      width: 1px;
+    }
+
+    .brand-mark::after {
+      left: 4px;
+      right: 4px;
+      top: 50%;
+      height: 1px;
+    }
+
+    .brand-mark span {
+      position: absolute;
+      inset: 11px;
+      border: 2px solid var(--lime);
+      border-radius: 50%;
+      box-shadow: 0 0 13px rgba(183, 239, 97, 0.45);
+    }
+
+    .brand-copy {
+      min-width: 0;
+    }
+
+    .brand-name {
+      margin: 0;
+      overflow: hidden;
+      color: #f6fbfd;
+      font-size: 14px;
+      font-weight: 720;
+      letter-spacing: 0.02em;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .brand-meta {
+      margin-top: 2px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .source-chip,
+    .status-chip,
+    .topic-chip,
+    .confidence-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+
+    .source-chip {
+      min-height: 34px;
+      padding: 6px 11px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.025);
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .source-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--orange);
+      box-shadow: 0 0 10px currentColor;
+    }
+
+    .source-chip.live .source-dot {
+      color: var(--lime);
+      background: var(--lime);
+      animation: pulse 1.8s infinite;
+    }
+
+    .source-chip.error .source-dot {
+      color: var(--red);
+      background: var(--red);
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.42; }
+    }
+
+    .btn {
+      display: inline-flex;
+      min-height: 36px;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 7px 13px;
+      border: 1px solid var(--line-strong);
+      border-radius: 10px;
+      color: #dce9ee;
+      background: rgba(255, 255, 255, 0.035);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 650;
+      transition: 140ms ease;
+    }
+
+    .btn:hover {
+      border-color: rgba(99, 230, 226, 0.42);
+      background: rgba(99, 230, 226, 0.08);
+      transform: translateY(-1px);
+    }
+
+    .btn.primary {
+      border-color: rgba(99, 230, 226, 0.48);
+      color: #07191e;
+      background: var(--cyan);
+    }
+
+    .btn.primary:hover {
+      background: #8df2ee;
+    }
+
+    .btn.danger:hover {
+      border-color: rgba(255, 107, 117, 0.5);
+      background: rgba(255, 107, 117, 0.1);
+    }
+
+    .btn.icon-only {
+      width: 36px;
+      padding: 0;
+      font-size: 17px;
+    }
+
+    main {
+      width: min(1840px, 100%);
+      margin: 0 auto;
+      padding: clamp(24px, 3vw, 42px);
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 24px;
+      align-items: end;
+      margin-bottom: 24px;
+    }
+
+    .eyebrow {
+      margin: 0 0 9px;
+      color: var(--cyan);
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 930px;
+      margin: 0;
+      color: #f4fafc;
+      font-size: clamp(29px, 4vw, 54px);
+      font-weight: 650;
+      letter-spacing: -0.045em;
+      line-height: 0.98;
+    }
+
+    .hero p {
+      max-width: 850px;
+      margin: 15px 0 0;
+      color: #9aadb8;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .session-card {
+      min-width: 260px;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(12, 28, 38, 0.68);
+    }
+
+    .label {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--muted-2);
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .session-time {
+      color: #dbe9ee;
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .session-note {
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.4;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(150px, 1fr));
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .metric {
+      position: relative;
+      min-height: 105px;
+      overflow: hidden;
+      padding: 16px 17px;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      background: linear-gradient(145deg, rgba(16, 38, 50, 0.94), rgba(9, 23, 31, 0.88));
+    }
+
+    .metric::after {
+      position: absolute;
+      right: -28px;
+      bottom: -52px;
+      width: 115px;
+      height: 115px;
+      border: 1px solid rgba(99, 230, 226, 0.08);
+      border-radius: 50%;
+      content: "";
+    }
+
+    .metric-value {
+      margin-top: 9px;
+      color: #f5fbfd;
+      font-family: var(--mono);
+      font-size: 25px;
+      font-weight: 650;
+      letter-spacing: -0.04em;
+    }
+
+    .metric-value small {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0;
+    }
+
+    .metric-trend {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .face-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(190px, 1fr));
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .face-card {
+      position: relative;
+      min-height: 92px;
+      padding: 14px 15px 13px 18px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(9, 24, 32, 0.8);
+    }
+
+    .face-card::before {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: 3px;
+      background: var(--face-color, var(--cyan));
+      content: "";
+      opacity: 0.75;
+    }
+
+    .face-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .face-name {
+      color: #dfecef;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .face-rate {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 9px;
+    }
+
+    .face-beam {
+      margin-top: 12px;
+      color: #f5fbfd;
+      font-family: var(--mono);
+      font-size: 18px;
+    }
+
+    .face-detail {
+      display: flex;
+      gap: 12px;
+      margin-top: 5px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 9px;
+    }
+
+    .workspace {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .workspace-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .workspace-title {
+      margin: 0;
+      color: #edf6f8;
+      font-size: 14px;
+      font-weight: 720;
+    }
+
+    .workspace-subtitle {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(5, 15, 21, 0.42);
+    }
+
+    .field {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .field input,
+    .field select,
+    .modal input {
+      min-height: 34px;
+      border: 1px solid var(--line-strong);
+      border-radius: 9px;
+      outline: none;
+      color: #dce9ee;
+      background: rgba(255, 255, 255, 0.035);
+      font-size: 11px;
+    }
+
+    .field input {
+      width: 160px;
+      padding: 7px 10px 7px 31px;
+    }
+
+    .field select {
+      padding: 7px 27px 7px 10px;
+    }
+
+    .field input:focus,
+    .field select:focus,
+    .modal input:focus {
+      border-color: rgba(99, 230, 226, 0.56);
+      box-shadow: 0 0 0 3px rgba(99, 230, 226, 0.07);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      pointer-events: none;
+    }
+
+    .toolbar-spacer {
+      flex: 1 1 auto;
+    }
+
+    .result-count {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+    }
+
+    .table-shell {
+      max-height: min(57vh, 690px);
+      overflow: auto;
+      scrollbar-color: #27434f transparent;
+    }
+
+    table {
+      width: 100%;
+      min-width: 1840px;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-family: var(--mono);
+      font-size: 10px;
+    }
+
+    thead {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+    }
+
+    th {
+      padding: 9px 10px;
+      border-right: 1px solid rgba(142, 177, 194, 0.08);
+      border-bottom: 1px solid var(--line);
+      color: #8da2ae;
+      background: #0d222d;
+      font-weight: 650;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    thead tr:first-child th {
+      padding-top: 10px;
+      padding-bottom: 7px;
+      color: #607d8a;
+      background: #0a1b24;
+      font-size: 8px;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+    }
+
+    td {
+      height: 47px;
+      padding: 8px 10px;
+      border-right: 1px solid rgba(142, 177, 194, 0.055);
+      border-bottom: 1px solid rgba(142, 177, 194, 0.085);
+      color: #bed0d8;
+      white-space: nowrap;
+    }
+
+    tbody tr {
+      cursor: pointer;
+      transition: background 100ms ease;
+    }
+
+    tbody tr:hover {
+      background: rgba(99, 230, 226, 0.052);
+    }
+
+    tbody tr.selected {
+      background: rgba(99, 230, 226, 0.09);
+      box-shadow: inset 3px 0 var(--cyan);
+    }
+
+    .cell-primary {
+      color: #f0f7f9;
+      font-weight: 650;
+    }
+
+    .cell-muted {
+      color: #718895;
+    }
+
+    .face-pill {
+      display: inline-flex;
+      min-width: 28px;
+      justify-content: center;
+      padding: 4px 6px;
+      border: 1px solid color-mix(in srgb, var(--face-color) 34%, transparent);
+      border-radius: 6px;
+      color: var(--face-color);
+      background: color-mix(in srgb, var(--face-color) 8%, transparent);
+      font-weight: 720;
+    }
+
+    .confidence-chip {
+      padding: 4px 7px;
+      font-size: 8px;
+      font-weight: 750;
+      letter-spacing: 0.035em;
+    }
+
+    .confidence-high {
+      border-color: rgba(183, 239, 97, 0.34);
+      color: var(--lime);
+      background: rgba(183, 239, 97, 0.08);
+    }
+
+    .confidence-medium {
+      border-color: rgba(107, 184, 255, 0.34);
+      color: var(--blue);
+      background: rgba(107, 184, 255, 0.08);
+    }
+
+    .confidence-low {
+      border-color: rgba(255, 184, 106, 0.36);
+      color: var(--orange);
+      background: rgba(255, 184, 106, 0.08);
+    }
+
+    .confidence-unresolved {
+      border-color: rgba(255, 107, 117, 0.36);
+      color: var(--red);
+      background: rgba(255, 107, 117, 0.08);
+    }
+
+    .empty {
+      display: none;
+      min-height: 230px;
+      place-items: center;
+      padding: 40px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .empty.visible {
+      display: grid;
+    }
+
+    .empty-ring {
+      width: 66px;
+      height: 66px;
+      margin: 0 auto 16px;
+      border: 1px solid rgba(99, 230, 226, 0.28);
+      border-radius: 50%;
+      box-shadow: inset 0 0 0 14px rgba(99, 230, 226, 0.025);
+    }
+
+    .empty strong {
+      display: block;
+      margin-bottom: 6px;
+      color: #ccdae0;
+      font-size: 13px;
+    }
+
+    .empty span {
+      font-size: 10px;
+    }
+
+    .footnote {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 11px 15px;
+      border-top: 1px solid var(--line);
+      color: var(--muted-2);
+      background: rgba(5, 15, 21, 0.38);
+      font-size: 9px;
+      line-height: 1.5;
+    }
+
+    .footnote code {
+      color: #8ab3bf;
+      font-family: var(--mono);
+    }
+
+    .drawer {
+      position: fixed;
+      z-index: 50;
+      top: 0;
+      right: 0;
+      width: min(520px, 94vw);
+      height: 100vh;
+      overflow: auto;
+      border-left: 1px solid var(--line-strong);
+      background: #091a23;
+      box-shadow: -30px 0 80px rgba(0, 0, 0, 0.48);
+      transform: translateX(103%);
+      transition: transform 220ms ease;
+    }
+
+    .drawer.open {
+      transform: translateX(0);
+    }
+
+    .drawer-header {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 21px 22px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(9, 26, 35, 0.94);
+      backdrop-filter: blur(14px);
+    }
+
+    .drawer-title {
+      margin: 0;
+      color: #f3fafc;
+      font-size: 18px;
+      font-weight: 680;
+    }
+
+    .drawer-subtitle {
+      margin-top: 5px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 10px;
+    }
+
+    .drawer-body {
+      padding: 20px 22px 34px;
+    }
+
+    .evidence-chain {
+      display: grid;
+      grid-template-columns: 1fr 26px 1fr 26px 1fr;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+
+    .chain-node {
+      min-height: 78px;
+      padding: 11px;
+      border: 1px solid var(--line-strong);
+      border-radius: 11px;
+      background: rgba(255, 255, 255, 0.025);
+    }
+
+    .chain-node .node-kicker {
+      color: var(--muted-2);
+      font-size: 8px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .chain-node .node-value {
+      margin-top: 9px;
+      color: #e7f1f4;
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .chain-node .node-meta {
+      margin-top: 4px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 8px;
+    }
+
+    .chain-arrow {
+      color: #52717e;
+      text-align: center;
+    }
+
+    .detail-section {
+      margin-top: 14px;
+      padding: 15px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.018);
+    }
+
+    .detail-section h3 {
+      margin: 0 0 12px;
+      color: #9eb2bc;
+      font-size: 9px;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 18px;
+    }
+
+    .detail-item span {
+      display: block;
+      color: var(--muted-2);
+      font-size: 8px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .detail-item strong {
+      display: block;
+      margin-top: 4px;
+      overflow-wrap: anywhere;
+      color: #d9e7eb;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 550;
+    }
+
+    .evidence-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .evidence-list li {
+      display: grid;
+      grid-template-columns: 12px 1fr;
+      gap: 8px;
+      color: #9bb0ba;
+      font-size: 10px;
+      line-height: 1.45;
+    }
+
+    .evidence-check {
+      color: var(--lime);
+    }
+
+    .evidence-warn {
+      color: var(--orange);
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      z-index: 70;
+      inset: 0;
+      display: none;
+      place-items: center;
+      padding: 18px;
+      background: rgba(2, 9, 13, 0.76);
+      backdrop-filter: blur(8px);
+    }
+
+    .modal-backdrop.open {
+      display: grid;
+    }
+
+    .modal {
+      width: min(700px, 100%);
+      max-height: 92vh;
+      overflow: auto;
+      border: 1px solid var(--line-strong);
+      border-radius: 18px;
+      background: #0c202b;
+      box-shadow: var(--shadow);
+    }
+
+    .modal-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 21px 22px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .modal h2 {
+      margin: 0;
+      color: #f0f8fa;
+      font-size: 19px;
+    }
+
+    .modal-lead {
+      margin: 7px 0 0;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
+    .modal-body {
+      padding: 18px 22px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 13px;
+    }
+
+    .form-group {
+      display: grid;
+      gap: 6px;
+    }
+
+    .form-group.full {
+      grid-column: 1 / -1;
+    }
+
+    .form-group label {
+      color: #8298a4;
+      font-size: 9px;
+      font-weight: 650;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .modal input {
+      width: 100%;
+      padding: 8px 10px;
+      font-family: var(--mono);
+    }
+
+    .reader-grid {
+      display: grid;
+      gap: 8px;
+      margin-top: 13px;
+      padding-top: 13px;
+      border-top: 1px solid var(--line);
+    }
+
+    .reader-row {
+      display: grid;
+      grid-template-columns: 130px 1fr;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .reader-row label {
+      color: #718995;
+      font-family: var(--mono);
+      font-size: 9px;
+    }
+
+    .connection-note {
+      margin-top: 15px;
+      padding: 12px 13px;
+      border: 1px solid rgba(255, 184, 106, 0.24);
+      border-radius: 10px;
+      color: #aebcc2;
+      background: rgba(255, 184, 106, 0.055);
+      font-size: 10px;
+      line-height: 1.55;
+    }
+
+    .connection-note strong {
+      color: var(--orange);
+    }
+
+    details {
+      margin-top: 13px;
+      color: #8fa3ad;
+      font-size: 10px;
+      line-height: 1.55;
+    }
+
+    summary {
+      color: #bad0d7;
+      cursor: pointer;
+      font-weight: 650;
+    }
+
+    details code {
+      color: var(--cyan);
+      font-family: var(--mono);
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 9px;
+      padding: 15px 22px 20px;
+    }
+
+    .toast {
+      position: fixed;
+      z-index: 90;
+      right: 20px;
+      bottom: 20px;
+      max-width: 420px;
+      padding: 11px 14px;
+      border: 1px solid var(--line-strong);
+      border-radius: 11px;
+      color: #cfdee3;
+      background: #102833;
+      box-shadow: var(--shadow);
+      font-size: 10px;
+      line-height: 1.45;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(12px);
+      transition: 180ms ease;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @media (max-width: 1120px) {
+      .metric-grid {
+        grid-template-columns: repeat(3, minmax(150px, 1fr));
+      }
+
+      .face-grid {
+        grid-template-columns: repeat(2, minmax(190px, 1fr));
+      }
+
+      .hero {
+        grid-template-columns: 1fr;
+      }
+
+      .session-card {
+        width: 100%;
+      }
+    }
+
+    @media (max-width: 700px) {
+      .topbar {
+        align-items: flex-start;
+      }
+
+      .brand-meta,
+      .source-chip .source-text,
+      .top-actions .btn:not(.primary) {
+        display: none;
+      }
+
+      main {
+        padding: 22px 12px;
+      }
+
+      .metric-grid {
+        grid-template-columns: repeat(2, minmax(130px, 1fr));
+      }
+
+      .metric {
+        min-height: 92px;
+      }
+
+      .face-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .workspace-header,
+      .footnote {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .form-group.full {
+        grid-column: auto;
+      }
+
+      .reader-row {
+        grid-template-columns: 1fr;
+      }
+
+      .evidence-chain {
+        grid-template-columns: 1fr;
+        gap: 7px;
+      }
+
+      .chain-arrow {
+        transform: rotate(90deg);
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true"><span></span></div>
+      <div class="brand-copy">
+        <div class="brand-name">Radar correlation workspace</div>
+        <div class="brand-meta">Connext DDS · Multi-topic live view 4.2</div>
+      </div>
+    </div>
+    <div class="top-actions">
+      <div class="source-chip" id="sourceChip" title="Current data source">
+        <span class="source-dot"></span>
+        <span class="source-text" id="sourceText">Demo stream</span>
+      </div>
+      <button class="btn" id="demoToggle" type="button">Pause demo</button>
+      <button class="btn primary" id="openConnection" type="button">Connect live</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Live detection lineage</p>
+        <h1>Which beam is producing each detection?</h1>
+        <p>
+          Every incoming detection is correlated at arrival time with the completed
+          raw-return dwell, its exact beam command, and the applicable pattern state.
+          Select any retained row to inspect the evidence.
+        </p>
+      </div>
+      <div class="session-card">
+        <span class="label">Subscription session</span>
+        <div class="session-time" id="sessionTime">—</div>
+        <div class="session-note" id="sessionNote">
+          Rows cover this browser session only. Pre-subscription volatile data is unavailable.
+        </div>
+      </div>
+    </section>
+
+    <section class="metric-grid" aria-label="Live correlation metrics">
+      <article class="metric">
+        <span class="label">Retained detections</span>
+        <div class="metric-value" id="rowCount">0</div>
+        <div class="metric-trend">in-memory enriched rows</div>
+      </article>
+      <article class="metric">
+        <span class="label">Detection rate</span>
+        <div class="metric-value"><span id="rateValue">0.0</span> <small>/ sec</small></div>
+        <div class="metric-trend">rolling 10-second window</div>
+      </article>
+      <article class="metric">
+        <span class="label">High confidence</span>
+        <div class="metric-value"><span id="confidenceValue">0</span><small>%</small></div>
+        <div class="metric-trend">transition + command + pointing</div>
+      </article>
+      <article class="metric">
+        <span class="label">Unresolved</span>
+        <div class="metric-value" id="unresolvedValue">0</div>
+        <div class="metric-trend">no defensible producing dwell</div>
+      </article>
+      <article class="metric">
+        <span class="label">Raw metadata rate</span>
+        <div class="metric-value"><span id="rawRateValue">0</span> <small>/ sec</small></div>
+        <div class="metric-trend">I/Q discarded at adapter boundary</div>
+      </article>
+    </section>
+
+    <section class="face-grid" id="faceGrid" aria-label="Per-face dwell state"></section>
+
+    <section class="workspace">
+      <div class="workspace-header">
+        <div>
+          <h2 class="workspace-title">Enriched detection stream</h2>
+          <div class="workspace-subtitle">
+            Retained rows remain inspectable after source correlation buffers expire.
+          </div>
+        </div>
+        <div class="top-actions">
+          <button class="btn" id="exportCsv" type="button">Export CSV</button>
+          <button class="btn danger" id="clearRows" type="button">Clear history</button>
+        </div>
+      </div>
+
+      <div class="toolbar" aria-label="Detection filters">
+        <div class="field">
+          <span class="search-icon">⌕</span>
+          <input id="searchFilter" type="search" placeholder="Detection or beam ID">
+        </div>
+        <div class="field">
+          <select id="faceFilter" aria-label="Filter by face">
+            <option value="">All faces</option>
+            <option value="0">FS · Forward Starboard</option>
+            <option value="1">AS · Aft Starboard</option>
+            <option value="2">AP · Aft Port</option>
+            <option value="3">FP · Forward Port</option>
+          </select>
+        </div>
+        <div class="field">
+          <select id="modeFilter" aria-label="Filter by beam mode">
+            <option value="">All modes</option>
+            <option value="SEARCH">Search</option>
+            <option value="TRACK">Track</option>
+            <option value="CONFIRM">Confirm</option>
+            <option value="CALIBRATE">Calibrate</option>
+          </select>
+        </div>
+        <div class="field">
+          <select id="confidenceFilter" aria-label="Filter by confidence">
+            <option value="">All confidence</option>
+            <option value="RECONSTRUCTED_HIGH">High</option>
+            <option value="RECONSTRUCTED_MEDIUM">Medium</option>
+            <option value="RECONSTRUCTED_LOW">Low</option>
+            <option value="UNRESOLVED">Unresolved</option>
+          </select>
+        </div>
+        <div class="field">
+          <input id="snrFilter" type="number" step="1" placeholder="Min SNR dB" style="padding-left:10px;width:112px">
+        </div>
+        <button class="btn" id="resetFilters" type="button">Reset</button>
+        <span class="toolbar-spacer"></span>
+        <span class="result-count" id="resultCount">0 visible</span>
+      </div>
+
+      <div class="table-shell" id="tableShell">
+        <table aria-label="Detection to beam correlation table">
+          <thead>
+            <tr>
+              <th colspan="7">DetectionEvent</th>
+              <th colspan="7">Producing dwell + BeamCommand</th>
+              <th colspan="3">BeamPatternStatus</th>
+              <th colspan="3">Correlation evidence</th>
+            </tr>
+            <tr>
+              <th>Event time</th>
+              <th>Face</th>
+              <th>Detection</th>
+              <th>Range</th>
+              <th>Az / El</th>
+              <th>SNR</th>
+              <th>Amplitude</th>
+              <th>Beam</th>
+              <th>A → B</th>
+              <th>Raw n</th>
+              <th>Mode</th>
+              <th>Cmd az / el</th>
+              <th>Dwell</th>
+              <th>Priority</th>
+              <th>RMA mask</th>
+              <th>Gain loss</th>
+              <th>3 dB width</th>
+              <th>Δ transition</th>
+              <th>Δ pointing</th>
+              <th>Confidence</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+        <div class="empty" id="emptyState">
+          <div>
+            <div class="empty-ring"></div>
+            <strong>No correlated detections yet</strong>
+            <span>Wait for live samples, change the filters, or start the demo stream.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="footnote">
+        <span>
+          Attribution is reconstructed because <code>DetectionEvent</code> does not carry
+          <code>beam_id</code>.
+        </span>
+        <span id="bufferStatus">Raw metadata buffer: 0 transitions · Commands: 0 · Patterns: 0</span>
+      </div>
+    </section>
+  </main>
+
+  <aside class="drawer" id="detailDrawer" aria-label="Correlation detail">
+    <div class="drawer-header">
+      <div>
+        <h2 class="drawer-title" id="drawerTitle">Detection</h2>
+        <div class="drawer-subtitle" id="drawerSubtitle"></div>
+      </div>
+      <button class="btn icon-only" id="closeDrawer" type="button" aria-label="Close detail">×</button>
+    </div>
+    <div class="drawer-body">
+      <div class="evidence-chain" id="evidenceChain"></div>
+      <div id="drawerSections"></div>
+      <div class="modal-actions" style="padding:16px 0 0">
+        <button class="btn" id="copyJson" type="button">Copy row JSON</button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="modal-backdrop" id="connectionModal" role="dialog" aria-modal="true" aria-labelledby="connectionTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h2 id="connectionTitle">Connect to DDS through Web Integration Service</h2>
+          <p class="modal-lead">
+            The service owns the DDS participant and readers. This page binds those
+            readers sequentially to one WebSocket and receives JSON
+            <code>B_PUSH</code> messages.
+          </p>
+        </div>
+        <button class="btn icon-only" id="closeConnection" type="button" aria-label="Close connection dialog">×</button>
+      </div>
+      <form id="connectionForm">
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group full">
+              <label for="wisEndpoint">Web Integration Service HTTP endpoint</label>
+              <input id="wisEndpoint" name="endpoint" value="http://localhost:18080" required>
+            </div>
+            <div class="form-group">
+              <label for="wisApplication">Application</label>
+              <input id="wisApplication" name="application" value="RadarLiveViewApp" required>
+            </div>
+            <div class="form-group">
+              <label for="wisParticipant">Domain participant</label>
+              <input id="wisParticipant" name="participant" value="RadarParticipant" required>
+            </div>
+            <div class="form-group">
+              <label for="wisSubscriber">Subscriber</label>
+              <input id="wisSubscriber" name="subscriber" value="RadarSubscriber" required>
+            </div>
+            <div class="form-group">
+              <label for="wisApiKey">API key</label>
+              <input id="wisApiKey" name="apiKey" value="" placeholder="Empty when access control is disabled">
+            </div>
+          </div>
+
+          <div class="reader-grid">
+            <div class="reader-row">
+              <label for="readerDetection">DetectionEvent</label>
+              <input id="readerDetection" value="DetectionEventReader" required>
+            </div>
+            <div class="reader-row">
+              <label for="readerRaw">RawReturn</label>
+              <input id="readerRaw" value="RawReturnReader" required>
+            </div>
+            <div class="reader-row">
+              <label for="readerCommand">BeamCommand</label>
+              <input id="readerCommand" value="BeamCommandReader" required>
+            </div>
+            <div class="reader-row">
+              <label for="readerPattern">BeamPatternStatus</label>
+              <input id="readerPattern" value="BeamPatternStatusReader" required>
+            </div>
+          </div>
+
+          <div class="connection-note">
+            <strong>Prerequisite:</strong> Start Web Integration Service with
+            <code>config/radar_live_view_wis.xml</code> and WebSockets enabled. Serve
+            this file from its document root for a same-origin connection. Direct
+            <code>file://</code> loading may cause the REST setup request to be blocked
+            by browser origin policy. The supplied configuration uses appendable-type
+            projections, so <code>iq_samples</code> and
+            <code>azimuth_pattern_db</code> never cross the web boundary.
+          </div>
+
+          <details>
+            <summary>Future Connext Studio host-injection contract</summary>
+            A Studio custom-view host can bypass Web Integration Service and call
+            <code>window.radarDetectionBeamView.ingest(topicName, data, metadata)</code>
+            for every valid sample. Topic names are the four names shown above. The
+            same correlation engine and UI are used.
+          </details>
+        </div>
+        <div class="modal-actions">
+          <button class="btn" id="useDemo" type="button">Use demo data</button>
+          <button class="btn primary" type="submit">Connect and bind readers</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <script>
+    "use strict";
+
+    const FACE_INFO = [
+      { name: "Forward Starboard", short: "FS", color: "#63e6e2", center: 45 },
+      { name: "Aft Starboard", short: "AS", color: "#b7ef61", center: 135 },
+      { name: "Aft Port", short: "AP", color: "#ffb86a", center: 225 },
+      { name: "Forward Port", short: "FP", color: "#b99aff", center: 315 }
+    ];
+
+    const TOPICS = {
+      detection: "Radar/DetectionEvent",
+      raw: "Radar/RawReturn",
+      command: "Radar/BeamCommand",
+      pattern: "Radar/BeamPatternStatus"
+    };
+
+    const BIND_TO_TOPIC = {
+      detection: TOPICS.detection,
+      raw: TOPICS.raw,
+      command: TOPICS.command,
+      pattern: TOPICS.pattern
+    };
+
+    const MAX_ROWS = 5000;
+    const MAX_RENDERED_ROWS = 350;
+    const MAX_TRANSITIONS_PER_FACE = 240;
+    const MAX_PATTERNS_PER_FACE = 800;
+    const JOIN_GRACE_MS = 70;
+    const TRANSITION_WINDOW_BEFORE_MS = 28;
+    const TRANSITION_WINDOW_AFTER_MS = 12;
+    const AZ_TOLERANCE_DEG = 0.15;
+    const EL_TOLERANCE_DEG = 0.08;
+
+    const state = {
+      source: "demo",
+      sourceStatus: "live",
+      sessionId: "",
+      sessionStarted: 0,
+      currentDwells: [null, null, null, null],
+      transitions: [[], [], [], []],
+      commands: new Map(),
+      patterns: [[], [], [], []],
+      pendingDetections: new Map(),
+      seenDetections: new Set(),
+      rows: [],
+      selectedKey: null,
+      detectionTimes: [],
+      rawTimes: [],
+      sampleCounts: { detection: 0, raw: 0, command: 0, pattern: 0 },
+      demo: { timer: null, running: false, detectionId: 4800, beamIds: [9200, 18400, 27600, 36800] },
+      wis: null,
+      renderTimer: null,
+      toastTimer: null
+    };
+
+    const el = id => document.getElementById(id);
+    const tableBody = el("tableBody");
+    const faceGrid = el("faceGrid");
+
+    function escapeHtml(value) {
+      return String(value ?? "—")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function number(value, digits = 1, fallback = "—") {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed.toFixed(digits) : fallback;
+    }
+
+    function integer(value, fallback = "—") {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? Math.round(parsed).toString() : fallback;
+    }
+
+    function epochOf(data, info) {
+      const direct = Number(data?.timestamp?.epoch_millis);
+      if (Number.isFinite(direct) && direct > 0) return direct;
+      const sec = Number(info?.source_timestamp?.sec);
+      const nanosec = Number(info?.source_timestamp?.nanosec);
+      if (Number.isFinite(sec)) return sec * 1000 + (Number.isFinite(nanosec) ? nanosec / 1e6 : 0);
+      return Date.now();
+    }
+
+    function clock(epoch) {
+      if (!Number.isFinite(Number(epoch))) return "—";
+      const date = new Date(Number(epoch));
+      return date.toLocaleTimeString([], {
+        hour12: false,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        fractionalSecondDigits: 3
+      });
+    }
+
+    function iso(epoch) {
+      try {
+        return new Date(Number(epoch)).toISOString();
+      } catch {
+        return "—";
+      }
+    }
+
+    function circularDelta(a, b) {
+      const first = Number(a);
+      const second = Number(b);
+      if (!Number.isFinite(first) || !Number.isFinite(second)) return NaN;
+      return ((first - second + 540) % 360) - 180;
+    }
+
+    function modeName(mode) {
+      if (typeof mode === "number") return ["SEARCH", "TRACK", "CONFIRM", "CALIBRATE"][mode] || String(mode);
+      const text = String(mode ?? "UNKNOWN").toUpperCase();
+      return text.replace("BEAM_MODE_", "");
+    }
+
+    function maskHex(mask) {
+      const parsed = Number(mask);
+      if (!Number.isFinite(parsed)) return "—";
+      return "0x" + (parsed >>> 0).toString(16).toUpperCase().padStart(4, "0");
+    }
+
+    function confidenceClass(confidence) {
+      if (confidence === "RECONSTRUCTED_HIGH") return "confidence-high";
+      if (confidence === "RECONSTRUCTED_MEDIUM") return "confidence-medium";
+      if (confidence === "RECONSTRUCTED_LOW") return "confidence-low";
+      return "confidence-unresolved";
+    }
+
+    function confidenceLabel(confidence) {
+      return String(confidence || "UNRESOLVED").replace("RECONSTRUCTED_", "");
+    }
+
+    function newSession(source) {
+      state.sessionId = `${source}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+      state.sessionStarted = Date.now();
+      el("sessionTime").textContent = iso(state.sessionStarted);
+      el("sessionNote").textContent =
+        source === "demo"
+          ? "Synthetic topic samples. Switch to Web Integration Service for DDS data."
+          : "Only samples observed after this subscription time can be correlated.";
+    }
+
+    function setSource(source, status, message) {
+      state.source = source;
+      state.sourceStatus = status;
+      const chip = el("sourceChip");
+      chip.classList.toggle("live", status === "live");
+      chip.classList.toggle("error", status === "error");
+      el("sourceText").textContent = message || source;
+      el("demoToggle").style.display = source === "demo" ? "inline-flex" : "none";
+    }
+
+    function showToast(message) {
+      const toast = el("toast");
+      toast.textContent = message;
+      toast.classList.add("show");
+      clearTimeout(state.toastTimer);
+      state.toastTimer = setTimeout(() => toast.classList.remove("show"), 3200);
+    }
+
+    function resetCorrelationState(clearRows = true) {
+      state.currentDwells = [null, null, null, null];
+      state.transitions = [[], [], [], []];
+      state.commands.clear();
+      state.patterns = [[], [], [], []];
+      for (const pending of state.pendingDetections.values()) clearTimeout(pending.timer);
+      state.pendingDetections.clear();
+      state.seenDetections.clear();
+      state.detectionTimes = [];
+      state.rawTimes = [];
+      state.sampleCounts = { detection: 0, raw: 0, command: 0, pattern: 0 };
+      if (clearRows) {
+        state.rows = [];
+        state.selectedKey = null;
+        closeDrawer();
+      }
+      scheduleRender(true);
+    }
+
+    function commandKey(face, beamId) {
+      return `${Number(face)}:${String(beamId)}`;
+    }
+
+    function normalizedRaw(data, info) {
+      return {
+        arrayId: Number(data.array_id),
+        beamId: Number(data.beam_id),
+        time: epochOf(data, info),
+        azimuth: Number(data.azimuth_deg),
+        elevation: Number(data.elevation_deg),
+        rangeBinCount: Number(data.range_bin_count),
+        instanceHandle: info?.instance_handle || null
+      };
+    }
+
+    function ingestRaw(data, info = {}) {
+      const sample = normalizedRaw(data, info);
+      if (!Number.isInteger(sample.arrayId) || sample.arrayId < 0 || sample.arrayId > 3) return;
+      if (!Number.isFinite(sample.beamId)) return;
+
+      state.sampleCounts.raw += 1;
+      state.rawTimes.push(performance.now());
+      const face = sample.arrayId;
+      const current = state.currentDwells[face];
+
+      if (!current) {
+        state.currentDwells[face] = {
+          face,
+          beamId: sample.beamId,
+          firstTime: sample.time,
+          lastTime: sample.time,
+          azimuth: sample.azimuth,
+          elevation: sample.elevation,
+          sampleCount: 1,
+          rangeBinCount: sample.rangeBinCount
+        };
+      } else if (current.beamId === sample.beamId) {
+        current.lastTime = sample.time;
+        current.sampleCount += 1;
+        current.rangeBinCount = sample.rangeBinCount;
+      } else {
+        const transition = {
+          face,
+          producing: { ...current },
+          nextBeamId: sample.beamId,
+          transitionTime: sample.time,
+          observedAt: performance.now()
+        };
+        state.transitions[face].unshift(transition);
+        if (state.transitions[face].length > MAX_TRANSITIONS_PER_FACE) {
+          state.transitions[face].length = MAX_TRANSITIONS_PER_FACE;
+        }
+        state.currentDwells[face] = {
+          face,
+          beamId: sample.beamId,
+          firstTime: sample.time,
+          lastTime: sample.time,
+          azimuth: sample.azimuth,
+          elevation: sample.elevation,
+          sampleCount: 1,
+          rangeBinCount: sample.rangeBinCount
+        };
+        resolvePending(false);
+      }
+
+      scheduleRender();
+    }
+
+    function ingestCommand(data, info = {}) {
+      const face = Number(data.scheduler_id);
+      const beamId = Number(data.beam_id);
+      if (!Number.isInteger(face) || face < 0 || face > 3 || !Number.isFinite(beamId)) return;
+
+      const command = {
+        schedulerId: face,
+        beamId,
+        time: epochOf(data, info),
+        azimuth: Number(data.azimuth_deg),
+        elevation: Number(data.elevation_deg),
+        dwellTimeUs: Number(data.dwell_time_us),
+        mode: modeName(data.mode),
+        priority: Number(data.priority),
+        info
+      };
+      state.commands.set(commandKey(face, beamId), command);
+      state.sampleCounts.command += 1;
+
+      while (state.commands.size > 16000) {
+        const first = state.commands.keys().next().value;
+        state.commands.delete(first);
+      }
+      resolvePending(false);
+      scheduleRender();
+    }
+
+    function ingestPattern(data, info = {}) {
+      const face = Number(data.array_id);
+      if (!Number.isInteger(face) || face < 0 || face > 3) return;
+
+      state.patterns[face].push({
+        arrayId: face,
+        beamId: Number(data.beam_id),
+        time: epochOf(data, info),
+        rmaMask: Number(data.rma_offline_mask),
+        commandedAzimuth: Number(data.commanded_azimuth_deg),
+        boresightError: Number(data.boresight_error_deg),
+        gainLoss: Number(data.gain_loss_db),
+        beamwidth: Number(data.beamwidth_3db_deg),
+        peakSidelobe: Number(data.peak_sidelobe_level_db),
+        info
+      });
+      if (state.patterns[face].length > MAX_PATTERNS_PER_FACE) {
+        state.patterns[face].splice(0, state.patterns[face].length - MAX_PATTERNS_PER_FACE);
+      }
+      state.sampleCounts.pattern += 1;
+      resolvePending(false);
+      scheduleRender();
+    }
+
+    function detectionIdentity(data, info) {
+      const writer = info?.publication_handle || info?.instance_handle || state.sessionId;
+      return `${writer}:${Number(data.sensor_id)}:${String(data.detection_id)}`;
+    }
+
+    function ingestDetection(data, info = {}) {
+      const face = Number(data.sensor_id);
+      if (!Number.isInteger(face) || face < 0 || face > 3) return;
+
+      const key = detectionIdentity(data, info);
+      if (state.seenDetections.has(key) || state.pendingDetections.has(key)) return;
+
+      const pending = {
+        key,
+        data: {
+          sensorId: face,
+          detectionId: Number(data.detection_id),
+          time: epochOf(data, info),
+          range: Number(data.range_m),
+          azimuth: Number(data.azimuth_deg),
+          elevation: Number(data.elevation_deg),
+          amplitude: Number(data.amplitude),
+          snr: Number(data.snr_db),
+          shipPosition: data.ship_position || null
+        },
+        info,
+        receivedAt: performance.now(),
+        timer: null
+      };
+
+      state.sampleCounts.detection += 1;
+      state.detectionTimes.push(performance.now());
+      state.pendingDetections.set(key, pending);
+      pending.timer = setTimeout(() => finalizePending(key, true), JOIN_GRACE_MS);
+      finalizePending(key, false);
+      scheduleRender();
+    }
+
+    function findTransition(detection) {
+      const candidates = state.transitions[detection.sensorId]
+        .map(transition => {
+          const deltaTime = detection.time - transition.transitionTime;
+          const deltaAzimuth = Math.abs(circularDelta(detection.azimuth, transition.producing.azimuth));
+          const deltaElevation = Math.abs(detection.elevation - transition.producing.elevation);
+          const inTime =
+            deltaTime >= -TRANSITION_WINDOW_AFTER_MS &&
+            deltaTime <= TRANSITION_WINDOW_BEFORE_MS;
+          const score =
+            Math.abs(deltaTime) * 0.16 +
+            (Number.isFinite(deltaAzimuth) ? deltaAzimuth * 5 : 40) +
+            (Number.isFinite(deltaElevation) ? deltaElevation * 12 : 40);
+          return { transition, deltaTime, deltaAzimuth, deltaElevation, inTime, score };
+        })
+        .filter(candidate => candidate.inTime)
+        .sort((a, b) => a.score - b.score);
+
+      if (!candidates.length) return { best: null, ambiguous: false, candidates: [] };
+      const ambiguous =
+        candidates.length > 1 &&
+        Math.abs(candidates[1].score - candidates[0].score) < 0.18;
+      return { best: candidates[0], ambiguous, candidates };
+    }
+
+    function fallbackCommand(detection) {
+      const candidates = [];
+      for (const command of state.commands.values()) {
+        if (command.schedulerId !== detection.sensorId) continue;
+        const age = detection.time - command.time;
+        if (age < -12 || age > 60) continue;
+        const da = Math.abs(circularDelta(detection.azimuth, command.azimuth));
+        const de = Math.abs(detection.elevation - command.elevation);
+        if (da > 0.4 || de > 0.2) continue;
+        candidates.push({ command, score: Math.abs(age) * 0.03 + da * 3 + de * 7 });
+      }
+      candidates.sort((a, b) => a.score - b.score);
+      if (!candidates.length) return { command: null, ambiguous: false };
+      const ambiguous =
+        candidates.length > 1 &&
+        Math.abs(candidates[1].score - candidates[0].score) < 0.14;
+      return { command: ambiguous ? null : candidates[0].command, ambiguous };
+    }
+
+    function findPattern(face, beamId, eventTime) {
+      const patterns = state.patterns[face];
+      let asOf = null;
+      for (let index = patterns.length - 1; index >= 0; index -= 1) {
+        const pattern = patterns[index];
+        if (pattern.time <= eventTime && !asOf) asOf = pattern;
+        if (pattern.beamId === beamId && pattern.time <= eventTime + 12) {
+          return { pattern, joinType: "EXACT_BEAM", ageMs: eventTime - pattern.time };
+        }
+      }
+      return asOf
+        ? { pattern: asOf, joinType: "AS_OF_FACE", ageMs: eventTime - asOf.time }
+        : { pattern: null, joinType: "MISSING", ageMs: null };
+    }
+
+    function resolvePending(force) {
+      for (const key of Array.from(state.pendingDetections.keys())) {
+        finalizePending(key, force);
+      }
+    }
+
+    function finalizePending(key, force) {
+      const pending = state.pendingDetections.get(key);
+      if (!pending) return;
+
+      const detection = pending.data;
+      const transitionResult = findTransition(detection);
+      const candidate = transitionResult.best;
+      const producingBeamId = candidate?.transition?.producing?.beamId;
+      const exactCommand = candidate
+        ? state.commands.get(commandKey(detection.sensorId, producingBeamId))
+        : null;
+
+      if (!force && (!candidate || !exactCommand)) return;
+
+      clearTimeout(pending.timer);
+      state.pendingDetections.delete(key);
+      state.seenDetections.add(key);
+
+      let transition = candidate?.transition || null;
+      let command = exactCommand;
+      let fallback = false;
+      let fallbackAmbiguous = false;
+
+      if (!transition && force) {
+        const result = fallbackCommand(detection);
+        command = result.command;
+        fallbackAmbiguous = result.ambiguous;
+        fallback = Boolean(command);
+      }
+
+      const patternResult = findPattern(
+        detection.sensorId,
+        transition?.producing?.beamId ?? command?.beamId,
+        transition?.transitionTime ?? detection.time
+      );
+
+      const deltaAzimuth = transition
+        ? Math.abs(circularDelta(detection.azimuth, transition.producing.azimuth))
+        : command
+          ? Math.abs(circularDelta(detection.azimuth, command.azimuth))
+          : NaN;
+      const deltaElevation = transition
+        ? Math.abs(detection.elevation - transition.producing.elevation)
+        : command
+          ? Math.abs(detection.elevation - command.elevation)
+          : NaN;
+      const pointingOk =
+        Number.isFinite(deltaAzimuth) &&
+        Number.isFinite(deltaElevation) &&
+        deltaAzimuth <= AZ_TOLERANCE_DEG &&
+        deltaElevation <= EL_TOLERANCE_DEG;
+
+      let confidence = "UNRESOLVED";
+      let status = "NO_DEFENSIBLE_DWELL";
+      const evidence = [];
+
+      if (transition) {
+        evidence.push({
+          ok: true,
+          text: `Observed RawReturn transition ${transition.producing.beamId} → ${transition.nextBeamId} on face ${detection.sensorId}.`
+        });
+        if (command) {
+          evidence.push({
+            ok: true,
+            text: `Exact BeamCommand join on scheduler_id ${detection.sensorId} and beam_id ${transition.producing.beamId}.`
+          });
+        } else {
+          evidence.push({ ok: false, text: "The exact BeamCommand was not observed before the join deadline." });
+        }
+        evidence.push({
+          ok: pointingOk,
+          text: `Detection/raw pointing deltas are ${number(deltaAzimuth, 3)}° azimuth and ${number(deltaElevation, 3)}° elevation.`
+        });
+        evidence.push({
+          ok: Boolean(patternResult.pattern),
+          text: patternResult.pattern
+            ? `Pattern state joined as ${patternResult.joinType}; state age ${number(patternResult.ageMs, 0)} ms.`
+            : "No applicable BeamPatternStatus was retained."
+        });
+
+        if (command && pointingOk && transition.producing.sampleCount >= 8) {
+          confidence = "RECONSTRUCTED_HIGH";
+          status = "TRANSITION_COMMAND_POINTING";
+        } else if (command || pointingOk) {
+          confidence = "RECONSTRUCTED_MEDIUM";
+          status = "PARTIAL_TRANSITION_EVIDENCE";
+        } else {
+          confidence = "RECONSTRUCTED_LOW";
+          status = "TRANSITION_ONLY";
+        }
+      } else if (fallback) {
+        confidence = "RECONSTRUCTED_LOW";
+        status = "COMMAND_PROXIMITY_ONLY";
+        evidence.push({
+          ok: false,
+          text: "No RawReturn beam transition was observed; attribution uses a unique nearby command with matching pointing."
+        });
+      } else {
+        evidence.push({
+          ok: false,
+          text: fallbackAmbiguous
+            ? "Multiple nearby BeamCommand candidates were equally plausible."
+            : "No RawReturn transition or unique command candidate was available."
+        });
+      }
+
+      const row = {
+        key,
+        sessionId: state.sessionId,
+        source: state.source,
+        detection,
+        detectionMetadata: {
+          instanceHandle: pending.info?.instance_handle || null,
+          publicationHandle: pending.info?.publication_handle || null,
+          validData: pending.info?.valid_data ?? true
+        },
+        transition,
+        command,
+        pattern: patternResult.pattern,
+        patternJoinType: patternResult.joinType,
+        patternAgeMs: patternResult.ageMs,
+        deltaTransitionMs: transition ? detection.time - transition.transitionTime : null,
+        commandToDwellMs:
+          transition && command ? transition.producing.firstTime - command.time : null,
+        deltaAzimuth,
+        deltaElevation,
+        confidence,
+        status,
+        evidence,
+        materializedAt: Date.now()
+      };
+
+      state.rows.unshift(row);
+      if (state.rows.length > MAX_ROWS) {
+        const removed = state.rows.splice(MAX_ROWS);
+        for (const oldRow of removed) state.seenDetections.delete(oldRow.key);
+      }
+      scheduleRender(true);
+    }
+
+    function ingest(topicName, data, metadata = {}) {
+      const topic = String(topicName);
+      if (topic === TOPICS.raw || topic.endsWith("/RawReturn") || topic === "raw") {
+        ingestRaw(data, metadata);
+      } else if (topic === TOPICS.command || topic.endsWith("/BeamCommand") || topic === "command") {
+        ingestCommand(data, metadata);
+      } else if (topic === TOPICS.pattern || topic.endsWith("/BeamPatternStatus") || topic === "pattern") {
+        ingestPattern(data, metadata);
+      } else if (topic === TOPICS.detection || topic.endsWith("/DetectionEvent") || topic === "detection") {
+        ingestDetection(data, metadata);
+      }
+    }
+
+    function scheduleRender(immediate = false) {
+      if (state.renderTimer) return;
+      state.renderTimer = setTimeout(() => {
+        state.renderTimer = null;
+        render();
+      }, immediate ? 0 : 90);
+    }
+
+    function activeFilters() {
+      return {
+        query: el("searchFilter").value.trim().toLowerCase(),
+        face: el("faceFilter").value,
+        mode: el("modeFilter").value,
+        confidence: el("confidenceFilter").value,
+        snr: Number(el("snrFilter").value)
+      };
+    }
+
+    function filteredRows() {
+      const filters = activeFilters();
+      const hasSnr = el("snrFilter").value !== "" && Number.isFinite(filters.snr);
+      return state.rows.filter(row => {
+        if (filters.face !== "" && row.detection.sensorId !== Number(filters.face)) return false;
+        if (filters.mode && row.command?.mode !== filters.mode) return false;
+        if (filters.confidence && row.confidence !== filters.confidence) return false;
+        if (hasSnr && row.detection.snr < filters.snr) return false;
+        if (filters.query) {
+          const haystack = [
+            row.detection.detectionId,
+            row.transition?.producing?.beamId,
+            row.command?.beamId,
+            FACE_INFO[row.detection.sensorId]?.short
+          ].join(" ").toLowerCase();
+          if (!haystack.includes(filters.query)) return false;
+        }
+        return true;
+      });
+    }
+
+    function renderFaceCards() {
+      faceGrid.innerHTML = FACE_INFO.map((faceInfo, face) => {
+        const current = state.currentDwells[face];
+        const transition = state.transitions[face][0];
+        const command = current ? state.commands.get(commandKey(face, current.beamId)) : null;
+        return `
+          <article class="face-card" style="--face-color:${faceInfo.color}">
+            <div class="face-top">
+              <span class="face-name">${faceInfo.short} · ${escapeHtml(faceInfo.name)}</span>
+              <span class="face-rate">${current ? integer(current.sampleCount) + " raw" : "waiting"}</span>
+            </div>
+            <div class="face-beam">${current ? "BEAM " + integer(current.beamId) : "NO DWELL"}</div>
+            <div class="face-detail">
+              <span>${current ? number(current.azimuth, 1) + "° az" : "—"}</span>
+              <span>${current ? number(current.elevation, 1) + "° el" : "—"}</span>
+              <span>${command ? escapeHtml(command.mode) : "—"}</span>
+              <span>${transition ? integer(transition.producing.beamId) + "→" + integer(transition.nextBeamId) : "—"}</span>
+            </div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    function renderMetrics() {
+      const now = performance.now();
+      state.detectionTimes = state.detectionTimes.filter(time => now - time <= 10000);
+      state.rawTimes = state.rawTimes.filter(time => now - time <= 1000);
+      const high = state.rows.filter(row => row.confidence === "RECONSTRUCTED_HIGH").length;
+      const unresolved = state.rows.filter(row => row.confidence === "UNRESOLVED").length;
+      el("rowCount").textContent = state.rows.length.toLocaleString();
+      el("rateValue").textContent = (state.detectionTimes.length / 10).toFixed(1);
+      el("confidenceValue").textContent = state.rows.length ? Math.round(high * 100 / state.rows.length) : "0";
+      el("unresolvedValue").textContent = unresolved.toLocaleString();
+      el("rawRateValue").textContent = state.rawTimes.length.toLocaleString();
+    }
+
+    function renderTable() {
+      const rows = filteredRows();
+      el("resultCount").textContent =
+        `${rows.length.toLocaleString()} visible · showing ${Math.min(rows.length, MAX_RENDERED_ROWS).toLocaleString()}`;
+
+      tableBody.innerHTML = rows.slice(0, MAX_RENDERED_ROWS).map(row => {
+        const face = FACE_INFO[row.detection.sensorId] || FACE_INFO[0];
+        const producing = row.transition?.producing;
+        const transitionLabel = row.transition
+          ? `${integer(producing.beamId)}→${integer(row.transition.nextBeamId)}`
+          : "—";
+        const selected = row.key === state.selectedKey ? " selected" : "";
+        return `
+          <tr class="${selected}" data-key="${escapeHtml(row.key)}">
+            <td class="cell-primary" title="${escapeHtml(iso(row.detection.time))}">${escapeHtml(clock(row.detection.time))}</td>
+            <td><span class="face-pill" style="--face-color:${face.color}" title="${escapeHtml(face.name)}">${face.short}</span></td>
+            <td class="cell-primary">${integer(row.detection.detectionId)}</td>
+            <td>${number(row.detection.range / 1000, 2)} km</td>
+            <td>${number(row.detection.azimuth, 2)}° / ${number(row.detection.elevation, 1)}°</td>
+            <td class="cell-primary">${number(row.detection.snr, 1)} dB</td>
+            <td>${number(row.detection.amplitude, 3)}</td>
+            <td class="cell-primary">${integer(producing?.beamId ?? row.command?.beamId)}</td>
+            <td>${transitionLabel}</td>
+            <td>${integer(producing?.sampleCount)}</td>
+            <td>${escapeHtml(row.command?.mode)}</td>
+            <td>${number(row.command?.azimuth, 1)}° / ${number(row.command?.elevation, 1)}°</td>
+            <td>${row.command ? number(row.command.dwellTimeUs / 1000, 1) + " ms" : "—"}</td>
+            <td>${integer(row.command?.priority)}</td>
+            <td>${escapeHtml(maskHex(row.pattern?.rmaMask))}</td>
+            <td>${row.pattern ? number(row.pattern.gainLoss, 2) + " dB" : "—"}</td>
+            <td>${row.pattern ? number(row.pattern.beamwidth, 2) + "°" : "—"}</td>
+            <td>${row.deltaTransitionMs == null ? "—" : number(row.deltaTransitionMs, 1) + " ms"}</td>
+            <td>${number(row.deltaAzimuth, 3)}° / ${number(row.deltaElevation, 3)}°</td>
+            <td><span class="confidence-chip ${confidenceClass(row.confidence)}">${confidenceLabel(row.confidence)}</span></td>
+          </tr>
+        `;
+      }).join("");
+
+      el("emptyState").classList.toggle("visible", rows.length === 0);
+      const transitionCount = state.transitions.reduce((sum, list) => sum + list.length, 0);
+      const patternCount = state.patterns.reduce((sum, list) => sum + list.length, 0);
+      el("bufferStatus").textContent =
+        `Raw metadata buffer: ${transitionCount.toLocaleString()} transitions · Commands: ${state.commands.size.toLocaleString()} · Patterns: ${patternCount.toLocaleString()}`;
+    }
+
+    function render() {
+      renderMetrics();
+      renderFaceCards();
+      renderTable();
+    }
+
+    function detailItem(label, value) {
+      return `<div class="detail-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
+    }
+
+    function openDrawer(row) {
+      if (!row) return;
+      state.selectedKey = row.key;
+      const face = FACE_INFO[row.detection.sensorId];
+      el("drawerTitle").textContent = `Detection ${integer(row.detection.detectionId)}`;
+      el("drawerSubtitle").textContent =
+        `${face.short} · ${clock(row.detection.time)} · materialized ${clock(row.materializedAt)}`;
+
+      const producing = row.transition?.producing;
+      el("evidenceChain").innerHTML = `
+        <div class="chain-node">
+          <div class="node-kicker">BeamCommand</div>
+          <div class="node-value">${row.command ? "#" + integer(row.command.beamId) : "Missing"}</div>
+          <div class="node-meta">${escapeHtml(row.command?.mode || "no exact join")}</div>
+        </div>
+        <div class="chain-arrow">→</div>
+        <div class="chain-node">
+          <div class="node-kicker">Raw boundary</div>
+          <div class="node-value">${row.transition ? integer(producing.beamId) + " → " + integer(row.transition.nextBeamId) : "Not observed"}</div>
+          <div class="node-meta">${producing ? integer(producing.sampleCount) + " pulses retained" : "command proximity only"}</div>
+        </div>
+        <div class="chain-arrow">→</div>
+        <div class="chain-node">
+          <div class="node-kicker">DetectionEvent</div>
+          <div class="node-value">#${integer(row.detection.detectionId)}</div>
+          <div class="node-meta">${number(row.detection.snr, 1)} dB SNR</div>
+        </div>
+      `;
+
+      const evidence = row.evidence.map(item => `
+        <li>
+          <span class="${item.ok ? "evidence-check" : "evidence-warn"}">${item.ok ? "●" : "▲"}</span>
+          <span>${escapeHtml(item.text)}</span>
+        </li>
+      `).join("");
+
+      el("drawerSections").innerHTML = `
+        <section class="detail-section">
+          <h3>Attribution result</h3>
+          <div class="detail-grid">
+            ${detailItem("Confidence", row.confidence)}
+            ${detailItem("Status", row.status)}
+            ${detailItem("Producing beam", producing?.beamId ?? row.command?.beamId ?? "—")}
+            ${detailItem("Pattern join", row.patternJoinType)}
+            ${detailItem("Detection ↔ transition", row.deltaTransitionMs == null ? "—" : number(row.deltaTransitionMs, 2) + " ms")}
+            ${detailItem("Command ↔ dwell", row.commandToDwellMs == null ? "—" : number(row.commandToDwellMs, 2) + " ms")}
+          </div>
+        </section>
+        <section class="detail-section">
+          <h3>Evidence</h3>
+          <ul class="evidence-list">${evidence}</ul>
+        </section>
+        <section class="detail-section">
+          <h3>DetectionEvent</h3>
+          <div class="detail-grid">
+            ${detailItem("Sensor / face", `${row.detection.sensorId} · ${face.name}`)}
+            ${detailItem("Detection ID", integer(row.detection.detectionId))}
+            ${detailItem("Timestamp", iso(row.detection.time))}
+            ${detailItem("Range", number(row.detection.range, 1) + " m")}
+            ${detailItem("Azimuth", number(row.detection.azimuth, 3) + "°")}
+            ${detailItem("Elevation", number(row.detection.elevation, 3) + "°")}
+            ${detailItem("Amplitude", number(row.detection.amplitude, 5))}
+            ${detailItem("SNR", number(row.detection.snr, 2) + " dB")}
+          </div>
+        </section>
+        <section class="detail-section">
+          <h3>Producing raw dwell</h3>
+          <div class="detail-grid">
+            ${detailItem("Array ID", producing?.face ?? "—")}
+            ${detailItem("Beam ID", producing?.beamId ?? "—")}
+            ${detailItem("First raw", producing ? iso(producing.firstTime) : "—")}
+            ${detailItem("Last raw", producing ? iso(producing.lastTime) : "—")}
+            ${detailItem("Observed samples", producing?.sampleCount ?? "—")}
+            ${detailItem("Range bins", producing?.rangeBinCount ?? "—")}
+            ${detailItem("Transition to", row.transition?.nextBeamId ?? "—")}
+            ${detailItem("Transition time", row.transition ? iso(row.transition.transitionTime) : "—")}
+          </div>
+        </section>
+        <section class="detail-section">
+          <h3>Beam command and pattern</h3>
+          <div class="detail-grid">
+            ${detailItem("Scheduler", row.command?.schedulerId ?? "—")}
+            ${detailItem("Beam ID", row.command?.beamId ?? "—")}
+            ${detailItem("Mode", row.command?.mode ?? "—")}
+            ${detailItem("Priority", row.command?.priority ?? "—")}
+            ${detailItem("Commanded pointing", row.command ? `${number(row.command.azimuth, 2)}° / ${number(row.command.elevation, 2)}°` : "—")}
+            ${detailItem("Dwell", row.command ? number(row.command.dwellTimeUs / 1000, 2) + " ms" : "—")}
+            ${detailItem("RMA mask", maskHex(row.pattern?.rmaMask))}
+            ${detailItem("Gain loss", row.pattern ? number(row.pattern.gainLoss, 3) + " dB" : "—")}
+            ${detailItem("Boresight error", row.pattern ? number(row.pattern.boresightError, 3) + "°" : "—")}
+            ${detailItem("3 dB width", row.pattern ? number(row.pattern.beamwidth, 3) + "°" : "—")}
+          </div>
+        </section>
+      `;
+      el("detailDrawer").classList.add("open");
+      scheduleRender(true);
+    }
+
+    function closeDrawer() {
+      el("detailDrawer").classList.remove("open");
+      state.selectedKey = null;
+      scheduleRender(true);
+    }
+
+    function csvCell(value) {
+      const text = String(value ?? "");
+      return `"${text.replaceAll('"', '""')}"`;
+    }
+
+    function exportCsv() {
+      const rows = filteredRows();
+      const headers = [
+        "event_epoch_millis", "sensor_id", "detection_id", "range_m",
+        "detection_azimuth_deg", "detection_elevation_deg", "snr_db", "amplitude",
+        "producing_beam_id", "transition_to_beam_id", "raw_sample_count",
+        "scheduler_id", "command_epoch_millis", "mode", "priority",
+        "command_azimuth_deg", "command_elevation_deg", "dwell_time_us",
+        "rma_offline_mask", "gain_loss_db", "beamwidth_3db_deg",
+        "detection_to_transition_ms", "azimuth_delta_deg", "elevation_delta_deg",
+        "confidence", "status"
+      ];
+      const lines = [headers.map(csvCell).join(",")];
+      for (const row of rows) {
+        const producing = row.transition?.producing;
+        lines.push([
+          row.detection.time, row.detection.sensorId, row.detection.detectionId,
+          row.detection.range, row.detection.azimuth, row.detection.elevation,
+          row.detection.snr, row.detection.amplitude, producing?.beamId,
+          row.transition?.nextBeamId, producing?.sampleCount,
+          row.command?.schedulerId, row.command?.time, row.command?.mode,
+          row.command?.priority, row.command?.azimuth, row.command?.elevation,
+          row.command?.dwellTimeUs, row.pattern?.rmaMask, row.pattern?.gainLoss,
+          row.pattern?.beamwidth, row.deltaTransitionMs, row.deltaAzimuth,
+          row.deltaElevation, row.confidence, row.status
+        ].map(csvCell).join(","));
+      }
+      const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+      const anchor = document.createElement("a");
+      anchor.href = URL.createObjectURL(blob);
+      anchor.download = `detection-to-beam-${Date.now()}.csv`;
+      anchor.click();
+      URL.revokeObjectURL(anchor.href);
+      showToast(`Exported ${rows.length.toLocaleString()} retained rows.`);
+    }
+
+    function demoPointing(face, beamId) {
+      const offsetIndex = beamId % 19;
+      const offset = -42 + offsetIndex * (84 / 18);
+      const elevation = [3, 14, 25][Math.floor(beamId / 19) % 3];
+      return {
+        azimuth: (FACE_INFO[face].center + offset + 360) % 360,
+        elevation
+      };
+    }
+
+    function demoTimestamp(epoch) {
+      return { epoch_millis: Math.round(epoch), sim_millis: Math.round(epoch - state.sessionStarted) };
+    }
+
+    function demoTick() {
+      const base = Date.now();
+      for (let face = 0; face < 4; face += 1) {
+        const beamId = state.demo.beamIds[face]++;
+        const pointing = demoPointing(face, beamId);
+        const mode = beamId % 37 === 0 ? "BEAM_MODE_CONFIRM" : "BEAM_MODE_SEARCH";
+        const priority = mode === "BEAM_MODE_CONFIRM" ? 2 : 4;
+
+        ingest(TOPICS.command, {
+          scheduler_id: face,
+          beam_id: beamId,
+          timestamp: demoTimestamp(base - 2),
+          azimuth_deg: pointing.azimuth,
+          elevation_deg: pointing.elevation,
+          dwell_time_us: 10000,
+          mode,
+          priority
+        }, { valid_data: true, publication_handle: `demo-command-${face}` });
+
+        if (beamId % 5 === 0) {
+          const degraded = Math.floor(beamId / 140) % 2 === 1 && face === 0;
+          ingest(TOPICS.pattern, {
+            array_id: face,
+            beam_id: beamId,
+            timestamp: demoTimestamp(base - 1),
+            rma_offline_mask: degraded ? 4 : 0,
+            commanded_azimuth_deg: pointing.azimuth,
+            boresight_error_deg: degraded ? 0.28 : 0.02,
+            gain_loss_db: degraded ? 1.14 : 0.06,
+            beamwidth_3db_deg: degraded ? 3.38 : 3.12,
+            peak_sidelobe_level_db: degraded ? -11.8 : -13.2
+          }, { valid_data: true, publication_handle: `demo-pattern-${face}` });
+        }
+
+        const previous = state.currentDwells[face] ? { ...state.currentDwells[face] } : null;
+        const loseFirst = Math.random() < 0.035;
+
+        for (let pulse = 0; pulse < 10; pulse += 1) {
+          if (pulse === 0 && loseFirst) continue;
+          if (pulse > 0 && Math.random() < 0.008) continue;
+          ingest(TOPICS.raw, {
+            array_id: face,
+            beam_id: beamId,
+            timestamp: demoTimestamp(base + pulse),
+            azimuth_deg: pointing.azimuth,
+            elevation_deg: pointing.elevation,
+            range_bin_count: 1024,
+            iq_samples: []
+          }, { valid_data: true, publication_handle: `demo-raw-${face}` });
+        }
+
+        if (previous && Math.random() < 0.085) {
+          const snr = 8 + Math.random() * 20;
+          const amplitude = 0.26 * Math.pow(10, snr / 20) * 0.11;
+          ingest(TOPICS.detection, {
+            sensor_id: face,
+            detection_id: state.demo.detectionId++,
+            timestamp: demoTimestamp(base),
+            ship_position: {
+              latitude_deg: 36.95,
+              longitude_deg: -76.31,
+              altitude_m: 8
+            },
+            range_m: 4200 + Math.random() * 85000,
+            azimuth_deg: previous.azimuth,
+            elevation_deg: previous.elevation,
+            amplitude,
+            snr_db: snr
+          }, {
+            valid_data: true,
+            instance_handle: `demo-face-${face}`,
+            publication_handle: "demo-detection-writer"
+          });
+        }
+      }
+    }
+
+    function startDemo(clear = true) {
+      disconnectWis();
+      stopDemo();
+      if (clear) resetCorrelationState(true);
+      newSession("demo");
+      setSource("demo", "live", "Demo stream");
+      state.demo.running = true;
+      state.demo.timer = setInterval(demoTick, 10);
+      el("demoToggle").textContent = "Pause demo";
+      showToast("Synthetic DDS topic stream started.");
+      scheduleRender(true);
+    }
+
+    function stopDemo() {
+      if (state.demo.timer) clearInterval(state.demo.timer);
+      state.demo.timer = null;
+      state.demo.running = false;
+      if (state.source === "demo") {
+        setSource("demo", "paused", "Demo paused");
+        el("demoToggle").textContent = "Resume demo";
+      }
+    }
+
+    function toggleDemo() {
+      if (state.demo.running) {
+        stopDemo();
+      } else {
+        state.demo.running = true;
+        state.demo.timer = setInterval(demoTick, 10);
+        setSource("demo", "live", "Demo stream");
+        el("demoToggle").textContent = "Pause demo";
+      }
+    }
+
+    function wisReaderUri(config, reader) {
+      const encode = encodeURIComponent;
+      return `/dds/rest1/applications/${encode(config.application)}` +
+        `/domain_participants/${encode(config.participant)}` +
+        `/subscribers/${encode(config.subscriber)}` +
+        `/data_readers/${encode(reader)}`;
+    }
+
+    function wisParticipantUri(config) {
+      const encode = encodeURIComponent;
+      return `/dds/rest1/applications/${encode(config.application)}` +
+        `/domain_participants/${encode(config.participant)}`;
+    }
+
+    function wisRequestHeaders(config, includeContentType = false) {
+      const headers = {};
+      if (includeContentType) headers["Content-Type"] = "application/dds-web+json";
+      if (config.apiKey) headers["OMG-DDS-API-Key"] = config.apiKey;
+      return headers;
+    }
+
+    async function enableWisResources(endpoint, config) {
+      const participantUri = wisParticipantUri(config);
+      const subscriberUri = `${participantUri}/subscribers/${encodeURIComponent(config.subscriber)}`;
+      const resources = [
+        participantUri,
+        subscriberUri,
+        wisReaderUri(config, config.readers.detection),
+        wisReaderUri(config, config.readers.raw),
+        wisReaderUri(config, config.readers.command),
+        wisReaderUri(config, config.readers.pattern)
+      ];
+
+      for (const uri of resources) {
+        const response = await fetch(`${endpoint}${uri}`, {
+          method: "PUT",
+          headers: wisRequestHeaders(config)
+        });
+        if (!response.ok) {
+          throw new Error(`Could not enable WIS resource ${uri}: HTTP ${response.status}`);
+        }
+      }
+    }
+
+    async function bindWisReaders(socket, config) {
+      const readers = [
+        ["detection", config.readers.detection],
+        ["raw", config.readers.raw],
+        ["command", config.readers.command],
+        ["pattern", config.readers.pattern]
+      ];
+
+      // WIS 7.7 can associate the wrong bind_id when several readers are sent
+      // in one BIND array. Sequential messages preserve the documented
+      // one-WebSocket/multiple-reader model without that startup race.
+      for (const [bindId, reader] of readers) {
+        socket.send(JSON.stringify({
+          kind: "bind",
+          body: [{
+            bind_kind: "bind_datareader",
+            bind_id: bindId,
+            uri: wisReaderUri(config, reader)
+          }]
+        }));
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+    }
+
+    function processWisPush(message) {
+      if (message.kind !== "b_push") return;
+      const topic = BIND_TO_TOPIC[message.bind_id];
+      if (!topic) return;
+      const samples = message.body?.read_sample_seq || [];
+      for (const sample of samples) {
+        const info = sample.read_sample_info || {};
+        if (info.valid_data === false) continue;
+        const data = sample.data;
+        if (!data) continue;
+
+        if (topic === TOPICS.raw && data.iq_samples) {
+          const projected = {
+            array_id: data.array_id,
+            beam_id: data.beam_id,
+            timestamp: data.timestamp,
+            azimuth_deg: data.azimuth_deg,
+            elevation_deg: data.elevation_deg,
+            range_bin_count: data.range_bin_count
+          };
+          ingest(topic, projected, info);
+        } else if (topic === TOPICS.pattern && data.azimuth_pattern_db) {
+          const projected = { ...data };
+          delete projected.azimuth_pattern_db;
+          ingest(topic, projected, info);
+        } else {
+          ingest(topic, data, info);
+        }
+      }
+    }
+
+    async function connectWis(config) {
+      stopDemo();
+      disconnectWis();
+      resetCorrelationState(true);
+      newSession("wis");
+      setSource("wis", "connecting", "Connecting WIS");
+
+      const endpoint = config.endpoint.replace(/\/+$/, "");
+      await enableWisResources(endpoint, config);
+      const connectionName = `radar-view-${Date.now()}-${Math.random().toString(16).slice(2, 7)}`;
+      const createResponse = await fetch(`${endpoint}/dds/v1/websocket_connections`, {
+        method: "POST",
+        headers: wisRequestHeaders(config, true),
+        body: JSON.stringify([{ name: connectionName }])
+      });
+      if (!createResponse.ok && createResponse.status !== 409) {
+        throw new Error(`WebSocket name creation failed: HTTP ${createResponse.status}`);
+      }
+
+      const endpointUrl = new URL(endpoint);
+      const protocol = endpointUrl.protocol === "https:" ? "wss:" : "ws:";
+      const wsUrl = `${protocol}//${endpointUrl.host}/dds/websocket/${encodeURIComponent(connectionName)}`;
+      const socket = new WebSocket(wsUrl);
+      state.wis = { socket, config, endpoint, connectionName, binding: false, bound: false };
+
+      socket.addEventListener("open", () => {
+        const hello =
+          "Content-Type:application/dds-web+json\r\n" +
+          "Accept:application/dds-web+json\r\n" +
+          `OMG-DDS-API-Key:${config.apiKey || ""}\r\n` +
+          "Version:1\r\n\r\n";
+        socket.send(hello);
+      });
+
+      socket.addEventListener("message", event => {
+        const wireText = typeof event.data === "string" ? event.data : "";
+        if (/^HELLO(?:_| )OK/i.test(wireText)) {
+          if (state.wis?.binding || state.wis?.bound) return;
+          state.wis.binding = true;
+          bindWisReaders(socket, config).then(() => {
+            if (state.wis?.socket !== socket) return;
+            state.wis.binding = false;
+            state.wis.bound = true;
+            setSource("wis", "live", "DDS via WIS");
+            el("sessionNote").textContent =
+              "Live DDS rows begin at this subscription time; volatile history before it is unavailable.";
+            showToast("WebSocket handshake succeeded; four DDS DataReaders are bound.");
+          }).catch(error => {
+            console.error("Could not bind Web Integration Service readers", error);
+            setSource("wis", "error", "WIS bind failed");
+            showToast(error.message || "Could not bind DDS readers.");
+            socket.close();
+          });
+          return;
+        }
+
+        if (/^HELLO(?:_| )FAIL/i.test(wireText)) {
+          setSource("wis", "error", "WIS handshake failed");
+          showToast(event.data);
+          socket.close();
+          return;
+        }
+
+        try {
+          processWisPush(JSON.parse(event.data));
+        } catch (error) {
+          console.error("Could not process Web Integration Service message", error, event.data);
+        }
+      });
+
+      socket.addEventListener("error", () => {
+        setSource("wis", "error", "WIS connection error");
+        showToast("Web Integration Service connection failed. Check endpoint, origin policy, and reader configuration.");
+      });
+
+      socket.addEventListener("close", () => {
+        if (state.source === "wis" && state.sourceStatus !== "error") {
+          setSource("wis", "paused", "WIS disconnected");
+          showToast("The Web Integration Service WebSocket closed.");
+        }
+      });
+    }
+
+    function disconnectWis() {
+      const wis = state.wis;
+      if (wis?.socket) {
+        try {
+          wis.socket.close();
+        } catch {
+          // no action
+        }
+      }
+      if (wis?.endpoint && wis?.connectionName) {
+        fetch(`${wis.endpoint}/dds/v1/websocket_connections/${encodeURIComponent(wis.connectionName)}`, {
+          method: "DELETE",
+          headers: wisRequestHeaders(wis.config)
+        }).catch(() => {
+          // Best-effort cleanup; WIS also reclaims a closed WebSocket session.
+        });
+      }
+      state.wis = null;
+    }
+
+    function openConnectionModal() {
+      el("connectionModal").classList.add("open");
+    }
+
+    function closeConnectionModal() {
+      el("connectionModal").classList.remove("open");
+    }
+
+    tableBody.addEventListener("click", event => {
+      const rowElement = event.target.closest("tr[data-key]");
+      if (!rowElement) return;
+      const row = state.rows.find(candidate => candidate.key === rowElement.dataset.key);
+      openDrawer(row);
+    });
+
+    el("closeDrawer").addEventListener("click", closeDrawer);
+    el("openConnection").addEventListener("click", openConnectionModal);
+    el("closeConnection").addEventListener("click", closeConnectionModal);
+    el("connectionModal").addEventListener("click", event => {
+      if (event.target === el("connectionModal")) closeConnectionModal();
+    });
+    el("demoToggle").addEventListener("click", toggleDemo);
+    el("useDemo").addEventListener("click", () => {
+      closeConnectionModal();
+      startDemo(true);
+    });
+    el("clearRows").addEventListener("click", () => {
+      state.rows = [];
+      state.seenDetections.clear();
+      closeDrawer();
+      scheduleRender(true);
+      showToast("Retained detection history cleared; live buffers were preserved.");
+    });
+    el("exportCsv").addEventListener("click", exportCsv);
+    el("copyJson").addEventListener("click", async () => {
+      const row = state.rows.find(candidate => candidate.key === state.selectedKey);
+      if (!row) return;
+      await navigator.clipboard.writeText(JSON.stringify(row, null, 2));
+      showToast("Selected enriched row copied as JSON.");
+    });
+
+    for (const filterId of ["searchFilter", "faceFilter", "modeFilter", "confidenceFilter", "snrFilter"]) {
+      el(filterId).addEventListener("input", () => scheduleRender(true));
+      el(filterId).addEventListener("change", () => scheduleRender(true));
+    }
+
+    el("resetFilters").addEventListener("click", () => {
+      el("searchFilter").value = "";
+      el("faceFilter").value = "";
+      el("modeFilter").value = "";
+      el("confidenceFilter").value = "";
+      el("snrFilter").value = "";
+      scheduleRender(true);
+    });
+
+    el("connectionForm").addEventListener("submit", async event => {
+      event.preventDefault();
+      const config = {
+        endpoint: el("wisEndpoint").value.trim(),
+        application: el("wisApplication").value.trim(),
+        participant: el("wisParticipant").value.trim(),
+        subscriber: el("wisSubscriber").value.trim(),
+        apiKey: el("wisApiKey").value,
+        readers: {
+          detection: el("readerDetection").value.trim(),
+          raw: el("readerRaw").value.trim(),
+          command: el("readerCommand").value.trim(),
+          pattern: el("readerPattern").value.trim()
+        }
+      };
+      closeConnectionModal();
+      try {
+        await connectWis(config);
+      } catch (error) {
+        console.error(error);
+        setSource("wis", "error", "WIS setup failed");
+        showToast(error.message || "Could not connect to Web Integration Service.");
+      }
+    });
+
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape") {
+        closeDrawer();
+        closeConnectionModal();
+      }
+    });
+
+    window.radarDetectionBeamView = Object.freeze({
+      ingest,
+      startHostSession(label = "Connext Studio host") {
+        stopDemo();
+        disconnectWis();
+        resetCorrelationState(true);
+        newSession("host");
+        setSource("host", "live", label);
+      },
+      clear() {
+        resetCorrelationState(true);
+      },
+      snapshot() {
+        return {
+          sessionId: state.sessionId,
+          sessionStarted: state.sessionStarted,
+          source: state.source,
+          rows: structuredClone(state.rows),
+          sampleCounts: { ...state.sampleCounts }
+        };
+      },
+      topics: { ...TOPICS }
+    });
+
+    if (location.protocol === "http:" || location.protocol === "https:") {
+      el("wisEndpoint").value = location.origin;
+    }
+
+    startDemo(true);
+    setInterval(() => scheduleRender(), 1000);
+  </script>
+</body>
+</html>

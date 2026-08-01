@@ -395,6 +395,67 @@ result. Neither `range_bin_count` nor `iq_samples` is needed to identify the
 boundary. Adding `beam_id` to `DetectionEvent` would turn the central
 attribution into an exact join.
 
+#### Test the HTML prototype with Web Integration Service
+
+[`detection_to_beam_live_view.html`](detection_to_beam_live_view.html) is a
+standalone implementation of this view. The supplied
+[`radar_live_view_wis.xml`](../config/radar_live_view_wis.xml) creates the four
+DDS DataReaders on domain 92, uses the simulator's matching QoS, and projects
+`RawReturn` and `BeamPatternStatus` so their large arrays are not serialized to
+JSON.
+
+From the repository root, start RTI Web Integration Service from Windows
+Command Prompt (`cmd.exe`):
+
+```bat
+set "RTI_HOME=%CONNEXTDDS_DIR%"
+if not defined RTI_HOME set "RTI_HOME=%NDDSHOME%"
+if not defined RTI_HOME set "RTI_HOME=C:\Program Files\rti_connext_dds-7.7.0"
+"%RTI_HOME%\bin\rtiwebintegrationservice.bat" ^
+  -cfgFile config\radar_live_view_wis.xml ^
+  -cfgName RadarLiveView ^
+  -enableWebSockets ^
+  -documentRoot docs ^
+  -listeningPorts 18080
+```
+
+In Windows PowerShell, use PowerShell's environment-variable and continuation
+syntax instead:
+
+```powershell
+$rtiHome = if ($env:CONNEXTDDS_DIR) { $env:CONNEXTDDS_DIR } elseif ($env:NDDSHOME) { $env:NDDSHOME } else { 'C:\Program Files\rti_connext_dds-7.7.0' }
+& "$rtiHome\bin\rtiwebintegrationservice.bat" `
+  -cfgFile config\radar_live_view_wis.xml `
+  -cfgName RadarLiveView `
+  -enableWebSockets `
+  -documentRoot docs `
+  -listeningPorts 18080
+```
+
+Or on macOS:
+
+```bash
+"$NDDSHOME/bin/rtiwebintegrationservice" \
+  -cfgFile config/radar_live_view_wis.xml \
+  -cfgName RadarLiveView \
+  -enableWebSockets \
+  -documentRoot docs \
+  -listeningPorts 18080
+```
+
+Run the interactive demo with its default domain 92 if it is not already
+running, then open
+`http://localhost:18080/detection_to_beam_live_view.html`. Select **Connect
+live**, leave the supplied entity names unchanged, and select **Connect and
+bind readers**. The page enables the configured participant, subscriber, and
+readers before binding them, so either launch order works. The table contains
+only detections received after the live subscription begins; use **Demo
+stream** when testing the UI without DDS traffic.
+
+The XML domain is intentionally fixed at 92 to match `start-all`. If the
+simulation is launched with a different domain, change `domain_id` in the XML
+before starting Web Integration Service.
+
 ### 4.3 How is a live RMA outage changing radar performance?
 
 This view begins measuring before an outage, detects the actual calibration

@@ -28,6 +28,7 @@
 
 #include "DiagnosticsInjector.hpp"
 #include "CliParse.hpp"
+#include "ProcessTimerResolution.hpp"
 #include "RadarFaces.hpp"
 #include "SimClock.hpp"
 #include "TargetFleet.hpp"
@@ -39,6 +40,7 @@ void on_sigint(int) { g_running.store(false); }
 }
 
 int run_target_gen(int argc, char** argv) {
+    radar::ProcessTimerResolution timer_resolution;
     radds::disable_monitoring_lib(); // no monitoring DPs (see DdsSupport)
     int32_t domain = 0;
     int32_t control_domain = -1;

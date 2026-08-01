@@ -197,6 +197,7 @@ void install_crash_handler() {}
 #include "components/DetectionProcessor.hpp"
 #include "components/HmiUi.hpp"
 #include "components/TrackManager.hpp"
+#include "ProcessTimerResolution.hpp"
 #include "ui/UiApp.hpp"
 
 namespace {
@@ -205,6 +206,7 @@ void on_sigint(int) { g_running.store(false); }
 } // namespace
 
 int run_radar_app(int argc, char** argv) {
+    radar::ProcessTimerResolution timer_resolution;
     radds::disable_monitoring_lib(); // no monitoring DPs (see DdsSupport)
     install_crash_handler();
     int32_t domain = 0;

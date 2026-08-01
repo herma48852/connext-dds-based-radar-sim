@@ -195,7 +195,8 @@ if(RADAR_BUILD_APPLICATIONS)
     target_include_directories(radar_common INTERFACE
         "${CMAKE_CURRENT_SOURCE_DIR}/src/common")
     target_link_libraries(radar_common INTERFACE
-        radar_types RTIConnextDDS::cpp2_api radar_project_options)
+        radar_types RTIConnextDDS::cpp2_api radar_project_options
+        $<$<PLATFORM_ID:Windows>:winmm>)
 
     # --- Radar simulation application -------------------------------------
     add_executable(radar_app
