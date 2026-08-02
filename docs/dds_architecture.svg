@@ -70,54 +70,54 @@
 
   <!-- Radar.ShipINS -->
   <g class="participant-node" data-participant="ship-ins" tabindex="0" role="button" aria-label="Focus Radar.ShipINS">
-  <rect x="40" y="110" width="190" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
-  <text x="135" y="140" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.ShipINS</text>
-  <text x="135" y="159" text-anchor="middle" font-size="10" fill="#8fa398">radar_app</text>
+  <rect x="500" y="110" width="190" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
+  <text x="595" y="140" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.ShipINS</text>
+  <text x="595" y="159" text-anchor="middle" font-size="10" fill="#8fa398">radar_app</text>
   </g>
   <g class="endpoint-set" data-owner="ship-ins">
-  <line x1="135" y1="182" x2="135" y2="420" stroke="#46d17c" stroke-width="2.2"/>
-  <polygon points="135,424 130,414 140,414" fill="#46d17c"/>
-  <text x="135" y="290" text-anchor="middle" font-size="11" fill="#c9d8ce">Ship/ShipPosition</text>
-  <text x="135" y="305" text-anchor="middle" font-size="9.5" fill="#8fa398">10 Hz &#183; key 0 (INS)</text>
+  <line x1="595" y1="182" x2="595" y2="420" stroke="#46d17c" stroke-width="2.2"/>
+  <polygon points="595,424 590,414 600,414" fill="#46d17c"/>
+  <text x="595" y="290" text-anchor="middle" font-size="11" fill="#c9d8ce">Ship/ShipPosition</text>
+  <text x="595" y="305" text-anchor="middle" font-size="9.5" fill="#8fa398">10 Hz &#183; key 0 (INS)</text>
   </g>
 
   <!-- Radar.BeamScheduler -->
   <g class="participant-node" data-participant="beam-scheduler" tabindex="0" role="button" aria-label="Focus Radar.BeamScheduler">
-  <rect x="280" y="110" width="190" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
-  <text x="375" y="140" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.BeamScheduler</text>
-  <text x="375" y="159" text-anchor="middle" font-size="10" fill="#8fa398">radar_app</text>
+  <rect x="40" y="110" width="190" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
+  <text x="135" y="140" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.BeamScheduler</text>
+  <text x="135" y="159" text-anchor="middle" font-size="10" fill="#8fa398">radar_app</text>
   </g>
   <g class="endpoint-set" data-owner="beam-scheduler">
-  <line x1="375" y1="182" x2="375" y2="420" stroke="#46d17c" stroke-width="2.2"/>
-  <polygon points="375,424 370,414 380,414" fill="#46d17c"/>
-  <text x="375" y="246" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/BeamCommand</text>
-  <text x="385" y="261" font-size="9.5" fill="#8fa398">100 Hz</text>
+  <line x1="135" y1="182" x2="135" y2="420" stroke="#46d17c" stroke-width="2.2"/>
+  <polygon points="135,424 130,414 140,414" fill="#46d17c"/>
+  <text x="135" y="246" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/BeamCommand</text>
+  <text x="145" y="261" font-size="9.5" fill="#8fa398">100 Hz</text>
   </g>
 
   <!-- Radar.Beamformer: steering + health -> actual beam response -->
   <g class="participant-node" data-participant="beamformer" tabindex="0" role="button" aria-label="Focus Radar.Beamformer">
-  <rect x="500" y="110" width="190" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
-  <text x="595" y="140" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.Beamformer</text>
-  <text x="595" y="159" text-anchor="middle" font-size="10" fill="#8fa398">radar_app</text>
+  <rect x="280" y="110" width="190" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
+  <text x="375" y="140" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.Beamformer</text>
+  <text x="375" y="159" text-anchor="middle" font-size="10" fill="#8fa398">radar_app</text>
   </g>
 
   <g class="endpoint-set" data-owner="beamformer">
 
   <!-- sub BeamCommand -->
-  <line x1="525" y1="424" x2="525" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
-  <polygon points="525,184 520,194 530,194" fill="#4fc3f7"/>
-  <text x="525" y="216" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/BeamCommand</text>
+  <line x1="305" y1="424" x2="305" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="305,184 300,194 310,194" fill="#4fc3f7"/>
+  <text x="305" y="216" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/BeamCommand</text>
 
   <!-- sub CalibrationStatus -->
-  <line x1="590" y1="424" x2="590" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
-  <polygon points="590,184 585,194 595,194" fill="#4fc3f7"/>
-  <text x="590" y="300" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/CalibrationStatus</text>
+  <line x1="370" y1="424" x2="370" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="370,184 365,194 375,194" fill="#4fc3f7"/>
+  <text x="370" y="300" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/CalibrationStatus</text>
 
   <!-- pub BeamPatternStatus -->
-  <line x1="660" y1="182" x2="660" y2="420" stroke="#46d17c" stroke-width="3"/>
-  <polygon points="660,424 655,414 665,414" fill="#46d17c"/>
-  <text x="660" y="382" text-anchor="middle" font-size="11" font-weight="bold" fill="#dff5e7">Radar/BeamPatternStatus</text>
-  <text x="660" y="397" text-anchor="middle" font-size="9.5" fill="#8fa398">writer &#183; 20 Hz</text>
+  <line x1="440" y1="182" x2="440" y2="420" stroke="#46d17c" stroke-width="3"/>
+  <polygon points="440,424 435,414 445,414" fill="#46d17c"/>
+  <text x="440" y="382" text-anchor="middle" font-size="11" font-weight="bold" fill="#dff5e7">Radar/BeamPatternStatus</text>
+  <text x="440" y="397" text-anchor="middle" font-size="9.5" fill="#8fa398">writer &#183; 20 Hz</text>
   </g>
 
   <!-- Radar.DetectionProcessor -->
@@ -135,39 +135,39 @@
   <polygon points="750,184 745,194 755,194" fill="#4fc3f7"/>
   <text x="750" y="216" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/BeamCommand</text>
 
-  <!-- pub RawReturn -->
-  <line x1="820" y1="182" x2="820" y2="420" stroke="#46d17c" stroke-width="2.2"/>
-  <polygon points="820,424 815,414 825,414" fill="#46d17c"/>
-  <text x="820" y="254" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/RawReturn</text>
-  <text x="820" y="269" text-anchor="middle" font-size="9.5" fill="#8fa398">1 kHz</text>
-
-  <!-- sub RawReturn (loopback) -->
-  <line x1="890" y1="424" x2="890" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
-  <polygon points="890,184 885,194 895,194" fill="#4fc3f7"/>
-  <text x="890" y="292" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/RawReturn</text>
-  <text x="890" y="307" text-anchor="middle" font-size="9.5" fill="#8fa398">loopback</text>
-
-  <!-- pub DetectionEvent -->
-  <line x1="960" y1="182" x2="960" y2="420" stroke="#46d17c" stroke-width="2.2"/>
-  <polygon points="960,424 955,414 965,414" fill="#46d17c"/>
-  <text x="960" y="330" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/DetectionEvent</text>
-
   <!-- sub BeamPatternStatus -->
-  <line x1="1030" y1="424" x2="1030" y2="188" stroke="#4fc3f7" stroke-width="3"/>
-  <polygon points="1030,184 1025,194 1035,194" fill="#4fc3f7"/>
-  <text x="1030" y="382" text-anchor="middle" font-size="11" font-weight="bold" fill="#dff5ff">Radar/BeamPatternStatus</text>
-  <text x="1030" y="397" text-anchor="middle" font-size="9.5" fill="#8fa398">reader &#183; receiver physics</text>
+  <line x1="820" y1="424" x2="820" y2="188" stroke="#4fc3f7" stroke-width="3"/>
+  <polygon points="820,184 815,194 825,194" fill="#4fc3f7"/>
+  <text x="820" y="382" text-anchor="middle" font-size="11" font-weight="bold" fill="#dff5ff">Radar/BeamPatternStatus</text>
+  <text x="820" y="397" text-anchor="middle" font-size="9.5" fill="#8fa398">reader &#183; receiver physics</text>
 
   <!-- sub TargetTruth -->
-  <line x1="1120" y1="424" x2="1120" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
-  <polygon points="1120,184 1115,194 1125,194" fill="#4fc3f7"/>
-  <text x="1120" y="350" text-anchor="middle" font-size="11" fill="#c9d8ce">TargetGen/TargetTruth</text>
+  <line x1="890" y1="424" x2="890" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="890,184 885,194 895,194" fill="#4fc3f7"/>
+  <text x="890" y="350" text-anchor="middle" font-size="11" fill="#c9d8ce">TargetGen/TargetTruth</text>
 
   <!-- sub own-ship INS through DDS content filter -->
-  <line x1="1200" y1="424" x2="1200" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
-  <polygon points="1200,184 1195,194 1205,194" fill="#4fc3f7"/>
-  <text x="1200" y="292" text-anchor="middle" font-size="11" fill="#c9d8ce">Ship/ShipPosition</text>
-  <text x="1200" y="307" text-anchor="middle" font-size="9.5" fill="#8fa398">key 0 CFT</text>
+  <line x1="960" y1="424" x2="960" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="960,184 955,194 965,194" fill="#4fc3f7"/>
+  <text x="960" y="292" text-anchor="middle" font-size="11" fill="#c9d8ce">Ship/ShipPosition</text>
+  <text x="960" y="307" text-anchor="middle" font-size="9.5" fill="#8fa398">key 0 CFT</text>
+
+  <!-- pub RawReturn -->
+  <line x1="1030" y1="182" x2="1030" y2="420" stroke="#46d17c" stroke-width="2.2"/>
+  <polygon points="1030,424 1025,414 1035,414" fill="#46d17c"/>
+  <text x="1030" y="254" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/RawReturn</text>
+  <text x="1030" y="269" text-anchor="middle" font-size="9.5" fill="#8fa398">1 kHz</text>
+
+  <!-- sub RawReturn (loopback) -->
+  <line x1="1120" y1="424" x2="1120" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="1120,184 1115,194 1125,194" fill="#4fc3f7"/>
+  <text x="1120" y="292" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/RawReturn</text>
+  <text x="1120" y="307" text-anchor="middle" font-size="9.5" fill="#8fa398">loopback</text>
+
+  <!-- pub DetectionEvent -->
+  <line x1="1200" y1="182" x2="1200" y2="420" stroke="#46d17c" stroke-width="2.2"/>
+  <polygon points="1200,424 1195,414 1205,414" fill="#46d17c"/>
+  <text x="1200" y="330" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/DetectionEvent</text>
   </g>
 
   <!-- Radar.TrackManager -->
