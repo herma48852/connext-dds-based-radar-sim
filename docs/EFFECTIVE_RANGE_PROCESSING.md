@@ -196,6 +196,50 @@ one-way antenna pattern on transmit and receive. It is consequently a
 demo-calibrated square-root radar-equation model, not a rigorous two-way RF
 link budget.
 
+### How RMA outages modify I/Q
+
+The receiver does not apply an outage percentage to a completed RawReturn.
+Instead, it reduces and reshapes each target phasor before adding that phasor
+to the pulse's I/Q cells. With 16 RMAs of 64 elements each,
+
+```text
+f_active = active_elements / 1024
+         = (16 - offline_RMAs) / 16
+
+A_degraded = K * f_active * P_mask(offset)
+             * sqrt(RCS_linear) / R^2
+
+I_pulse = A_degraded * cos(phi) + N_I
+Q_pulse = A_degraded * sin(phi) + N_Q
+```
+
+The independent `sigma = 0.05` I/Q noise is not scaled with the online-RMA
+fraction. After the target contributions and noise are combined, the signal
+processor performs the same dwell RMS calculation and compares it with the
+same `0.26` threshold.
+
+The exact 16-bit RMA mask matters, not only its population count. Beamformer
+turns the physical mask into azimuth column weights and publishes the resulting
+active fraction, boresight error, main-beam width, sidelobe locations and
+levels, and 181-sample normalized azimuth cut in `Radar/BeamPatternStatus`.
+DetectionProcessor consumes that same status and evaluates `P_mask(offset)`
+when generating I/Q. Consequently, masks with the same percentage offline can
+produce different voltage amplitudes at the same commanded offset when the
+failed RMAs occupy different horizontal positions.
+
+The **Beam Formation** panel renders this same `BeamPatternStatus`; its pattern
+and outage behavior are therefore a visualization of the response used by the
+receiver synthesizer, not a decorative or independent approximation. With all
+RMAs offline, RawReturn continues to carry noise for observability, but no
+target phasor is added and the aperture-online gate suppresses detections.
+
+The present pattern model is a one-dimensional azimuth cut. It distinguishes
+the horizontal/column geometry of offline RMAs, including asymmetric
+boresight and sidelobe changes. Vertically separated RMAs in the same column
+block produce the same azimuth response because a two-dimensional elevation
+array-factor model is not yet implemented; elevation currently remains a
+separate acceptance gate.
+
 The model assumes a constant RCS for each target. It does not currently model
 aspect-dependent RCS, Swerling fluctuations, propagation loss, atmospheric
 attenuation, terrain, sea state, multipath, ducting, jamming, or receiver
