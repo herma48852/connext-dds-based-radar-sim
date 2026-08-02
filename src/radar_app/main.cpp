@@ -5,15 +5,17 @@
 //   Radar.BeamScheduler        -> Radar/BeamCommand         (100 Hz/face)
 //   Radar.Beamformer           <- BeamCommand, CalibrationStatus
 //                              -> Radar/BeamPatternStatus    (20 Hz/face)
-//   Radar.DetectionProcessor   <- BeamCommand, BeamPatternStatus
+//   Radar.DetectionProcessor   <- BeamCommand, BeamPatternStatus,
+//                                 ShipPosition key 0
 //                              -> Radar/RawReturn (1 kHz/face), DetectionEvent
-//   Radar.TrackManager         -> Radar/TargetTrack          (10 Hz)
+//   Radar.TrackManager         <- DetectionEvent, ShipPosition key 0
+//                              -> Radar/TargetTrack          (10 Hz)
 //   Radar.CalibrationMonitor   -> Radar/CalibrationStatus    (1 Hz + changes)
 //   Radar.CommandHandler       <- Radar/SystemCommand        (WaitSet)
 //   Radar.ShipINS              -> Ship/ShipPosition          (10 Hz)
 //   Radar.CommandConsole       -> Radar/SystemCommand        (UI scenarios)
 //   Radar.HMI-UI               <- TargetTrack, DetectionEvent,
-//                                 ShipPosition, CalibrationStatus,
+//                                 ShipPosition key 0, CalibrationStatus,
 //                                 BeamPatternStatus (display)
 //
 // Usage: radar_app [--domain N]     (default domain 0)
@@ -314,7 +316,7 @@ int run_radar_app(int argc, char** argv) {
         RADAR_LOG << "[radar_app] --no-dispose: dispose_instance disabled\n";
     }
 
-    radar::app::ShipSimulator      ship(domain, bus);
+    radar::app::ShipSimulator      ship(domain);
     radar::app::BeamScheduler      scheduler(domain, bus);
     radar::app::Beamformer         beamformer(domain);
     radar::app::DetectionProcessor processor(

@@ -9,8 +9,9 @@
 //   CommandHandler thread --> atomic command state ----------> components
 //
 // Display data (tracks, blips, ship panel, health panel) arrives via the
-// Radar.HMI-UI participant's DDS readers. Radar-function data shared between
-// components (own-ship state, A-scope trace, beam pointing) stays in-process.
+// Radar.HMI-UI participant's DDS readers. Operational own-ship state also
+// travels over DDS directly to DetectionProcessor and TrackManager. Only
+// render-only traces and UI control state remain in-process here.
 // The render thread never blocks on DDS; DDS threads never touch ImGui/GL.
 // ============================================================================
 
@@ -150,19 +151,7 @@ public:
         tracks_.clear();
     }
 
-    void update_ship(const ShipView& s) {
-        std::lock_guard lk(ship_mutex_);
-        ship_ = s;
-    }
-    ShipView ship() const {
-        std::lock_guard lk(ship_mutex_);
-        return ship_;
-    }
-
     // Ship PANEL data: fed by HmiUi's Ship/ShipPosition reader (key 0).
-    // Kept separate from ship() above, which is the radar-function path
-    // (ShipSimulator -> DetectionProcessor/TrackManager) so the HMI can
-    // never perturb component behaviour.
     void update_ship_display(const ShipView& s) {
         std::lock_guard lk(ship_display_mutex_);
         ship_display_ = s;
@@ -265,8 +254,6 @@ private:
 
     mutable std::mutex tracks_mutex_;
     std::vector<TrackView> tracks_;
-    mutable std::mutex ship_mutex_;
-    ShipView ship_{};
     mutable std::mutex ship_display_mutex_;
     ShipView ship_display_{};
     mutable std::mutex health_mutex_;

@@ -28,37 +28,55 @@ workspace-switching webinar runbook and AI visualization prompts, see
 
 ### 2.1 Topology map
 
+Open [`dds_architecture.html`](dds_architecture.html) in a browser and click a
+participant to focus its existing readers and writers without changing the
+diagram layout. The page scales the diagram as large as possible while keeping
+the complete 1600 x 940 canvas visible, including in browser fullscreen mode.
+Click again, click the background, or press Escape to reset.
+
 Every component is a named participant:
 
 | Participant name | Role |
 |---|---|
 | `Radar.BeamScheduler` | publishes four keyed `Radar/BeamCommand` instances (100 Hz/face; 400 Hz aggregate) |
 | `Radar.Beamformer` | publishes four keyed `Radar/BeamPatternStatus` instances (20 Hz/face; 80 Hz aggregate); subscribes `Radar/BeamCommand`, `Radar/CalibrationStatus` |
-| `Radar.DetectionProcessor` | pub `Radar/RawReturn` and `Radar/DetectionEvent`; sub `Radar/BeamCommand`, `Radar/BeamPatternStatus`, `Radar/RawReturn`, `TargetGen/TargetTruth` |
-| `Radar.TrackManager` | subscribes `Radar/DetectionEvent`; publishes `Radar/TargetTrack` (10 Hz) and authoritative `Radar/TrackAssociationEvent` decisions |
+| `Radar.DetectionProcessor` | pub `Radar/RawReturn` and `Radar/DetectionEvent`; sub `Radar/BeamCommand`, `Radar/BeamPatternStatus`, `Radar/RawReturn`, `TargetGen/TargetTruth`, and content-filtered `Ship/ShipPosition` (`source_id = 0`) |
+| `Radar.TrackManager` | subscribes `Radar/DetectionEvent` and content-filtered `Ship/ShipPosition` (`source_id = 0`); publishes `Radar/TargetTrack` (10 Hz) and authoritative `Radar/TrackAssociationEvent` decisions |
 | `Radar.CalibrationMonitor` | publishes four keyed `Radar/CalibrationStatus` instances (1 Hz/face heartbeat + state changes) |
 | `Radar.CommandHandler` | subscribes `Radar/SystemCommand` (WaitSet) |
 | `Radar.ShipINS` | publishes `Ship/ShipPosition` (key 0) |
 | `Radar.CommandConsole` | publishes `Radar/SystemCommand` (UI buttons) |
-| `Radar.HMI-UI` | subscribes `Radar/TargetTrack`, `Radar/DetectionEvent`, `Ship/ShipPosition` (key 0), `Radar/CalibrationStatus`, `Radar/BeamPatternStatus` — the display endpoint |
+| `Radar.HMI-UI` | subscribes `Radar/TargetTrack`, `Radar/DetectionEvent`, content-filtered `Ship/ShipPosition` (`source_id = 0`), `Radar/CalibrationStatus`, `Radar/BeamPatternStatus` — the display endpoint |
 | `TargetGen.Generator` | publishes `TargetGen/TargetTruth` + `Ship/ShipPosition` (key 1) |
 
 When the Section 4.4 WIS view is connected, Studio also shows
 `Recording.DiagnosticTools`. This participant is created by WIS and consumes
 `Radar/TrackAssociationEvent`, `Radar/TargetTrack`, and
 `Radar/DetectionEvent`; it is the demo's explicit recording/diagnostic
-endpoint rather than part of the radar processing flow.
+endpoint rather than part of the radar processing flow. The simplified
+architecture overview intentionally omits this optional participant, leaving
+`Radar/TrackAssociationEvent` and the `Ship/ShipPosition` instance with
+`source_id = 1` ending at the DDS bus as externally consumable diagnostic
+hooks.
 
 Note the **loopback edge** inside `Radar.DetectionProcessor`
 (RawReturn out and back in)—four face-keyed 1 kHz post-beamforming receiver
 streams on the bus (4 kHz aggregate). DetectionProcessor noncoherently
 integrates the ten pulses in each 10 ms dwell before publishing CFAR-like
 DetectionEvent plots; PRF samples are not independent tracker hits.
-Every topic has at least one in-system subscriber (the display topics
-terminate at `Radar.HMI-UI`), so there are no dangling publishers.
+Operational flows terminate at an in-system subscriber (the display topics
+terminate at `Radar.HMI-UI`). The two deliberate exceptions are
+`Radar/TrackAssociationEvent` and `Ship/ShipPosition` with `source_id = 1`;
+they terminate at an external diagnostic consumer only when one is connected.
 The beam path is also explicit: scheduler intent and array health converge at
 `Radar.Beamformer`; its effective response fans out to the receiver model and
 display.
+
+The navigation path is equally explicit in discovery: the source-0
+`Ship/ShipPosition` instance from `Radar.ShipINS` fans out through DDS
+content-filtered readers to DetectionProcessor, TrackManager, and HMI-UI.
+The source-1 instance from TargetGen remains available to diagnostic views but
+cannot enter operational processing.
 
 ### 2.2 Topic tree and live data
 

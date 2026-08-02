@@ -42,12 +42,20 @@ private:
 
 void TrackManager::start() {
     auto det_topic   = radds::make_topic<types::DetectionEvent>(participant_, dds_names::TOPIC_DETECTION_EVENT);
+    auto ship_base_topic = radds::make_topic<types::ShipPosition>(
+        participant_, dds_names::TOPIC_SHIP_POSITION);
+    ship_topic_ = dds::topic::ContentFilteredTopic<types::ShipPosition>(
+        ship_base_topic,
+        "TrackManagerOwnShip",
+        dds::topic::Filter("source_id = 0"));
     auto track_topic = radds::make_topic<types::TargetTrack>(participant_, dds_names::TOPIC_TARGET_TRACK);
     auto association_topic =
         radds::make_topic<types::TrackAssociationEvent>(
             participant_, dds_names::TOPIC_TRACK_ASSOCIATION);
 
     reader_ = radds::make_reader<types::DetectionEvent>(subscriber_, det_topic, dds_names::PROFILE_DETECTION_EVENT);
+    ship_reader_ = radds::make_reader<types::ShipPosition>(
+        subscriber_, ship_topic_, dds_names::PROFILE_SHIP_POSITION);
     writer_ = radds::make_writer<types::TargetTrack>(publisher_, track_topic, dds_names::PROFILE_TARGET_TRACK);
     association_writer_ =
         radds::make_writer<types::TrackAssociationEvent>(
@@ -59,6 +67,10 @@ void TrackManager::start() {
         std::make_shared<ForwardingListener<types::DetectionEvent, TrackManager,
                                             &TrackManager::on_detection>>(this),
         dds::core::status::StatusMask::data_available());
+    ship_reader_.set_listener(
+        std::make_shared<ForwardingListener<types::ShipPosition, TrackManager,
+                                            &TrackManager::on_ship_position>>(this),
+        dds::core::status::StatusMask::data_available());
 
     spawn([this] { update_loop(); });
 }
@@ -66,6 +78,7 @@ void TrackManager::start() {
 void TrackManager::stop() {
     stop_.store(true);
     detach_listener(reader_);
+    detach_listener(ship_reader_);
     join_all();
 
     // Dispose every keyed instance while the writer is still alive. Remote
@@ -201,6 +214,13 @@ void TrackManager::on_detection(const types::DetectionEvent& det) {
     pending_.push_back(det); // batched; consumed at 10 Hz by update_loop
 }
 
+void TrackManager::on_ship_position(const types::ShipPosition& ship) {
+    if (ship.source_id != 0)
+        return; // defensive: the DDS content filter is authoritative
+    ship_heading_deg_.store(ship.heading_deg, std::memory_order_relaxed);
+    navigation_valid_.store(true, std::memory_order_release);
+}
+
 void TrackManager::update_loop() {
     using namespace std::chrono;
     auto next = steady_clock::now();
@@ -215,6 +235,14 @@ void TrackManager::update_loop() {
     while (!stop_.load()) {
         next = advance_periodic_deadline(
             next, milliseconds(100)); // 10 Hz track update
+
+        // Preserve queued detections until the reliable transient-local
+        // navigation instance has arrived. Processing them with a fabricated
+        // zero-degree heading would corrupt the Earth-relative track frame.
+        if (!navigation_valid_.load(std::memory_order_acquire)) {
+            std::this_thread::sleep_until(next);
+            continue;
+        }
 
         if (bus_.reset_requested.exchange(false)) {
             // Dispose every live instance so subscribers (HMI-UI, Studio)
@@ -258,11 +286,12 @@ void TrackManager::update_loop() {
                     d.snr_db, d.contributors});
         }
 
-        const auto ship = bus_.ship();
+        const double ship_heading_deg =
+            ship_heading_deg_.load(std::memory_order_relaxed);
         const int64_t now_ms = SimClock::sim_millis();
 
         // TrackerCore does association/filter/coast; we dispose the dropped.
-        const auto dropped = core_.update(dets, ship.heading_deg, now_ms);
+        const auto dropped = core_.update(dets, ship_heading_deg, now_ms);
         publish_association_events();
         for (const int64_t id : dropped) {
             auto h = handles_.find(id);

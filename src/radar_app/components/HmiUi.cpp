@@ -70,8 +70,12 @@ void HmiUi::start() {
         participant_, dds_names::TOPIC_TARGET_TRACK);
     auto det_topic = radds::make_topic<types::DetectionEvent>(
         participant_, dds_names::TOPIC_DETECTION_EVENT);
-    auto ship_topic = radds::make_topic<types::ShipPosition>(
+    auto ship_base_topic = radds::make_topic<types::ShipPosition>(
         participant_, dds_names::TOPIC_SHIP_POSITION);
+    ship_topic_ = dds::topic::ContentFilteredTopic<types::ShipPosition>(
+        ship_base_topic,
+        "HmiOwnShip",
+        dds::topic::Filter("source_id = 0"));
     auto cal_topic = radds::make_topic<types::CalibrationStatus>(
         participant_, dds_names::TOPIC_CALIBRATION_STATUS);
     auto pattern_topic = radds::make_topic<types::BeamPatternStatus>(
@@ -82,7 +86,7 @@ void HmiUi::start() {
     det_reader_ = radds::make_reader<types::DetectionEvent>(
         subscriber_, det_topic, dds_names::PROFILE_DETECTION_EVENT);
     ship_reader_ = radds::make_reader<types::ShipPosition>(
-        subscriber_, ship_topic, dds_names::PROFILE_SHIP_POSITION);
+        subscriber_, ship_topic_, dds_names::PROFILE_SHIP_POSITION);
     cal_reader_ = radds::make_reader<types::CalibrationStatus>(
         subscriber_, cal_topic, dds_names::PROFILE_CALIBRATION_STATUS);
     pattern_reader_ = radds::make_reader<types::BeamPatternStatus>(
@@ -163,7 +167,7 @@ void HmiUi::on_detection(const types::DetectionEvent& d) {
 }
 
 void HmiUi::on_ship(const types::ShipPosition& s) {
-    if (s.source_id != 0) return; // panel shows own-ship INS (key 0)
+    if (s.source_id != 0) return; // defensive: CFT admits only own-ship INS
     bus_.update_ship_display(ShipView{
         s.latitude_deg, s.longitude_deg, s.altitude_m,
         s.heading_deg, s.course_deg, s.speed_mps,

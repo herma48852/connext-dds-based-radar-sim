@@ -2,6 +2,7 @@
 // TrackManager: DDS adapter over TrackerCore.
 //
 //   subscribes: Radar/DetectionEvent  (listener: enqueue)
+//   subscribes: Ship/ShipPosition     (source_id = 0 navigation CFT)
 //   publishes : Radar/TargetTrack            (10 Hz, alpha-beta filtered)
 //               Radar/TrackAssociationEvent (authoritative decisions)
 //
@@ -9,6 +10,7 @@
 // tests/tracker_replay.cpp for the offline harness). This class converts
 // DDS samples <-> core calls and manages instance handles for dispose.
 
+#include <atomic>
 #include <mutex>
 #include <unordered_map>
 #include <vector>
@@ -31,12 +33,16 @@ public:
 
 private:
     void on_detection(const types::DetectionEvent& det);
+    void on_ship_position(const types::ShipPosition& ship);
     void update_loop();
     void publish_association_events();
     void publish_lifecycle_drops(types::TrackAssociationReason reason);
 
     DataBus& bus_;
     dds::sub::DataReader<types::DetectionEvent> reader_{dds::core::null};
+    dds::topic::ContentFilteredTopic<types::ShipPosition>
+        ship_topic_{dds::core::null};
+    dds::sub::DataReader<types::ShipPosition> ship_reader_{dds::core::null};
     dds::pub::DataWriter<types::TargetTrack>    writer_{dds::core::null};
     dds::pub::DataWriter<types::TrackAssociationEvent>
         association_writer_{dds::core::null};
@@ -44,6 +50,8 @@ private:
     // Listener thread -> update thread handoff (mutex; batch copy is cheap)
     mutable std::mutex pending_mutex_;
     std::vector<types::DetectionEvent> pending_;
+    std::atomic<double> ship_heading_deg_{0.0};
+    std::atomic<bool> navigation_valid_{false};
 
     TrackerCore core_;
     int64_t tracker_instance_id_{0};

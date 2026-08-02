@@ -2,6 +2,7 @@
 // DetectionProcessor: the simulated receiver + signal processor.
 //
 //   subscribes: Radar/BeamCommand      (listener: track current dwell)
+//   subscribes: Ship/ShipPosition      (source_id = 0 navigation CFT)
 //   subscribes: TargetGen/TargetTruth  (listener: maintain truth cache)
 //   subscribes: Radar/BeamPatternStatus (effective array response)
 //   publishes : Radar/RawReturn        (1 kHz/face synthesized I/Q)
@@ -80,6 +81,7 @@ private:
     static constexpr double kCfarThreshold  = detection_model::kCfarThreshold;
     void on_beam_command(const types::BeamCommand& cmd);
     void on_beam_pattern(const types::BeamPatternStatus& status);
+    void on_ship_position(const types::ShipPosition& ship);
     void on_truth(const types::TargetTruth& truth);
     void on_raw_return(const types::RawReturn& ret);
     void publish_completed_dwell(
@@ -97,6 +99,9 @@ private:
         pattern_reader_{dds::core::null};
     dds::sub::DataReader<types::RawReturn>      raw_reader_{dds::core::null};
     dds::sub::DataReader<types::TargetTruth>    truth_reader_{dds::core::null};
+    dds::topic::ContentFilteredTopic<types::ShipPosition>
+        ship_topic_{dds::core::null};
+    dds::sub::DataReader<types::ShipPosition> ship_reader_{dds::core::null};
 
     // Current dwell (written by BeamCommand listener, read by synth thread)
     std::array<std::atomic<int64_t>, faces::kFaceCount> dwell_beam_ids_{};
@@ -125,6 +130,13 @@ private:
     // Truth cache (TargetTruth listener -> synth thread)
     mutable std::mutex truth_mutex_;
     std::unordered_map<int32_t, TruthState> truth_;
+
+    // Authoritative navigation state received over DDS. The CFT prevents
+    // target-generator truth (source_id = 1) from entering this component.
+    mutable std::mutex navigation_mutex_;
+    types::ShipPosition navigation_{};
+    bool navigation_valid_{false};
+    bool navigation_snapshot(types::ShipPosition& destination) const;
 
     std::mt19937 rng_{std::random_device{}()};
     std::normal_distribution<float> noise_{0.0f, static_cast<float>(kNoiseSigma)};

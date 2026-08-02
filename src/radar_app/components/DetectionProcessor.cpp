@@ -57,6 +57,12 @@ void DetectionProcessor::start() {
     auto pattern_topic = radds::make_topic<types::BeamPatternStatus>(
         participant_, dds_names::TOPIC_BEAM_PATTERN_STATUS);
     auto truth_topic = radds::make_topic<types::TargetTruth>(participant_, dds_names::TOPIC_TARGET_TRUTH);
+    auto ship_base_topic = radds::make_topic<types::ShipPosition>(
+        participant_, dds_names::TOPIC_SHIP_POSITION);
+    ship_topic_ = dds::topic::ContentFilteredTopic<types::ShipPosition>(
+        ship_base_topic,
+        "DetectionProcessorOwnShip",
+        dds::topic::Filter("source_id = 0"));
 
     raw_writer_   = radds::make_writer<types::RawReturn>(publisher_, raw_topic, dds_names::PROFILE_RAW_RETURN);
     det_writer_   = radds::make_writer<types::DetectionEvent>(publisher_, det_topic, dds_names::PROFILE_DETECTION_EVENT);
@@ -65,6 +71,8 @@ void DetectionProcessor::start() {
         subscriber_, pattern_topic, dds_names::PROFILE_BEAM_PATTERN_STATUS);
     raw_reader_   = radds::make_reader<types::RawReturn>(subscriber_, raw_topic, dds_names::PROFILE_RAW_RETURN);
     truth_reader_ = radds::make_reader<types::TargetTruth>(subscriber_, truth_topic, dds_names::PROFILE_TARGET_TRUTH);
+    ship_reader_ = radds::make_reader<types::ShipPosition>(
+        subscriber_, ship_topic_, dds_names::PROFILE_SHIP_POSITION);
 
     // Listeners for the high-rate paths (BeamCommand, RawReturn, TargetTruth).
     beam_reader_.set_listener(
@@ -84,6 +92,11 @@ void DetectionProcessor::start() {
         std::make_shared<ForwardingListener<types::TargetTruth, DetectionProcessor,
                                             &DetectionProcessor::on_truth>>(this),
         dds::core::status::StatusMask::data_available());
+    ship_reader_.set_listener(
+        std::make_shared<
+            ForwardingListener<types::ShipPosition, DetectionProcessor,
+                               &DetectionProcessor::on_ship_position>>(this),
+        dds::core::status::StatusMask::data_available());
 
     spawn([this] { return_synthesis_loop(); });
 }
@@ -94,6 +107,7 @@ void DetectionProcessor::stop() {
     detach_listener(pattern_reader_);
     detach_listener(raw_reader_);
     detach_listener(truth_reader_);
+    detach_listener(ship_reader_);
     join_all();
     std::lock_guard lock(dwell_power_mutex_);
     for (auto& accumulator : dwell_power_accumulators_)
@@ -155,6 +169,23 @@ void DetectionProcessor::on_truth(const types::TargetTruth& t) {
     s.received_at = std::chrono::steady_clock::now();
 }
 
+void DetectionProcessor::on_ship_position(const types::ShipPosition& ship) {
+    if (ship.source_id != 0)
+        return; // defensive: the DDS content filter is authoritative
+    std::lock_guard lk(navigation_mutex_);
+    navigation_ = ship;
+    navigation_valid_ = true;
+}
+
+bool DetectionProcessor::navigation_snapshot(
+        types::ShipPosition& destination) const {
+    std::lock_guard lk(navigation_mutex_);
+    if (!navigation_valid_)
+        return false;
+    destination = navigation_;
+    return true;
+}
+
 // --- Receiver simulation: PRF-rate RawReturn synthesis for current dwell ---
 void DetectionProcessor::return_synthesis_loop() {
     using namespace std::chrono;
@@ -191,7 +222,12 @@ void DetectionProcessor::return_synthesis_loop() {
                 truth_snapshot.push_back(target);
             }
         }
-        const double heading = bus_.ship().heading_deg;
+        types::ShipPosition navigation;
+        if (!navigation_snapshot(navigation)) {
+            std::this_thread::sleep_until(next);
+            continue;
+        }
+        const double heading = navigation.heading_deg;
 
         for (const auto& face : faces::kDefinitions) {
             const auto face_index = static_cast<std::size_t>(face.id);
@@ -405,7 +441,9 @@ void DetectionProcessor::publish_completed_dwell(
     tb.beam_id       = beam_id;
     bus_.update_trace(tb);
 
-    const auto ship = bus_.ship();
+    types::ShipPosition ship;
+    if (!navigation_snapshot(ship))
+        return;
     types::GeoPosition geo;
     geo.latitude_deg  = ship.latitude_deg;
     geo.longitude_deg = ship.longitude_deg;

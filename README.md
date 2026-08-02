@@ -319,7 +319,8 @@ all setup, build, test, and launch commands in that directory.
 ## Architecture
 
 ![DDS topic flow: participants, topics and the data bus](docs/dds_architecture.png)
-([vector source](docs/dds_architecture.svg))
+([open the full-size interactive diagram](docs/dds_architecture.html) in a
+browser and click any participant to focus its existing reader/writer arrows)
 
 Every internal radar component is a named DomainParticipant wired to the
 others purely through topics on the shared bus — there are no direct
@@ -336,15 +337,25 @@ samples into view structs in a `DataBus` (lock-free SPSC queues +
 mutex-protected stores), which the render thread drains at display rate:
 the GUI can never stall a DDS receive thread, and DDS threads never touch
 OpenGL. `Radar.TrackManager` also publishes the bounded, authoritative
-`Radar/TrackAssociationEvent` diagnostic stream. Connecting the Section 4.4
-WIS view creates `Recording.DiagnosticTools`, an external DomainParticipant
-that consumes that stream without inserting diagnostics into the operational
-processing path. When the diagnostic view is not connected, this intentionally
-optional publisher has no reader. (Connext Studio joins the same domain from a
+`Radar/TrackAssociationEvent` diagnostic stream. The architecture overview
+intentionally ends both that stream and `Ship/ShipPosition` with
+`source_id = 1` at the DDS bus: they are external diagnostic hooks consumed on
+demand by Connext Studio, WIS live views, recording tools, or other analysis
+participants, not operational radar inputs. They therefore have no reader when
+no diagnostic tool is connected. (Connext Studio joins the same domain from a
 separate workspace and can read every topic shown; see
 [docs/CONNEXT_STUDIO.md](docs/CONNEXT_STUDIO.md). Not shown: the
 on-demand diagnostic endpoints `target_gen` creates with
 `--inject-qos-mismatch`, `--inject-type-mismatch` and `--degrade-array`.)
+
+Own-ship navigation is also an explicit DDS flow. `Radar.ShipINS` publishes
+`Ship/ShipPosition` with `source_id = 0`; content-filtered readers in
+`Radar.DetectionProcessor`, `Radar.TrackManager`, and `Radar.HMI-UI` consume
+only that operational INS instance. DetectionProcessor uses it for
+ship-relative beam geometry and stamps its geodetic position into detections;
+TrackManager uses its heading for the Earth-relative track frame. The
+`source_id = 1` instance from `TargetGen.Generator` remains truth-only and is
+available to recording and diagnostic views, never operational processing.
 
 ### Four-face architecture
 
@@ -386,7 +397,7 @@ between beam centers. Resolvable contacts remain separate.
 | `Radar/TargetTrack` | TargetTrack | 10 Hz | TargetTrackProfile | RELIABLE + TRANSIENT_LOCAL + 200 ms deadline; consumed by HMI-UI (track list) |
 | `Radar/CalibrationStatus` | CalibrationStatus | 1 Hz/face + changes | CalibrationStatusProfile | Face-keyed array health: 1024-element drift + `rma_offline_mask`; consumed by Beamformer and HMI-UI (health + ARRAY FACE panels) |
 | `Radar/SystemCommand` | SystemCommand | bursty | SystemCommandProfile | RELIABLE, WaitSet-handled; `target_face_mask` addresses one or more faces |
-| `Ship/ShipPosition` | ShipPosition | 10 Hz | ShipPositionProfile | keyed: 0 = INS, 1 = truth; key 0 consumed by HMI-UI (ship panel) |
+| `Ship/ShipPosition` | ShipPosition | 10 Hz/source | ShipPositionProfile | keyed: 0 = operational INS, 1 = truth; source-0 DDS content-filtered readers feed DetectionProcessor, TrackManager, and HMI-UI; source 1 is diagnostic-only |
 | `TargetGen/TargetTruth` | TargetTruth | 50 Hz/target | TargetTruthProfile | keyed per target |
 
 All keyed topics have a **bounded key space** (four face ids, constant source

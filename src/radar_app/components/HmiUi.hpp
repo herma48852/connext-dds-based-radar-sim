@@ -5,7 +5,7 @@
 //
 //   subscribes: Radar/TargetTrack       (track list)
 //               Radar/DetectionEvent    (PPI blips)
-//               Ship/ShipPosition       (ship panel; key 0 = own-ship INS)
+//               Ship/ShipPosition       (source_id = 0 content filter)
 //               Radar/CalibrationStatus (health panel)
 //               Radar/BeamPatternStatus (B-scope degradation overlay)
 //
@@ -69,6 +69,8 @@ private:
     DataBus& bus_;
     dds::sub::DataReader<types::TargetTrack>       track_reader_{dds::core::null};
     dds::sub::DataReader<types::DetectionEvent>    det_reader_{dds::core::null};
+    dds::topic::ContentFilteredTopic<types::ShipPosition>
+        ship_topic_{dds::core::null};
     dds::sub::DataReader<types::ShipPosition>      ship_reader_{dds::core::null};
     dds::sub::DataReader<types::CalibrationStatus> cal_reader_{dds::core::null};
     dds::sub::DataReader<types::BeamPatternStatus> pattern_reader_{dds::core::null};

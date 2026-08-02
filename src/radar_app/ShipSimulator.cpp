@@ -51,10 +51,6 @@ void ShipSimulator::start() {
             msg.roll_deg      = roll;
             writer_.write(msg);
 
-            bus_.update_ship(ShipView{
-                lat, lon, 0.0, kHeadingDeg, kHeadingDeg, kSpeedMps,
-                pitch, roll, SimClock::sim_millis()});
-
             std::this_thread::sleep_until(next);
         }
     });

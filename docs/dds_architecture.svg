@@ -1,45 +1,107 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1480" height="940"
-     viewBox="0 0 1480 940" font-family="Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"
+     viewBox="0 0 1600 940" preserveAspectRatio="xMidYMid meet"
+     font-family="Helvetica, Arial, sans-serif">
+
+  <style>
+    .participant-node,
+    .endpoint-set {
+      transition: opacity 160ms ease;
+    }
+
+    .participant-node {
+      cursor: pointer;
+    }
+
+    .participant-node:hover rect,
+    .participant-node:focus-visible rect {
+      stroke: #6f8997;
+    }
+
+    .participant-node:focus {
+      outline: none;
+    }
+
+    .focus-active .participant-node:not(.focused) {
+      opacity: 0.2;
+    }
+
+    .focus-active .endpoint-set:not(.focused) {
+      opacity: 0.08;
+    }
+
+    .focus-active .participant-node.focused rect {
+      stroke: #76ded8;
+      stroke-width: 4;
+    }
+
+    .focus-active .endpoint-set.focused line {
+      stroke-width: 4;
+    }
+
+    .focus-active .endpoint-set.focused polygon[fill="#46d17c"] {
+      stroke: #46d17c;
+      stroke-width: 1.5;
+    }
+
+    .focus-active .endpoint-set.focused polygon[fill="#4fc3f7"] {
+      stroke: #4fc3f7;
+      stroke-width: 1.5;
+    }
+
+    .focus-active .endpoint-set.focused text {
+      font-weight: 700;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .participant-node,
+      .endpoint-set {
+        transition: none;
+      }
+    }
+  </style>
 
   <!-- background -->
-  <rect x="0" y="0" width="1480" height="940" fill="#0a0a0f"/>
+  <rect x="0" y="0" width="1600" height="940" fill="#0a0a0f"/>
 
   <!-- title -->
-  <text x="740" y="46" text-anchor="middle" font-size="23" font-weight="bold" fill="#e8f2ea">AesaRadarSim &#8212; DDS Topic Flow</text>
-
-  <!-- legend -->
-  <rect x="40" y="800" width="400" height="62" rx="6" fill="#0e1118" stroke="#3a4350"/>
-  <polygon points="100,820 90,815 90,825" fill="#46d17c"/>
-  <line x1="56" y1="820" x2="91" y2="820" stroke="#46d17c" stroke-width="2.4"/>
-  <text x="110" y="824" font-size="11" fill="#c9d8ce">publishes (writes topic)</text>
-  <polygon points="100,844 90,839 90,849" fill="#4fc3f7"/>
-  <line x1="56" y1="844" x2="91" y2="844" stroke="#4fc3f7" stroke-width="2.4"/>
-  <text x="110" y="848" font-size="11" fill="#c9d8ce">subscribes (reads topic)</text>
+  <text x="800" y="46" text-anchor="middle" font-size="23" font-weight="bold" fill="#e8f2ea">AesaRadarSim &#8212; DDS Topic Flow</text>
 
   <!-- ============================ TOP ROW ============================ -->
 
   <!-- Radar.ShipINS -->
+  <g class="participant-node" data-participant="ship-ins" tabindex="0" role="button" aria-label="Focus Radar.ShipINS">
   <rect x="40" y="110" width="190" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
   <text x="135" y="140" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.ShipINS</text>
   <text x="135" y="159" text-anchor="middle" font-size="10" fill="#8fa398">radar_app</text>
+  </g>
+  <g class="endpoint-set" data-owner="ship-ins">
   <line x1="135" y1="182" x2="135" y2="420" stroke="#46d17c" stroke-width="2.2"/>
   <polygon points="135,424 130,414 140,414" fill="#46d17c"/>
-  <text x="145" y="290" font-size="11" fill="#c9d8ce">Ship/ShipPosition</text>
-  <text x="145" y="305" font-size="9.5" fill="#8fa398">10 Hz &#183; key 0 (INS)</text>
+  <text x="135" y="290" text-anchor="middle" font-size="11" fill="#c9d8ce">Ship/ShipPosition</text>
+  <text x="135" y="305" text-anchor="middle" font-size="9.5" fill="#8fa398">10 Hz &#183; key 0 (INS)</text>
+  </g>
 
   <!-- Radar.BeamScheduler -->
+  <g class="participant-node" data-participant="beam-scheduler" tabindex="0" role="button" aria-label="Focus Radar.BeamScheduler">
   <rect x="280" y="110" width="190" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
   <text x="375" y="140" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.BeamScheduler</text>
   <text x="375" y="159" text-anchor="middle" font-size="10" fill="#8fa398">radar_app</text>
+  </g>
+  <g class="endpoint-set" data-owner="beam-scheduler">
   <line x1="375" y1="182" x2="375" y2="420" stroke="#46d17c" stroke-width="2.2"/>
   <polygon points="375,424 370,414 380,414" fill="#46d17c"/>
   <text x="375" y="246" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/BeamCommand</text>
   <text x="385" y="261" font-size="9.5" fill="#8fa398">100 Hz</text>
+  </g>
 
   <!-- Radar.Beamformer: steering + health -> actual beam response -->
+  <g class="participant-node" data-participant="beamformer" tabindex="0" role="button" aria-label="Focus Radar.Beamformer">
   <rect x="500" y="110" width="190" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
   <text x="595" y="140" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.Beamformer</text>
   <text x="595" y="159" text-anchor="middle" font-size="10" fill="#8fa398">radar_app</text>
+  </g>
+
+  <g class="endpoint-set" data-owner="beamformer">
 
   <!-- sub BeamCommand -->
   <line x1="525" y1="424" x2="525" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
@@ -49,168 +111,263 @@
   <!-- sub CalibrationStatus -->
   <line x1="590" y1="424" x2="590" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
   <polygon points="590,184 585,194 595,194" fill="#4fc3f7"/>
-  <text x="580" y="300" text-anchor="end" font-size="11" fill="#c9d8ce">Radar/CalibrationStatus</text>
+  <text x="590" y="300" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/CalibrationStatus</text>
 
   <!-- pub BeamPatternStatus -->
   <line x1="660" y1="182" x2="660" y2="420" stroke="#46d17c" stroke-width="3"/>
   <polygon points="660,424 655,414 665,414" fill="#46d17c"/>
   <text x="660" y="382" text-anchor="middle" font-size="11" font-weight="bold" fill="#dff5e7">Radar/BeamPatternStatus</text>
   <text x="660" y="397" text-anchor="middle" font-size="9.5" fill="#8fa398">writer &#183; 20 Hz</text>
+  </g>
 
   <!-- Radar.DetectionProcessor -->
-  <rect x="730" y="110" width="430" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
-  <text x="945" y="134" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.Detection</text>
-  <text x="945" y="151" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Processor</text>
-  <text x="945" y="168" text-anchor="middle" font-size="10" fill="#8fa398">radar_app</text>
+  <g class="participant-node" data-participant="detection" tabindex="0" role="button" aria-label="Focus Radar.DetectionProcessor">
+  <rect x="730" y="110" width="490" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
+  <text x="975" y="134" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.Detection</text>
+  <text x="975" y="151" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Processor</text>
+  <text x="975" y="168" text-anchor="middle" font-size="10" fill="#8fa398">radar_app</text>
+  </g>
+
+  <g class="endpoint-set" data-owner="detection">
 
   <!-- sub BeamCommand -->
-  <line x1="760" y1="424" x2="760" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
-  <polygon points="760,184 755,194 765,194" fill="#4fc3f7"/>
-  <text x="760" y="216" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/BeamCommand</text>
+  <line x1="750" y1="424" x2="750" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="750,184 745,194 755,194" fill="#4fc3f7"/>
+  <text x="750" y="216" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/BeamCommand</text>
 
   <!-- pub RawReturn -->
-  <line x1="830" y1="182" x2="830" y2="420" stroke="#46d17c" stroke-width="2.2"/>
-  <polygon points="830,424 825,414 835,414" fill="#46d17c"/>
-  <text x="830" y="254" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/RawReturn</text>
-  <text x="830" y="269" text-anchor="middle" font-size="9.5" fill="#8fa398">1 kHz</text>
+  <line x1="820" y1="182" x2="820" y2="420" stroke="#46d17c" stroke-width="2.2"/>
+  <polygon points="820,424 815,414 825,414" fill="#46d17c"/>
+  <text x="820" y="254" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/RawReturn</text>
+  <text x="820" y="269" text-anchor="middle" font-size="9.5" fill="#8fa398">1 kHz</text>
 
   <!-- sub RawReturn (loopback) -->
-  <line x1="900" y1="424" x2="900" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
-  <polygon points="900,184 895,194 905,194" fill="#4fc3f7"/>
-  <text x="900" y="292" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/RawReturn</text>
-  <text x="900" y="307" text-anchor="middle" font-size="9.5" fill="#8fa398">loopback</text>
+  <line x1="890" y1="424" x2="890" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="890,184 885,194 895,194" fill="#4fc3f7"/>
+  <text x="890" y="292" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/RawReturn</text>
+  <text x="890" y="307" text-anchor="middle" font-size="9.5" fill="#8fa398">loopback</text>
 
   <!-- pub DetectionEvent -->
-  <line x1="970" y1="182" x2="970" y2="420" stroke="#46d17c" stroke-width="2.2"/>
-  <polygon points="970,424 965,414 975,414" fill="#46d17c"/>
-  <text x="970" y="330" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/DetectionEvent</text>
+  <line x1="960" y1="182" x2="960" y2="420" stroke="#46d17c" stroke-width="2.2"/>
+  <polygon points="960,424 955,414 965,414" fill="#46d17c"/>
+  <text x="960" y="330" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/DetectionEvent</text>
 
   <!-- sub BeamPatternStatus -->
-  <line x1="1040" y1="424" x2="1040" y2="188" stroke="#4fc3f7" stroke-width="3"/>
-  <polygon points="1040,184 1035,194 1045,194" fill="#4fc3f7"/>
-  <text x="1040" y="382" text-anchor="middle" font-size="11" font-weight="bold" fill="#dff5ff">Radar/BeamPatternStatus</text>
-  <text x="1040" y="397" text-anchor="middle" font-size="9.5" fill="#8fa398">reader &#183; receiver physics</text>
+  <line x1="1030" y1="424" x2="1030" y2="188" stroke="#4fc3f7" stroke-width="3"/>
+  <polygon points="1030,184 1025,194 1035,194" fill="#4fc3f7"/>
+  <text x="1030" y="382" text-anchor="middle" font-size="11" font-weight="bold" fill="#dff5ff">Radar/BeamPatternStatus</text>
+  <text x="1030" y="397" text-anchor="middle" font-size="9.5" fill="#8fa398">reader &#183; receiver physics</text>
 
   <!-- sub TargetTruth -->
-  <line x1="1125" y1="424" x2="1125" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
-  <polygon points="1125,184 1120,194 1130,194" fill="#4fc3f7"/>
-  <text x="1125" y="350" text-anchor="middle" font-size="11" fill="#c9d8ce">TargetGen/TargetTruth</text>
+  <line x1="1120" y1="424" x2="1120" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="1120,184 1115,194 1125,194" fill="#4fc3f7"/>
+  <text x="1120" y="350" text-anchor="middle" font-size="11" fill="#c9d8ce">TargetGen/TargetTruth</text>
+
+  <!-- sub own-ship INS through DDS content filter -->
+  <line x1="1200" y1="424" x2="1200" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="1200,184 1195,194 1205,194" fill="#4fc3f7"/>
+  <text x="1200" y="292" text-anchor="middle" font-size="11" fill="#c9d8ce">Ship/ShipPosition</text>
+  <text x="1200" y="307" text-anchor="middle" font-size="9.5" fill="#8fa398">key 0 CFT</text>
+  </g>
 
   <!-- Radar.TrackManager -->
-  <rect x="1190" y="110" width="250" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
-  <text x="1315" y="140" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.TrackManager</text>
-  <text x="1315" y="159" text-anchor="middle" font-size="10" fill="#8fa398">radar_app</text>
+  <g class="participant-node" data-participant="track-manager" tabindex="0" role="button" aria-label="Focus Radar.TrackManager">
+  <rect x="1290" y="110" width="270" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
+  <text x="1425" y="140" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.TrackManager</text>
+  <text x="1425" y="159" text-anchor="middle" font-size="10" fill="#8fa398">radar_app</text>
+  </g>
+
+  <g class="endpoint-set" data-owner="track-manager">
 
   <!-- sub DetectionEvent -->
-  <line x1="1220" y1="424" x2="1220" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
-  <polygon points="1220,184 1215,194 1225,194" fill="#4fc3f7"/>
-  <text x="1220" y="250" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/DetectionEvent</text>
+  <line x1="1310" y1="424" x2="1310" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="1310,184 1305,194 1315,194" fill="#4fc3f7"/>
+  <text x="1310" y="250" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/DetectionEvent</text>
+
+  <!-- sub own-ship INS through DDS content filter -->
+  <line x1="1375" y1="424" x2="1375" y2="188" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="1375,184 1370,194 1380,194" fill="#4fc3f7"/>
+  <text x="1375" y="216" text-anchor="middle" font-size="11" fill="#c9d8ce">Ship/ShipPosition</text>
+  <text x="1375" y="231" text-anchor="middle" font-size="9.5" fill="#8fa398">key 0 CFT</text>
 
   <!-- pub TargetTrack -->
-  <line x1="1320" y1="182" x2="1320" y2="420" stroke="#46d17c" stroke-width="2.2"/>
-  <polygon points="1320,424 1315,414 1325,414" fill="#46d17c"/>
-  <text x="1330" y="330" font-size="11" fill="#c9d8ce">Radar/TargetTrack</text>
-  <text x="1330" y="345" font-size="9.5" fill="#8fa398">10 Hz</text>
+  <line x1="1460" y1="182" x2="1460" y2="420" stroke="#46d17c" stroke-width="2.2"/>
+  <polygon points="1460,424 1455,414 1465,414" fill="#46d17c"/>
+  <text x="1460" y="330" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/TargetTrack</text>
+  <text x="1460" y="345" text-anchor="middle" font-size="9.5" fill="#8fa398">10 Hz</text>
 
   <!-- pub authoritative association/lifecycle diagnostics -->
-  <line x1="1400" y1="182" x2="1400" y2="420" stroke="#46d17c" stroke-width="2.2"/>
-  <polygon points="1400,424 1395,414 1405,414" fill="#46d17c"/>
-  <text x="1400" y="382" text-anchor="middle" font-size="10.5" fill="#c9d8ce">Radar/TrackAssociationEvent</text>
-  <text x="1400" y="397" text-anchor="middle" font-size="9.5" fill="#8fa398">authoritative decisions</text>
+  <line x1="1530" y1="182" x2="1530" y2="420" stroke="#46d17c" stroke-width="2.2"/>
+  <polygon points="1530,424 1525,414 1535,414" fill="#46d17c"/>
+  <text x="1530" y="382" text-anchor="middle" font-size="10.5" fill="#c9d8ce">Radar/TrackAssociationEvent</text>
+  <text x="1530" y="397" text-anchor="middle" font-size="9.5" fill="#8fa398">authoritative decisions</text>
+  </g>
 
   <!-- ============================ THE BUS ============================ -->
-  <rect x="40" y="430" width="1400" height="65" rx="9" fill="#12291b" stroke="#2e7d4f" stroke-width="2"/>
-  <text x="740" y="459" text-anchor="middle" font-size="17" font-weight="bold" letter-spacing="4" fill="#a9e6c3">DDS DATA BUS</text>
-  <text x="740" y="480" text-anchor="middle" font-size="11" fill="#6fae8a">RTI Connext DDS 7.7.0 &#183; Domain 0 &#183; UDPv4 &#183; QoS profiles: qos/radar_qos.xml</text>
+  <rect x="40" y="430" width="1520" height="65" rx="9" fill="#12291b" stroke="#2e7d4f" stroke-width="2"/>
+  <text x="800" y="459" text-anchor="middle" font-size="17" font-weight="bold" letter-spacing="4" fill="#a9e6c3">DDS DATA BUS</text>
+  <text x="800" y="480" text-anchor="middle" font-size="11" fill="#6fae8a">RTI Connext DDS 7.7.0 &#183; Domain 0 &#183; UDPv4 &#183; QoS profiles: qos/radar_qos.xml</text>
 
   <!-- ============================ BOTTOM ROW ============================ -->
 
   <!-- Radar.CalibrationMonitor -->
+  <g class="participant-node" data-participant="calibration" tabindex="0" role="button" aria-label="Focus Radar.CalibrationMonitor">
   <rect x="40" y="700" width="190" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
   <text x="135" y="724" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.Calibration</text>
   <text x="135" y="741" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Monitor</text>
   <text x="135" y="758" text-anchor="middle" font-size="10" fill="#8fa398">radar_app</text>
+  </g>
+  <g class="endpoint-set" data-owner="calibration">
   <line x1="135" y1="700" x2="135" y2="505" stroke="#46d17c" stroke-width="2.2"/>
   <polygon points="135,501 130,511 140,511" fill="#46d17c"/>
-  <text x="145" y="548" font-size="11" fill="#c9d8ce">Radar/CalibrationStatus</text>
-  <text x="145" y="563" font-size="9.5" fill="#8fa398">1 Hz + state changes</text>
+  <text x="135" y="548" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/CalibrationStatus</text>
+  <text x="135" y="563" text-anchor="middle" font-size="9.5" fill="#8fa398">1 Hz + state changes</text>
+  </g>
 
   <!-- Radar.CommandHandler -->
+  <g class="participant-node" data-participant="command-handler" tabindex="0" role="button" aria-label="Focus Radar.CommandHandler">
   <rect x="280" y="700" width="190" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
   <text x="375" y="724" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.Command</text>
   <text x="375" y="741" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Handler</text>
   <text x="375" y="758" text-anchor="middle" font-size="10" fill="#8fa398">radar_app &#183; WaitSet</text>
+  </g>
+  <g class="endpoint-set" data-owner="command-handler">
   <line x1="375" y1="505" x2="375" y2="690" stroke="#4fc3f7" stroke-width="2.2"/>
   <polygon points="375,694 370,684 380,684" fill="#4fc3f7"/>
-  <text x="365" y="580" text-anchor="end" font-size="11" fill="#c9d8ce">Radar/SystemCommand</text>
+  <text x="375" y="580" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/SystemCommand</text>
+  </g>
 
   <!-- Radar.CommandConsole -->
+  <g class="participant-node" data-participant="command-console" tabindex="0" role="button" aria-label="Focus Radar.CommandConsole">
   <rect x="540" y="700" width="190" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
   <text x="635" y="724" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.Command</text>
   <text x="635" y="741" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Console</text>
   <text x="635" y="758" text-anchor="middle" font-size="10" fill="#8fa398">radar_app &#183; UI</text>
+  </g>
+  <g class="endpoint-set" data-owner="command-console">
   <line x1="635" y1="700" x2="635" y2="505" stroke="#46d17c" stroke-width="2.2"/>
   <polygon points="635,501 630,511 640,511" fill="#46d17c"/>
-  <text x="625" y="548" text-anchor="end" font-size="11" fill="#c9d8ce">Radar/SystemCommand</text>
-  <text x="625" y="563" text-anchor="end" font-size="9.5" fill="#8fa398">UI scenarios</text>
+  <text x="635" y="548" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/SystemCommand</text>
+  <text x="635" y="563" text-anchor="middle" font-size="9.5" fill="#8fa398">UI scenarios</text>
+  </g>
 
   <!-- Radar.HMI-UI (display endpoint: every panel is DDS-fed) -->
-  <rect x="820" y="700" width="280" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
-  <text x="960" y="730" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.HMI-UI</text>
-  <text x="960" y="749" text-anchor="middle" font-size="10" fill="#8fa398">radar_app &#183; display</text>
+  <g class="participant-node" data-participant="hmi" tabindex="0" role="button" aria-label="Focus Radar.HMI-UI">
+  <rect x="850" y="700" width="300" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
+  <text x="1000" y="730" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Radar.HMI-UI</text>
+  <text x="1000" y="749" text-anchor="middle" font-size="10" fill="#8fa398">radar_app &#183; display</text>
+  </g>
 
-  <!-- sub TargetTrack -->
-  <line x1="850" y1="505" x2="850" y2="690" stroke="#4fc3f7" stroke-width="2.2"/>
-  <polygon points="850,694 845,684 855,684" fill="#4fc3f7"/>
-  <text x="850" y="540" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/TargetTrack</text>
-
-  <!-- sub DetectionEvent -->
-  <line x1="920" y1="505" x2="920" y2="690" stroke="#4fc3f7" stroke-width="2.2"/>
-  <polygon points="920,694 915,684 925,684" fill="#4fc3f7"/>
-  <text x="920" y="585" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/DetectionEvent</text>
-
-  <!-- sub Ship/ShipPosition -->
-  <line x1="990" y1="505" x2="990" y2="690" stroke="#4fc3f7" stroke-width="2.2"/>
-  <polygon points="990,694 985,684 995,684" fill="#4fc3f7"/>
-  <text x="990" y="630" text-anchor="middle" font-size="11" fill="#c9d8ce">Ship/ShipPosition</text>
-  <text x="990" y="643" text-anchor="middle" font-size="9.5" fill="#8fa398">key 0 (INS)</text>
+  <g class="endpoint-set" data-owner="hmi">
 
   <!-- sub CalibrationStatus -->
-  <line x1="1090" y1="505" x2="1090" y2="690" stroke="#4fc3f7" stroke-width="2.2"/>
-  <polygon points="1090,694 1085,684 1095,684" fill="#4fc3f7"/>
-  <text x="1090" y="675" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/CalibrationStatus</text>
+  <line x1="880" y1="505" x2="880" y2="690" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="880,694 875,684 885,684" fill="#4fc3f7"/>
+  <text x="880" y="540" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/CalibrationStatus</text>
+
+  <!-- sub DetectionEvent -->
+  <line x1="950" y1="505" x2="950" y2="690" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="950,694 945,684 955,684" fill="#4fc3f7"/>
+  <text x="950" y="585" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/DetectionEvent</text>
+
+  <!-- sub Ship/ShipPosition -->
+  <line x1="1020" y1="505" x2="1020" y2="690" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="1020,694 1015,684 1025,684" fill="#4fc3f7"/>
+  <text x="1020" y="630" text-anchor="middle" font-size="11" fill="#c9d8ce">Ship/ShipPosition</text>
+  <text x="1020" y="643" text-anchor="middle" font-size="9.5" fill="#8fa398">key 0 CFT</text>
+
+  <!-- sub TargetTrack -->
+  <line x1="1080" y1="505" x2="1080" y2="690" stroke="#4fc3f7" stroke-width="2.2"/>
+  <polygon points="1080,694 1075,684 1085,684" fill="#4fc3f7"/>
+  <text x="1080" y="675" text-anchor="middle" font-size="11" fill="#c9d8ce">Radar/TargetTrack</text>
 
   <!-- sub BeamPatternStatus -->
-  <line x1="1040" y1="505" x2="1040" y2="690" stroke="#4fc3f7" stroke-width="3"/>
-  <polygon points="1040,694 1035,684 1045,684" fill="#4fc3f7"/>
-  <text x="1052" y="520" font-size="11" font-weight="bold" fill="#dff5ff">Radar/BeamPatternStatus</text>
-  <text x="1052" y="535" font-size="9.5" fill="#8fa398">reader &#183; Radar.HMI-UI</text>
+  <line x1="1130" y1="505" x2="1130" y2="690" stroke="#4fc3f7" stroke-width="3"/>
+  <polygon points="1130,694 1125,684 1135,684" fill="#4fc3f7"/>
+  <text x="1130" y="520" text-anchor="middle" font-size="11" font-weight="bold" fill="#dff5ff">Radar/BeamPatternStatus</text>
+  <text x="1130" y="535" text-anchor="middle" font-size="9.5" fill="#8fa398">reader &#183; Radar.HMI-UI</text>
+  </g>
 
   <!-- TargetGen.Generator (flush with bus right edge) -->
-  <rect x="1160" y="700" width="280" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
-  <text x="1300" y="730" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">TargetGen.Generator</text>
-  <text x="1300" y="749" text-anchor="middle" font-size="10" fill="#8fa398">target_gen</text>
+  <g class="participant-node" data-participant="target-gen" tabindex="0" role="button" aria-label="Focus TargetGen.Generator">
+  <rect x="1260" y="700" width="300" height="68" rx="7" fill="#10141c" stroke="#3a4350"/>
+  <text x="1410" y="730" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">TargetGen.Generator</text>
+  <text x="1410" y="749" text-anchor="middle" font-size="10" fill="#8fa398">target_gen</text>
+  </g>
+
+  <g class="endpoint-set" data-owner="target-gen">
 
   <!-- pub TargetGen/TargetTruth -->
-  <line x1="1230" y1="700" x2="1230" y2="505" stroke="#46d17c" stroke-width="2.2"/>
-  <polygon points="1230,501 1225,511 1235,511" fill="#46d17c"/>
-  <text x="1230" y="548" text-anchor="middle" font-size="11" fill="#c9d8ce">TargetGen/TargetTruth</text>
-  <text x="1230" y="563" text-anchor="middle" font-size="9.5" fill="#8fa398">50 Hz &#183; keyed per target</text>
+  <line x1="1340" y1="700" x2="1340" y2="505" stroke="#46d17c" stroke-width="2.2"/>
+  <polygon points="1340,501 1335,511 1345,511" fill="#46d17c"/>
+  <text x="1340" y="548" text-anchor="middle" font-size="11" fill="#c9d8ce">TargetGen/TargetTruth</text>
+  <text x="1340" y="563" text-anchor="middle" font-size="9.5" fill="#8fa398">50 Hz &#183; keyed per target</text>
 
   <!-- pub Ship/ShipPosition key 1 -->
-  <line x1="1370" y1="700" x2="1370" y2="505" stroke="#46d17c" stroke-width="2.2"/>
-  <polygon points="1370,501 1365,511 1375,511" fill="#46d17c"/>
-  <text x="1370" y="620" text-anchor="middle" font-size="11" fill="#c9d8ce">Ship/ShipPosition</text>
-  <text x="1370" y="633" text-anchor="middle" font-size="9.5" fill="#8fa398">10 Hz &#183; key 1 (truth)</text>
-
-  <!-- Recording/diagnostic tools: enabled by the Section 4.4 WIS view. -->
-  <line x1="770" y1="505" x2="770" y2="790" stroke="#4fc3f7" stroke-width="2.4"/>
-  <polygon points="770,794 765,784 775,784" fill="#4fc3f7"/>
-  <text x="770" y="675" text-anchor="middle" font-size="10.5" fill="#c9d8ce">Radar/TrackAssociationEvent</text>
-  <rect x="520" y="800" width="500" height="62" rx="7" fill="#10141c" stroke="#3a4350" stroke-width="1.4" stroke-dasharray="2 5" stroke-linecap="round"/>
-  <text x="770" y="826" text-anchor="middle" font-size="13" font-weight="bold" fill="#dfe9e2">Recording.DiagnosticTools</text>
-  <text x="770" y="846" text-anchor="middle" font-size="10" fill="#8fa398">WIS &#183; Section 4.4 live view &#183; recording/diagnostic scope</text>
+  <line x1="1490" y1="700" x2="1490" y2="505" stroke="#46d17c" stroke-width="2.2"/>
+  <polygon points="1490,501 1485,511 1495,511" fill="#46d17c"/>
+  <text x="1490" y="620" text-anchor="middle" font-size="11" fill="#c9d8ce">Ship/ShipPosition</text>
+  <text x="1490" y="633" text-anchor="middle" font-size="9.5" fill="#8fa398">10 Hz &#183; key 1 (truth)</text>
+  </g>
 
   <!-- footer -->
   <text x="40" y="916" font-size="10.5" fill="#6f7f76">All application types are @appendable and self-describing via the builtin TypeLookup Service &#8212; monitoring tools decode samples without the IDL file.</text>
+
+  <script><![CDATA[
+    (() => {
+      const root = document.documentElement;
+      const nodes = Array.from(root.querySelectorAll(".participant-node"));
+      const endpointSets = Array.from(root.querySelectorAll(".endpoint-set"));
+      const baseUrl = window.location.href.split("#")[0];
+      let active = null;
+
+      function applyFocus(requested, updateLocation = true) {
+        const exists = nodes.some(node => node.dataset.participant === requested);
+        active = exists && active !== requested ? requested : null;
+        root.classList.toggle("focus-active", Boolean(active));
+
+        for (const node of nodes) {
+          const focused = node.dataset.participant === active;
+          node.classList.toggle("focused", focused);
+          node.setAttribute("aria-pressed", String(focused));
+        }
+        for (const endpointSet of endpointSets) {
+          endpointSet.classList.toggle("focused", endpointSet.dataset.owner === active);
+        }
+
+        if (updateLocation) {
+          try {
+            history.replaceState(null, "", active ? `${baseUrl}#${active}` : baseUrl);
+          } catch (_) {
+            // Some embedded SVG viewers do not expose writable history.
+          }
+        }
+      }
+
+      for (const node of nodes) {
+        node.setAttribute("aria-pressed", "false");
+        node.addEventListener("click", event => {
+          event.stopPropagation();
+          applyFocus(node.dataset.participant);
+        });
+        node.addEventListener("keydown", event => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            event.stopPropagation();
+            applyFocus(node.dataset.participant);
+          }
+        });
+      }
+
+      root.addEventListener("click", event => {
+        if (!event.target.closest(".participant-node") && active) applyFocus(null);
+      });
+      window.addEventListener("keydown", event => {
+        if (event.key === "Escape" && active) applyFocus(null);
+      });
+
+      const initial = decodeURIComponent(window.location.hash.slice(1));
+      if (initial) applyFocus(initial, false);
+    })();
+  ]]></script>
 </svg>
