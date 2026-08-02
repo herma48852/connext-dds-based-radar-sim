@@ -186,6 +186,46 @@ The noise-free magnitude is `sqrt(I^2 + Q^2) = A`; `sqrt(2) * 0.05` is the
 RMS magnitude of the two-dimensional noise vector, not a multiplier applied
 to `A` or to one noise sample.
 
+Because `A` is voltage-like, an amplitude ratio is converted to decibels with
+`20 * log10(amplitude ratio)`. This is equivalent to first squaring the
+amplitude ratio to obtain a power ratio and then using `10 * log10(power
+ratio)`:
+
+```text
+power ratio = (A_1 / A_2)^2
+
+10 * log10(power ratio)
+  = 20 * log10(A_1 / A_2)
+```
+
+For the healthy-array, beam-center, `0 dBsm` reference target at 17.3 km,
+`A = 1`. The fixed `0.26` integrated-magnitude threshold corresponds, under
+the root-sum-square noise approximation derived below, to a noise-free target
+amplitude of approximately `A_threshold = 0.2502`. Therefore:
+
+```text
+amplitude ratio = 1.0 / 0.2502 ~= 4.0
+power ratio     = 4.0^2 ~= 16
+threshold margin = 20 * log10(4.0) ~= 12.04 dB
+```
+
+Thus the reference return has approximately four times the required target
+voltage-like amplitude, or sixteen times the corresponding target power. This
+12 dB quantity is **target-amplitude threshold margin**, not S/N. Using the
+actual expected integrated magnitude gives the closely related detector
+margin:
+
+```text
+M_expected ~= sqrt(1.0^2 + 2 * 0.05^2) = 1.0025
+detector margin = 20 * log10(1.0025 / 0.26) ~= 11.72 dB
+```
+
+Relative to the complex-noise RMS of `sqrt(2) * 0.05 = 0.07071`, the
+simulator reports approximately `23.0 dB` S/N for this return. The `0 dBsm`
+input describes its `1 m^2` radar cross section; it does not mean zero-decibel
+S/N. These margins describe the mean engineering calibration and are not a
+probability-of-detection guarantee near the threshold.
+
 This follows the monostatic radar equation's `1/R^4` received-power law:
 voltage is proportional to the square root of power and therefore follows
 `1/R^2`, while the square root of RCS produces `sqrt(RCS_linear)`. `K` absorbs
@@ -470,7 +510,156 @@ elevation estimator, stronger energy cannot reveal a sub-bar angle. The
 11-degree bar width therefore gives an approximately 3.18° standard
 deviation.
 
-## Association and elevation-bar continuity
+## Target-tracking algorithm
+
+The TrackManager uses a **greedy gated nearest-neighbor association algorithm
+with an alpha-beta position/velocity filter and three-of-five scan
+confirmation**. It is not a Kalman filter, global nearest-neighbor assignment,
+Hungarian assignment, JPDA, or multiple-hypothesis tracker.
+
+The processing order is:
+
+1. fuse duplicate plots from overlapping resolution cells;
+2. predict every existing track to the detection time;
+3. reject detection/track pairs that fail the association gates;
+4. select the lowest-error track among the passing candidates;
+5. update that track with the alpha-beta filter, or initiate a tentative track
+   when no candidate passes;
+6. apply confirmation, duplicate-merge, coast, and drop rules; and
+7. publish only confirmed tracks on `Radar/TargetTrack`.
+
+### Pre-association plot fusion
+
+Adjacent beam footprints and face seams can report the same physical return
+more than once. Before track association, reports are clustered when they are
+within 30 ms, 1.5 range cells, 3.3 degrees of azimuth, and 0.1 degree of
+elevation. Range, azimuth, and elevation are combined using reported-S/N power
+weighting, and the fused report retains the identities of every contributing
+DetectionEvent. This resolution-cell fusion is not the track gate; it reduces
+duplicate measurements before the tracker sees them.
+
+### Prediction and association gating
+
+For each incoming fused detection, every existing track is predicted with a
+constant-velocity model:
+
+```text
+dt = detection_time - last_track_update_time
+
+x_pred = x + vx * dt
+y_pred = y + vy * dt
+z_pred = z + vz * dt
+```
+
+The association **gate** is applied here, before nearest-neighbor selection.
+It is a validation region: a detection/track pair must pass both the slant-
+range and cross-range tests to become a candidate. This gate is separate from
+the DetectionProcessor's `0.26` signal threshold.
+
+For slant range:
+
+```text
+range_error = abs(predicted_slant_range - detected_range)
+
+range_gate = max(375 m, 3 * sigma_range)
+             + motion_uncertainty
+```
+
+For azimuth, the angular error is converted to physical cross-range distance:
+
+```text
+azimuth_error = wrap180(predicted_azimuth - detected_azimuth)
+
+cross_range_error = mean_range * abs(sin(azimuth_error))
+
+azimuth_gate = max(2.6 deg, 3 * sigma_azimuth)
+
+cross_range_gate = 150 m
+                   + mean_range * tan(azimuth_gate)
+                   + motion_uncertainty
+```
+
+The pair passes only when
+
+```text
+range_error       < range_gate
+cross_range_error < cross_range_gate
+```
+
+Before velocity is initialized, the gate permits up to `350 m/s * dt` of
+additional motion. During early velocity stabilization that allowance is
+halved; after the velocity history is established it is removed. Measurement
+S/N changes `sigma_range` and `sigma_azimuth`, but the 375 m and 2.6-degree
+floors dominate for ordinary accepted reports.
+
+Elevation is deliberately absent from this candidate gate because a reported
+elevation is the center of an 11-degree illumination bar, not a continuous
+angle measurement.
+
+### Greedy nearest-neighbor selection
+
+Every candidate that passed both gates receives the normalized innovation
+score
+
+```text
+score = (range_error / range_gate)^2
+        + (cross_range_error / cross_range_gate)^2
+```
+
+The passing candidate with the smallest score receives the detection. The
+selection is greedy because detections are processed sequentially; the
+tracker does not solve one global assignment across all detections and tracks.
+If no existing track passes, the detection initiates a tentative track, up to
+the bounded capacity of 256 tracks.
+
+### Alpha-beta state update
+
+After converting the selected polar report to an Earth-aligned Cartesian
+measurement, the tracker forms the position residual
+
+```text
+rx = x_measured - x_pred
+ry = y_measured - y_pred
+rz = z_measured - z_pred
+```
+
+The fixed alpha gain corrects position:
+
+```text
+x_new = x_pred + alpha * rx
+y_new = y_pred + alpha * ry
+z_new = z_pred + alpha * rz
+
+alpha = 0.55
+```
+
+`alpha = 0.55` means that the filtered position moves 55 percent of the way
+from the prediction toward the new measurement and retains 45 percent of the
+prediction. Alpha is a deterministic smoothing gain, not a probability.
+
+The fixed beta gain corrects velocity:
+
+```text
+vx_new = vx + (beta / dt) * rx
+vy_new = vy + (beta / dt) * ry
+vz_new = vz + (beta / dt) * rz
+
+beta = 0.20
+```
+
+Dividing the position residual by `dt` converts it to an implied velocity
+error. `beta = 0.20` applies 20 percent of that implied error to the existing
+velocity estimate. Beta is suppressed for associations less than 250 ms apart
+and during elevation-bar changes, preventing nearly simultaneous plots or a
+bar-center transition from producing a large velocity impulse.
+
+An initial velocity is seeded from the birth-to-measurement displacement only
+after two qualifying cross-sweep associations separated by at least one
+second; horizontal seed speed is capped at 700 m/s. The fixed alpha and beta
+gains do not vary with the published measurement covariance. Consequently,
+this is an alpha-beta filter rather than a Kalman filter.
+
+### Association uncertainty and elevation-bar continuity
 
 The tracker predicts each Cartesian state with its alpha-beta velocity. It
 then associates a plot using:
@@ -505,10 +694,42 @@ target translation. The regression reproduces the observed approximately
 22.84 km, 326° transition and requires one persistent track ID with no
 fragment.
 
-Track confirmation is otherwise unchanged: three independent scan visits,
-separated by at least 600 ms and occurring inside a 6-second window, confirm
-a track. Confirmed tracks coast for 12 seconds. The alpha-beta gains remain
-`alpha = 0.55` and `beta = 0.20`.
+### Track construction, confirmation, merging, and disposal
+
+An unmatched detection constructs a new lifecycle as a tentative track; its
+initiating detection is the first hit. Multiple reports from one illumination
+must not promote that track: only accepted updates separated by at least 600
+ms count as independent scan visits. Three independent visits inside a
+rolling 6-second window confirm the existing tentative track—they do not
+create a second track. This is the tracker's
+**three-of-five** rule because a complete three-bar face volume nominally
+repeats every 1.2 seconds, giving five opportunities in that window. Only
+confirmed tracks are published on `Radar/TargetTrack`, and a confirmed track
+does not return to tentative status when later scans miss it.
+
+After association, a second safety-net merge removes track fragments occupying
+the same radar resolution cell. Two tracks are merge candidates when their
+slant ranges differ by less than 300 m and their azimuths by less than 3.3
+degrees; if both have initialized velocities, their speed-vector difference
+must also be less than 80 m/s. The confirmed track wins over a tentative one;
+otherwise the track with more hits wins. The survivor absorbs the fragment's
+newer state, timestamp, and confirmation history so a merge does not make a
+valid track appear to stop receiving detections. The losing lifecycle is
+reported as `MERGE/DUPLICATE` on `Radar/TrackAssociationEvent` and its
+registered `Radar/TargetTrack` DDS instance is disposed when disposal is
+enabled.
+
+A track with no accepted detections is **coasting**: its stored velocity is
+used to predict position when testing subsequent associations, but no
+measurement correction occurs. An unconfirmed track is dropped after 6
+seconds without an update; a confirmed track is dropped after 12 seconds.
+These are elapsed-time limits, not counts of missed plots. Dropping the track
+for either timeout emits `DROP/COAST_TIMEOUT` on
+`Radar/TrackAssociationEvent`, removes the lifecycle from TrackManager, and
+disposes any registered keyed `Radar/TargetTrack` instance when disposal is
+enabled. An operator reset and application shutdown similarly terminate all
+lifecycles with `DROP/RESET` and `DROP/SHUTDOWN`, respectively, before their
+registered DDS instances are disposed.
 
 ## Published Cartesian covariance
 
