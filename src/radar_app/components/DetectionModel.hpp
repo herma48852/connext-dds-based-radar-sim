@@ -17,6 +17,8 @@ inline constexpr double kNoiseSigma     = 0.05;
 // RMS magnitude of complex noise whose I and Q axes each have kNoiseSigma.
 inline constexpr double kNoiseMagnitudeRms =
     kNoiseSigma * 1.4142135623730950488;
+// Fixed demo sensitivity calibration, not an adaptive-CFAR result. See
+// docs/EFFECTIVE_RANGE_PROCESSING.md, "Why the threshold is 0.26".
 inline constexpr double kCfarThreshold  = 0.26;
 
 // The original demo sensitivity was calibrated at a nominal 10 cm

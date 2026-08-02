@@ -140,12 +140,61 @@ where:
 - `RCS_linear = 10^(RCS_dBsm / 10)`; and
 - `R` is slant range in metres.
 
+### Calibration and simulator voltage units
+
+`A` is an unbounded, voltage-like value in arbitrary simulator units. It is
+not a physical receiver voltage, a value normalized to the interval `[0, 1]`,
+or a fraction of ADC full scale. The aperture fraction and pattern response
+are normalized factors, but their product with the range/RCS model can produce
+an `A` greater than one.
+
+At the current 3 GHz carrier, the wavelength-scaled calibration is
+
+```text
+K = 3.0e8 * (wavelength / 0.10 m) = 299,792,458
+```
+
+The most useful reference point for explaining that scale is a healthy array,
+a target at beam center, and a `0 dBsm` (`1 m^2`) RCS:
+
+```text
+f_active = 1
+P(0) = 1
+sqrt(RCS_linear) = 1
+A = 299,792,458 / R^2
+
+A = 1 at R = sqrt(299,792,458) = 17,314.5 m
+```
+
+This means a `1 m^2` effective radar cross section at approximately 17.3 km
+places a unit-magnitude target phasor in the center range cell before noise.
+It does not imply that a physical one-square-metre object is a perfect
+reflector; RCS depends on shape, material, aspect, and frequency. The adjacent
+compressed-pulse cells receive `0.4 A` in the current three-cell response.
+
+For carrier phase `phi`, independent noise samples are added to both complex
+components:
+
+```text
+I = A * cos(phi) + N_I
+Q = A * sin(phi) + N_Q
+
+N_I, N_Q ~ Gaussian(mean = 0, sigma = 0.05)
+```
+
+The noise-free magnitude is `sqrt(I^2 + Q^2) = A`; `sqrt(2) * 0.05` is the
+RMS magnitude of the two-dimensional noise vector, not a multiplier applied
+to `A` or to one noise sample.
+
 This follows the monostatic radar equation's `1/R^4` received-power law:
 voltage is proportional to the square root of power and therefore follows
-`1/R^2`. The target voltage is placed coherently into the selected range cell
-and its two adjacent compressed-pulse sidelobe cells. Independent zero-mean
-Gaussian noise with standard deviation `0.05` is added to each I and Q
-component.
+`1/R^2`, while the square root of RCS produces `sqrt(RCS_linear)`. `K` absorbs
+the omitted transmitter, nominal-gain, propagation-constant, loss, and
+receiver-scale terms. The current `f_active` and `P` terms are effective
+amplitude factors applied once; the model does not independently apply a
+one-way antenna pattern on transmit and receive. It is consequently a
+demo-calibrated square-root radar-equation model, not a rigorous two-way RF
+link budget.
 
 The model assumes a constant RCS for each target. It does not currently model
 aspect-dependent RCS, Swerling fluctuations, propagation loss, atmospheric
@@ -167,9 +216,78 @@ A range cell becomes a plot when all of the following are true:
 2. it is a local maximum relative to its two adjacent cells; and
 3. the receive aperture has at least one active element.
 
-The term “CFAR-like” in the code refers to this peak picker. The threshold is
-fixed; it does not estimate a local clutter or noise reference window and
-does not provide a calibrated false-alarm probability.
+### Why the threshold is 0.26
+
+`0.26` is an engineering calibration for this demonstration, not a threshold
+derived from a current adaptive-CFAR noise estimate or an operational `Pfa`
+requirement. It was originally selected for the single-pulse complex Gaussian
+noise model, where each I and Q component has `sigma = 0.05`. A noise-only
+single-pulse magnitude is Rayleigh distributed, giving
+
+```text
+P(sqrt(I^2 + Q^2) > T) = exp(-T^2 / (2 * sigma^2))
+
+T = 0.26, sigma = 0.05  ->  P(exceedance) ~= 1.34e-6 per bin
+```
+
+That probability put the original high-rate detector in the useful demo
+regime of a few raw noise excursions per second across all faces rather than
+tens of thousands. The local-maximum test reduced the number that became
+plots. At the same time, `0.26` left useful margin for the calibrated target
+returns: relative to the complex-noise RMS,
+
+```text
+noise_magnitude_RMS = sqrt(2) * 0.05 = 0.07071
+0.26 / 0.07071 = 3.677  ->  11.31 dB reported magnitude ratio
+```
+
+The production detector now averages power over the normal ten pulses in a
+dwell before applying the same threshold. Under the ideal independent-noise
+model,
+
+```text
+M = sqrt((1/N) * sum(I_p^2 + Q_p^2))
+N * M^2 / sigma^2 ~ chi-square with 2N degrees of freedom
+
+N = 10, M > 0.26  ->  chi-square(20) > 270.4
+```
+
+The corresponding ideal noise-only tail probability is approximately
+`8.6e-46` per integrated bin before the local-maximum test. Thus `0.26` is no
+longer justified as a calibrated false-alarm-rate setting for the current
+integrator. It is intentionally retained as the established sensitivity
+calibration: it preserves the demonstrated target ranges, deterministic replay
+behavior, and tracker workload while strongly suppressing isolated noise.
+
+Using the root-sum-square engineering approximation, the threshold corresponds
+to a noise-free target voltage of
+
+```text
+A_threshold ~= sqrt(0.26^2 - 2 * 0.05^2) = 0.2502
+```
+
+`Pfa` is the probability of false alarm: the probability that the detector
+reports a threshold crossing when no target signal is present. It is normally
+stated per resolution cell or per independent detector test. That per-test
+probability is not the complete system false-alarm rate. For a small `Pfa`, a
+first-order opportunity count is
+
+```text
+expected false alarms ~= Pfa * tested bins * dwells * faces
+```
+
+The local-maximum requirement, correlations between bins or pulses, and other
+gates change the exact system result. A true CFAR detector estimates the local
+noise or clutter level and adjusts its threshold to maintain a selected
+`Pfa`. This simulator's fixed `0.26` threshold has an analytically meaningful
+`Pfa` only while the stated independent Gaussian-noise model is valid; it does
+not estimate a local reference window or maintain a calibrated false-alarm
+probability when the background changes. The term “CFAR-like” in the code
+refers only to the fixed-threshold local-maximum peak picker.
+
+Changing the noise model, adding clutter, or requiring an explicit `Pd`/`Pfa`
+would therefore require recalculating or replacing this constant rather than
+treating `0.26` as universally meaningful.
 
 For the simulation's current controlled background, this simple algorithm
 performs well. The effective-range changes leave the detector's 294 plots in
