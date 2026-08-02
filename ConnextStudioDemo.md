@@ -148,19 +148,41 @@ Typical response times are:
 
 ### Prepare the Studio View
 
-Open or generate:
+Create the live views before issuing the command; these topics are VOLATILE,
+so Studio cannot recover an event that occurred before it subscribed.
 
-- A sample log for `Radar/SystemCommand`.
-- A time chart for `Radar/BeamCommand.azimuth_deg`.
-- Optional traces for `elevation_deg` and `priority`.
-- Filter `Radar/BeamCommand` to `scheduler_id = 0` (FS).
+1. Open a sample log for `Radar/SystemCommand`.
+2. Select **Create Data Visualization**, choose domain 92 and
+   `Radar/BeamCommand`, and create a **Time Chart**.
+3. In the chart settings, select `azimuth_deg` as the plotted field and keep
+   all four `scheduler_id` instances visible. Use `scheduler_id` to identify
+   the series; do not plot it as a numeric Y value, which only adds four flat
+   lines at 0, 1, 2, and 3.
+4. Optionally create separate charts for `elevation_deg` and `priority`.
+
+Keeping all four face instances in the azimuth chart makes the effect especially
+clear. In full search, the faces produce four repeating sawtooth sweeps:
+
+| `scheduler_id` | Face | Full-search beam centers |
+|---:|---|---:|
+| 0 | Forward Starboard (FS) | 1.125°–88.875° |
+| 1 | Aft Starboard (AS) | 91.125°–178.875° |
+| 2 | Aft Port (AP) | 181.125°–268.875° |
+| 3 | Forward Port (FP) | 271.125°–358.875° |
+
+When one face enters sector scan, its full sawtooth collapses into a narrow,
+faster-reversing triangular trace while the other three faces continue their
+full sweeps. The faster reversals also make the increased revisit cadence
+visible. Pause the chart after several cycles when a static view will make the
+comparison easier to explain.
 
 Suggested AI prompt:
 
 > Subscribe to `Radar/SystemCommand` and `Radar/BeamCommand` on domain 92.
-> For `scheduler_id = 0`, create a scrolling time chart of azimuth and
-> elevation, put priority in a second panel, and mark each SystemCommand on
-> the common time axis. Use a 15-second window.
+> Create a scrolling time chart with `azimuth_deg` as the only numeric Y field
+> and one series for each `scheduler_id`. Keep all four face instances visible,
+> put priority in a second panel, and mark each SystemCommand on the common time
+> axis. Use a 15-second window.
 
 In steady FS search, `azimuth_deg` repeatedly sweeps through its forty
 half-step-inset centers from 1.125° to 88.875°, `elevation_deg` cycles among
@@ -181,7 +203,15 @@ Return to Studio and show:
 3. FS `Radar/BeamCommand.azimuth_deg` now bounces across thirteen centers
    from 31.5° through 58.5°. The displayed nominal sector limits are
    30° and 60°.
-4. `Radar/BeamCommand.priority` changes from 3 to 2.
+4. The other three traces retain their full-face spans, showing that the
+   command changed only the selected face.
+5. The FS trace reverses more frequently, showing its increased revisit
+   cadence, and `Radar/BeamCommand.priority` changes from 3 to 2.
+
+If a different face is selected, the same 30° sector appears around that
+face's boresight: AS spans 121.5°–148.5°, AP spans 211.5°–238.5°, and FP spans
+301.5°–328.5°. For example, an AP sector is the narrow trace centered near
+225° while the other three traces remain full sawtooths.
 
 Do not use `BeamCommand.mode` to distinguish these two views; both are emitted
 as `BEAM_MODE_SEARCH` in the current model. The azimuth bounds and priority

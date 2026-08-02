@@ -167,11 +167,18 @@ duplicate target/truth publisher.
    click individual offline blocks. The CLI accepts
    `--face fs|as|ap|fp|all`.
 
-5. **Sector scan** — select FS, press **SECTOR SCAN**, and filter
-   `Radar/BeamCommand` to `scheduler_id = 0`: the thirteen commanded centers
-   bounce from 31.5 to 58.5 degrees instead of sweeping the full 0..90 face
-   field. The B-scope shows the nominal 30 and 60 degree sector boundaries.
-   Other faces continue their independent schedules.
+5. **Sector scan** — before issuing the command, create a
+   `Radar/BeamCommand` Time Chart and plot `azimuth_deg` for all four keyed
+   `scheduler_id` instances. Use `scheduler_id` to distinguish the series; do
+   not plot it as a numeric Y field, because that only adds flat lines at
+   0 through 3. Select FS and press **SECTOR SCAN**: the FS trace changes from
+   a full-face sawtooth to a faster triangular sweep through thirteen centers
+   from 31.5 to 58.5 degrees, while the other three faces retain their full
+   90-degree sweeps. This makes both the narrower sector, increased revisit
+   cadence, and face-local nature of the command visible at once. The B-scope
+   shows the nominal 30 and 60 degree sector boundaries. Optionally isolate
+   `scheduler_id = 0` afterward for a closer look or chart `priority`
+   separately to show its change from 3 to 2.
 
 ## 3. Compatibility notes for Studio
 
