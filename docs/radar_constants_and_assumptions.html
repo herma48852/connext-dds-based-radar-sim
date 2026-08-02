@@ -1,0 +1,964 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>AesaRadarSim — Radar Constants &amp; Modeling Assumptions</title>
+  <style>
+    :root {
+      --bg: #070b10;
+      --bg-2: #0b1119;
+      --panel: #101923;
+      --panel-2: #121e2a;
+      --line: #263747;
+      --line-hot: #3e6277;
+      --text: #e5edf1;
+      --muted: #91a6b2;
+      --cyan: #59d8ff;
+      --green: #61e89a;
+      --amber: #ffc65a;
+      --red: #ff7777;
+      --violet: #b6a0ff;
+      --shadow: 0 22px 60px rgba(0, 0, 0, .32);
+      --radius: 15px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 80% -10%, rgba(89,216,255,.11), transparent 32rem),
+        radial-gradient(circle at -10% 28%, rgba(97,232,154,.07), transparent 28rem),
+        var(--bg);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      line-height: 1.5;
+    }
+
+    a { color: var(--cyan); text-underline-offset: 3px; }
+    code, .mono {
+      font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+      font-variant-numeric: tabular-nums;
+    }
+    code {
+      color: #d9f7ff;
+      background: rgba(89,216,255,.08);
+      border: 1px solid rgba(89,216,255,.13);
+      border-radius: 5px;
+      padding: .08rem .3rem;
+    }
+
+    .topbar {
+      position: sticky;
+      z-index: 20;
+      top: 0;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      min-height: 58px;
+      padding: 9px clamp(16px, 3vw, 42px);
+      border-bottom: 1px solid rgba(145,166,178,.18);
+      background: rgba(7,11,16,.91);
+      backdrop-filter: blur(16px);
+    }
+    .brand {
+      flex: 0 0 auto;
+      font-size: .86rem;
+      font-weight: 800;
+      letter-spacing: .16em;
+      color: var(--green);
+      text-transform: uppercase;
+    }
+    .nav {
+      display: flex;
+      gap: 5px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .nav::-webkit-scrollbar { display: none; }
+    .nav a {
+      flex: 0 0 auto;
+      padding: 6px 9px;
+      color: var(--muted);
+      border-radius: 7px;
+      font-size: .79rem;
+      text-decoration: none;
+    }
+    .nav a:hover, .nav a:focus-visible {
+      color: var(--text);
+      background: rgba(89,216,255,.09);
+      outline: none;
+    }
+
+    main {
+      width: min(1520px, calc(100% - 30px));
+      margin: 0 auto;
+      padding: clamp(34px, 6vw, 82px) 0 70px;
+    }
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(320px, .75fr);
+      align-items: end;
+      gap: 30px;
+      margin-bottom: 28px;
+    }
+    .eyebrow {
+      margin-bottom: 10px;
+      color: var(--green);
+      font-size: .76rem;
+      font-weight: 800;
+      letter-spacing: .17em;
+      text-transform: uppercase;
+    }
+    h1 {
+      max-width: 950px;
+      margin: 0;
+      font-size: clamp(2.4rem, 6vw, 5.9rem);
+      line-height: .94;
+      letter-spacing: -.055em;
+    }
+    .hero p {
+      max-width: 880px;
+      margin: 22px 0 0;
+      color: #b6c5cc;
+      font-size: clamp(1rem, 1.5vw, 1.24rem);
+    }
+    .scope-card {
+      padding: 20px;
+      border: 1px solid rgba(255,198,90,.32);
+      border-left: 4px solid var(--amber);
+      border-radius: var(--radius);
+      background: linear-gradient(140deg, rgba(255,198,90,.10), rgba(16,25,35,.92));
+      box-shadow: var(--shadow);
+    }
+    .scope-card strong {
+      display: block;
+      margin-bottom: 7px;
+      color: var(--amber);
+      font-size: .78rem;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .scope-card p { margin: 0; font-size: .94rem; }
+
+    .quick-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(130px, 1fr));
+      gap: 10px;
+      margin: 25px 0 56px;
+    }
+    .quick {
+      min-height: 104px;
+      padding: 17px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: linear-gradient(155deg, rgba(18,30,42,.96), rgba(11,17,25,.96));
+    }
+    .quick .value {
+      color: var(--cyan);
+      font-size: clamp(1.25rem, 2.1vw, 2rem);
+      font-weight: 760;
+      letter-spacing: -.035em;
+    }
+    .quick .label { margin-top: 5px; color: var(--muted); font-size: .77rem; }
+
+    section { scroll-margin-top: 75px; margin: 0 0 58px; }
+    .section-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(240px, .55fr);
+      gap: 25px;
+      align-items: end;
+      margin-bottom: 18px;
+      padding-bottom: 13px;
+      border-bottom: 1px solid var(--line);
+    }
+    .section-number {
+      color: var(--green);
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: .76rem;
+      letter-spacing: .12em;
+    }
+    h2 { margin: 3px 0 0; font-size: clamp(1.55rem, 3vw, 2.65rem); letter-spacing: -.035em; }
+    h3 { margin: 0 0 12px; font-size: 1.08rem; }
+    .section-head p { margin: 0; color: var(--muted); font-size: .91rem; }
+
+    .panel {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(16,25,35,.94);
+      box-shadow: var(--shadow);
+    }
+    .panel + .panel { margin-top: 16px; }
+    .panel-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 15px;
+      padding: 15px 18px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(18,30,42,.86);
+    }
+    .panel-title h3 { margin: 0; }
+    .panel-title span { color: var(--muted); font-size: .78rem; }
+    .panel-body { padding: 20px; }
+
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 820px; }
+    th, td { padding: 12px 15px; text-align: left; vertical-align: top; }
+    th {
+      position: sticky;
+      top: 58px;
+      z-index: 2;
+      color: #afc0c8;
+      background: #131f2a;
+      border-bottom: 1px solid var(--line-hot);
+      font-size: .7rem;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+    td { border-bottom: 1px solid rgba(38,55,71,.68); font-size: .87rem; }
+    tr:last-child td { border-bottom: 0; }
+    tr:hover td { background: rgba(89,216,255,.026); }
+    td:nth-child(2), td.value-cell { white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .name { color: #f0f6f8; font-weight: 680; }
+    .subtle { color: var(--muted); }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 21px;
+      padding: 2px 7px;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      font-size: .63rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      line-height: 1;
+      text-transform: uppercase;
+      white-space: nowrap;
+      opacity: .9;
+    }
+    .implemented { color: var(--green); }
+    .derived { color: var(--cyan); }
+    .calibrated { color: var(--amber); }
+    .limitation { color: var(--red); }
+    .diagnostic { color: var(--violet); }
+
+    .formula-grid, .two-col, .three-col {
+      display: grid;
+      gap: 15px;
+    }
+    .two-col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .three-col { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .formula-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 16px; }
+    .formula {
+      min-height: 145px;
+      padding: 17px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(8,13,19,.62);
+    }
+    .formula .kicker { color: var(--muted); font-size: .71rem; text-transform: uppercase; letter-spacing: .1em; }
+    .formula .equation { margin: 13px 0 10px; color: #e7fbff; font-size: .91rem; overflow-wrap: anywhere; }
+    .formula p { margin: 0; color: var(--muted); font-size: .79rem; }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--line);
+    }
+    .flow > div { padding: 18px; background: var(--panel); }
+    .flow strong { display: block; color: var(--cyan); font-size: .8rem; }
+    .flow code { display: inline-block; margin: 8px 0; }
+    .flow span { display: block; color: var(--muted); font-size: .77rem; }
+
+    .calculator {
+      display: grid;
+      grid-template-columns: minmax(310px, .7fr) minmax(0, 1.3fr);
+      gap: 16px;
+    }
+    .controls, .results {
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+    }
+    .controls p, .results p { color: var(--muted); font-size: .84rem; }
+    .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    label { display: block; color: #b7c6cc; font-size: .74rem; font-weight: 700; }
+    input {
+      width: 100%;
+      margin-top: 6px;
+      padding: 10px 11px;
+      color: var(--text);
+      background: #080e14;
+      border: 1px solid #304555;
+      border-radius: 8px;
+      font: inherit;
+      font-variant-numeric: tabular-nums;
+    }
+    input:focus { outline: 2px solid rgba(89,216,255,.35); border-color: var(--cyan); }
+    .result-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .result {
+      min-height: 105px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #0a1017;
+    }
+    .result .r-label { color: var(--muted); font-size: .69rem; text-transform: uppercase; letter-spacing: .08em; }
+    .result .r-value { margin-top: 7px; color: var(--cyan); font-size: 1.28rem; font-weight: 760; font-variant-numeric: tabular-nums; }
+    .result .r-note { margin-top: 4px; color: var(--muted); font-size: .7rem; }
+    .result.pass { border-color: rgba(97,232,154,.45); }
+    .result.pass .r-value { color: var(--green); }
+    .result.fail { border-color: rgba(255,119,119,.45); }
+    .result.fail .r-value { color: var(--red); }
+
+    .callout {
+      padding: 16px 18px;
+      border-left: 3px solid var(--cyan);
+      background: rgba(89,216,255,.065);
+      color: #c4d5dc;
+      font-size: .88rem;
+    }
+    .callout.amber { border-left-color: var(--amber); background: rgba(255,198,90,.07); }
+    .callout.red { border-left-color: var(--red); background: rgba(255,119,119,.06); }
+
+    .list-card {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(16,25,35,.82);
+    }
+    .list-card ul { margin: 0; padding-left: 1.15rem; }
+    .list-card li { margin: 7px 0; color: #b8c8cf; font-size: .84rem; }
+
+    .sources { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .source {
+      display: block;
+      padding: 14px;
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(16,25,35,.8);
+      text-decoration: none;
+    }
+    .source:hover { border-color: var(--cyan); }
+    .source strong { display: block; color: var(--cyan); font-size: .82rem; }
+    .source span { display: block; margin-top: 5px; color: var(--muted); font-size: .72rem; }
+
+    footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      margin-top: 55px;
+      padding-top: 20px;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+      font-size: .76rem;
+    }
+
+    @media (max-width: 1100px) {
+      .hero, .calculator, .section-head { grid-template-columns: 1fr; }
+      .quick-grid { grid-template-columns: repeat(3, 1fr); }
+      .formula-grid { grid-template-columns: repeat(2, 1fr); }
+      .three-col { grid-template-columns: 1fr; }
+      .sources { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 700px) {
+      main { width: min(100% - 20px, 1520px); }
+      .brand { display: none; }
+      .topbar { padding-inline: 10px; }
+      .quick-grid, .two-col, .field-grid, .result-grid, .formula-grid, .sources { grid-template-columns: 1fr; }
+      .flow { grid-template-columns: 1fr; }
+      .quick { min-height: auto; }
+      footer { flex-direction: column; }
+    }
+    @media print {
+      :root { --bg: #fff; --panel: #fff; --panel-2: #fff; --text: #111; --muted: #4d5960; --line: #ccd4d8; }
+      body { background: #fff; color: #111; }
+      .topbar, .calculator { display: none; }
+      main { width: 100%; padding: 0; }
+      .hero { grid-template-columns: 1fr; }
+      .panel, .scope-card, .quick { box-shadow: none; break-inside: avoid; }
+      th { position: static; color: #111; background: #eef2f4; }
+      code { color: #111; background: #f1f4f5; }
+      a { color: #075d75; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">AesaRadarSim / Reference</div>
+    <nav class="nav" aria-label="Page sections">
+      <a href="#scope">Scope</a>
+      <a href="#rf">RF &amp; timing</a>
+      <a href="#array">Array</a>
+      <a href="#search">Search</a>
+      <a href="#receiver">Receiver</a>
+      <a href="#detection">Detection</a>
+      <a href="#tracking">Tracking</a>
+      <a href="#interfaces">Interfaces</a>
+      <a href="#limits">Limits</a>
+      <a href="#calculator">Calculator</a>
+      <a href="#sources">Sources</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="hero">
+      <div>
+        <div class="eyebrow">Implemented baseline · source-audited 2026-08-02</div>
+        <h1>Radar constants &amp; modeling assumptions</h1>
+        <p>A presentation-ready reference for the waveform, array, search raster,
+          receiver, detector, measurement, tracker, and data-rate constants actually
+          used by the simulator.</p>
+      </div>
+      <aside class="scope-card">
+        <strong>Representative demo model</strong>
+        <p>These are public-band, round-number, internally consistent assumptions.
+          They are not classified values, measured performance, or a claim about an
+          operational SPY-6 waveform.</p>
+      </aside>
+    </div>
+
+    <div class="quick-grid" aria-label="Key constants at a glance">
+      <div class="quick"><div class="value">3 GHz</div><div class="label">representative S-band carrier</div></div>
+      <div class="quick"><div class="value">1 ms</div><div class="label">pulse repetition interval</div></div>
+      <div class="quick"><div class="value">20 μs</div><div class="label">transmit pulse width</div></div>
+      <div class="quick"><div class="value">1 MHz</div><div class="label">baseband waveform bandwidth</div></div>
+      <div class="quick"><div class="value">149.90 m</div><div class="label">bandwidth-limited range cell</div></div>
+      <div class="quick"><div class="value">100 km</div><div class="label">instrumented slant range</div></div>
+    </div>
+
+    <section id="scope">
+      <div class="section-head">
+        <div><div class="section-number">01 / SCOPE</div><h2>How to read this page</h2></div>
+        <p><span class="tag implemented">implemented</span> is a literal code value;
+          <span class="tag derived">derived</span> follows from other constants;
+          <span class="tag calibrated">calibrated</span> is a demo engineering choice.</p>
+      </div>
+      <div class="three-col">
+        <div class="list-card">
+          <h3>Physical frame</h3>
+          <ul>
+            <li>Monostatic radar: the same modeled aperture transmits and receives.</li>
+            <li>Range is three-dimensional slant range, not ground range.</li>
+            <li>Ship-relative azimuth is clockwise: bow 0°, starboard 90°.</li>
+            <li>Track positions and velocities are Earth-aligned ENU Cartesian values.</li>
+          </ul>
+        </div>
+        <div class="list-card">
+          <h3>Signal abstraction</h3>
+          <ul>
+            <li>Complex baseband I/Q with independent Gaussian noise.</li>
+            <li>Pulse-compressed range is represented by discrete cells.</li>
+            <li>Target return is a voltage-like square-root radar-equation model.</li>
+            <li>Ten pulses are integrated noncoherently per search dwell.</li>
+          </ul>
+        </div>
+        <div class="list-card">
+          <h3>Authority</h3>
+          <ul>
+            <li>Values below are transcribed from the linked implementation headers.</li>
+            <li>Derived values use the exact speed of light constant in the code.</li>
+            <li>If this page and source ever disagree, the source code is authoritative.</li>
+            <li>The detailed rationale remains in <a href="EFFECTIVE_RANGE_PROCESSING.md">EFFECTIVE_RANGE_PROCESSING.md</a>.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="rf">
+      <div class="section-head">
+        <div><div class="section-number">02 / RF &amp; TIMING</div><h2>Waveform and range constants</h2></div>
+        <p>The 1 MHz value is the complex-baseband <em>waveform bandwidth</em>, not a
+          baseband carrier frequency. It controls range resolution; the 3 GHz RF
+          carrier controls wavelength and carrier phase.</p>
+      </div>
+      <div class="panel">
+        <div class="panel-title"><h3>RF and pulse baseline</h3><span>Source: RadarRfModel.hpp</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Constant</th><th>Symbol</th><th>Value</th><th>Interpretation</th><th>Type</th></tr></thead>
+            <tbody>
+              <tr><td class="name">Speed of light</td><td><code>c</code></td><td>299,792,458 m/s</td><td>Exact simulator propagation constant.</td><td><span class="tag implemented">implemented</span></td></tr>
+              <tr><td class="name">RF carrier</td><td><code>f<sub>c</sub></code></td><td>3.000 GHz</td><td>Representative S-band carrier used for wavelength and two-way phase.</td><td><span class="tag calibrated">assumed</span></td></tr>
+              <tr><td class="name">Wavelength</td><td><code>λ = c/f<sub>c</sub></code></td><td>0.0999308 m</td><td>Approximately 9.993 cm.</td><td><span class="tag derived">derived</span></td></tr>
+              <tr><td class="name">Waveform bandwidth</td><td><code>B</code></td><td>1.000 MHz</td><td>Pulse-compressed complex-baseband bandwidth.</td><td><span class="tag calibrated">assumed</span></td></tr>
+              <tr><td class="name">Pulse repetition frequency</td><td><code>PRF</code></td><td>1.000 kHz</td><td>One synthesized RawReturn pulse per millisecond per face.</td><td><span class="tag calibrated">assumed</span></td></tr>
+              <tr><td class="name">Pulse repetition interval</td><td><code>PRI = 1/PRF</code></td><td>1.000 ms</td><td>Time between consecutive transmitted pulses.</td><td><span class="tag derived">derived</span></td></tr>
+              <tr><td class="name">Pulse width</td><td><code>τ</code></td><td>20.000 μs</td><td>Rectangular transmit interval used by the near-range eclipse model.</td><td><span class="tag calibrated">assumed</span></td></tr>
+              <tr><td class="name">Duty cycle</td><td><code>τ · PRF</code></td><td>2.000%</td><td>Transmit-time fraction of each PRI.</td><td><span class="tag derived">derived</span></td></tr>
+              <tr><td class="name">Search dwell</td><td><code>T<sub>dwell</sub></code></td><td>10.000 ms</td><td>One commanded pointing; ten pulses at the 1 kHz PRF.</td><td><span class="tag implemented">implemented</span></td></tr>
+              <tr><td class="name">Pulses per dwell</td><td><code>N</code></td><td>10</td><td>Noncoherent integration length.</td><td><span class="tag derived">derived</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="formula-grid" style="margin-top:16px">
+        <div class="formula"><div class="kicker">Range resolution</div><div class="equation mono">ΔR = c / (2B)<br>= 149.896 m</div><p>The factor of two is the target round trip.</p></div>
+        <div class="formula"><div class="kicker">Unambiguous range</div><div class="equation mono">R<sub>u</sub> = c / (2·PRF)<br>= 149.896 km</div><p>Longer delays would arrive in a later PRI.</p></div>
+        <div class="formula"><div class="kicker">Transmit eclipse boundary</div><div class="equation mono">R<sub>blind</sub> = cτ / 2<br>= 2.9979 km</div><p>The default tail-capture model can still represent nearer returns.</p></div>
+        <div class="formula"><div class="kicker">Two-way carrier phase</div><div class="equation mono">φ = 4πR / λ</div><p>A half-wavelength range change produces a complete phase cycle.</p></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title"><h3>Instrumented range representation</h3><span>Complex cells carried as interleaved scalar I/Q</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Quantity</th><th>Value</th><th>Consequence</th><th>Type</th></tr></thead>
+            <tbody>
+              <tr><td class="name">Instrumented slant range</td><td>100,000 m</td><td>Below the 149.896 km unambiguous limit.</td><td><span class="tag calibrated">assumed</span></td></tr>
+              <tr><td class="name">Complex range cells</td><td>668</td><td><code>ceil(100,000 / 149.896229)</code>.</td><td><span class="tag derived">derived</span></td></tr>
+              <tr><td class="name">RawReturn scalar sequence</td><td>1,336 floats</td><td>Interleaved <code>I,Q</code> for every complex cell.</td><td><span class="tag derived">derived</span></td></tr>
+              <tr><td class="name">IDL scalar capacity</td><td>2,048 floats</td><td>Capacity is scalar values, not complex-cell count.</td><td><span class="tag implemented">implemented</span></td></tr>
+              <tr><td class="name">Reported cell range</td><td><code>(bin + 0.5)ΔR</code></td><td>Cell-center estimate; ordinary quantization error is bounded by approximately ±74.95 m.</td><td><span class="tag implemented">implemented</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="array">
+      <div class="section-head">
+        <div><div class="section-number">03 / ARRAY</div><h2>Aperture and beam assumptions</h2></div>
+        <p>The receiver uses the same calculated one-dimensional azimuth response
+          shown in the Beam Formation panel. Offline-RMA geometry therefore affects
+          boresight, width, sidelobes, and target voltage.</p>
+      </div>
+      <div class="two-col">
+        <div class="panel">
+          <div class="panel-title"><h3>Per-face aperture</h3><span>BeamPatternModel</span></div>
+          <div class="table-wrap"><table style="min-width:620px">
+            <thead><tr><th>Constant</th><th>Value</th><th>Meaning</th></tr></thead>
+            <tbody>
+              <tr><td class="name">Element grid</td><td>32 × 32</td><td>1,024 modeled T/R elements per face.</td></tr>
+              <tr><td class="name">RMA grid</td><td>4 × 4</td><td>16 independently maskable RMAs.</td></tr>
+              <tr><td class="name">Elements per RMA</td><td>8 × 8</td><td>64 elements become dark for one offline bit.</td></tr>
+              <tr><td class="name">Element pitch</td><td>50.0 mm</td><td><code>0.50035 λ</code> at 3 GHz.</td></tr>
+              <tr><td class="name">Center-to-center span</td><td>1.55 m</td><td>31 element intervals across one row or column.</td></tr>
+              <tr><td class="name">Nominal azimuth HPBW</td><td>3.1719°</td><td>Approximate half-power beamwidth of the healthy 32-column aperture.</td></tr>
+              <tr><td class="name">Pattern cut</td><td>−45° … +45°</td><td>181 samples at 0.5° spacing; −80 dB display/model floor.</td></tr>
+              <tr><td class="name">Residual outage boresight</td><td>bounded ±1.5°</td><td>Deterministic horizontal-moment approximation.</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+        <div class="panel">
+          <div class="panel-title"><h3>Four-face geometry</h3><span>Clockwise ship-relative</span></div>
+          <div class="table-wrap"><table style="min-width:620px">
+            <thead><tr><th>Key</th><th>Face</th><th>Coverage</th><th>Boresight</th></tr></thead>
+            <tbody>
+              <tr><td><code>0</code></td><td class="name">Forward Starboard</td><td>0°–90°</td><td>45°</td></tr>
+              <tr><td><code>1</code></td><td class="name">Aft Starboard</td><td>90°–180°</td><td>135°</td></tr>
+              <tr><td><code>2</code></td><td class="name">Aft Port</td><td>180°–270°</td><td>225°</td></tr>
+              <tr><td><code>3</code></td><td class="name">Forward Port</td><td>270°–360°</td><td>315°</td></tr>
+            </tbody>
+          </table></div>
+          <div class="callout">A shared boundary belongs to the clockwise face. A value of 360° wraps to face 0.</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title"><h3>RMA outage response</h3><span>Voltage is modified before noise and dwell integration</span></div>
+        <div class="panel-body">
+          <div class="flow">
+            <div><strong>Availability</strong><code>f<sub>active</sub> = active / 1024</code><span>Each offline RMA removes 64 elements.</span></div>
+            <div><strong>Geometry</strong><code>P<sub>mask</sub>(offset)</code><span>Column locations reshape the azimuth array factor.</span></div>
+            <div><strong>Target phasor</strong><code>A ∝ f<sub>active</sub>P<sub>mask</sub></code><span>Both factors rescale each pulse’s target I/Q.</span></div>
+            <div><strong>Dark aperture</strong><code>active = 0</code><span>Noise remains visible, but DetectionEvents are suppressed.</span></div>
+          </div>
+          <p class="subtle" style="margin:16px 0 0">The pattern is a one-dimensional azimuth cut. Vertically separated RMAs in the same column have the same modeled azimuth effect; a two-dimensional elevation array factor is not implemented. For degraded arrays only, the receiver also admits the two strongest modeled sidelobes inside ±1.2° dwell gates and applies an additional 0.35 amplitude scale.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="search">
+      <div class="section-head">
+        <div><div class="section-number">04 / SEARCH</div><h2>Raster geometry and revisit timing</h2></div>
+        <p>All four faces advance in parallel. The 1.2-second face-volume period is
+          therefore also the nominal full-radar volume period, not four times longer.</p>
+      </div>
+      <div class="panel">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Constant</th><th>Value</th><th>Derived behavior</th><th>Type</th></tr></thead>
+            <tbody>
+              <tr><td class="name">Dwell period</td><td>10 ms</td><td>100 BeamCommands/s per face; 400/s aggregate.</td><td><span class="tag implemented">implemented</span></td></tr>
+              <tr><td class="name">Azimuth raster step</td><td>2.25°</td><td>40 half-step-inset centers cover each 90° face.</td><td><span class="tag calibrated">assumed</span></td></tr>
+              <tr><td class="name">First / last center</td><td>1.125° / 88.875°</td><td>Values shown relative to each face’s lower boundary.</td><td><span class="tag derived">derived</span></td></tr>
+              <tr><td class="name">Elevation-bar centers</td><td>3°, 14°, 25°</td><td>Three discrete labels separated by 11°.</td><td><span class="tag calibrated">assumed</span></td></tr>
+              <tr><td class="name">Elevation acceptance</td><td>center ±5.5°</td><td>Bars tile −2.5° through 30.5° without overlap; this is not an elevation HPBW.</td><td><span class="tag implemented">implemented</span></td></tr>
+              <tr><td class="name">Pointings per face volume</td><td>120</td><td>40 azimuth centers × 3 elevation bars.</td><td><span class="tag derived">derived</span></td></tr>
+              <tr><td class="name">Nominal volume revisit</td><td>1.2 s</td><td>120 pointings × 10 ms.</td><td><span class="tag derived">derived</span></td></tr>
+              <tr><td class="name">Sector mode width</td><td>30°</td><td>13 centers from −13.5° to +13.5° about the selected center.</td><td><span class="tag implemented">implemented</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="callout amber" style="margin-top:16px">The 2.25° raster is finer than the approximately 3.17° healthy-array HPBW, so adjacent half-power footprints overlap. A reported DetectionEvent azimuth is a dwell/raster bearing, not a continuous monopulse angle estimate.</div>
+    </section>
+
+    <section id="receiver">
+      <div class="section-head">
+        <div><div class="section-number">05 / RECEIVER</div><h2>Target voltage and I/Q synthesis</h2></div>
+        <p>The model preserves the radar equation’s range and RCS scaling while
+          absorbing omitted transmit-power, propagation, loss, and receiver-scale
+          constants into one arbitrary-unit calibration.</p>
+      </div>
+      <div class="formula-grid">
+        <div class="formula"><div class="kicker">Target amplitude</div><div class="equation mono">A = K f<sub>active</sub> P(offset)<br>· √RCS / R²</div><p>Voltage-like arbitrary simulator units.</p></div>
+        <div class="formula"><div class="kicker">Calibration</div><div class="equation mono">K = 299,792,458</div><p>Wavelength-scaled from a 3.0×10⁸ reference at 10 cm.</p></div>
+        <div class="formula"><div class="kicker">Complex sample</div><div class="equation mono">I = A cosφ + N<sub>I</sub><br>Q = A sinφ + N<sub>Q</sub></div><p>Independent noise is added to both components.</p></div>
+        <div class="formula"><div class="kicker">Noise model</div><div class="equation mono">N<sub>I</sub>, N<sub>Q</sub> ~ 𝒩(0, 0.05²)</div><p>Complex-noise RMS magnitude is 0.07071.</p></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title"><h3>Receiver calibration and range response</h3><span>Arbitrary voltage-like units</span></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Assumption</th><th>Value / equation</th><th>Interpretation</th><th>Type</th></tr></thead>
+          <tbody>
+            <tr><td class="name">Unit-amplitude reference</td><td>0 dBsm at 17.3145 km</td><td>Healthy array, beam center, before noise: <code>A = 1</code>. The 0 dBsm value means 1 m² RCS, not 0 dB S/N.</td><td><span class="tag calibrated">calibrated</span></td></tr>
+            <tr><td class="name">Range law</td><td><code>A ∝ 1/R²</code></td><td>Corresponds to the monostatic radar equation’s <code>1/R⁴</code> received-power law.</td><td><span class="tag derived">derived</span></td></tr>
+            <tr><td class="name">RCS law</td><td><code>A ∝ √RCS<sub>linear</sub></code></td><td>RCS input is converted with <code>10^(dBsm/10)</code>.</td><td><span class="tag derived">derived</span></td></tr>
+            <tr><td class="name">Compressed-pulse cells</td><td><code>[0.4A, 1.0A, 0.4A]</code></td><td>Center cell and its immediate neighbors; all other cells receive zero target phasor.</td><td><span class="tag calibrated">assumed</span></td></tr>
+            <tr><td class="name">Truth freshness</td><td>500 ms</td><td>Target truth older than 25 nominal 50 Hz publications is removed from synthesis.</td><td><span class="tag implemented">implemented</span></td></tr>
+            <tr><td class="name">Sub-3 km mode</td><td>enabled by default</td><td>Processes the observable tail of echoes that overlap transmission.</td><td><span class="tag implemented">implemented</span></td></tr>
+            <tr><td class="name">Truncated-return fraction</td><td><code>f = R<sub>true</sub>/R<sub>blind</sub></code></td><td>Coherent amplitude fraction for positive ranges below 2.998 km.</td><td><span class="tag calibrated">assumed</span></td></tr>
+            <tr><td class="name">Truncated apparent range</td><td><code>(R<sub>true</sub> + R<sub>blind</sub>)/2</code></td><td>Deterministic midpoint of the rectangular-tail delay ambiguity.</td><td><span class="tag calibrated">assumed</span></td></tr>
+            <tr><td class="name">Near-return clip</td><td><code>A ≤ 64</code></td><td>Bounds the far-field formula at extremely short ranges.</td><td><span class="tag calibrated">assumed</span></td></tr>
+          </tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <section id="detection">
+      <div class="section-head">
+        <div><div class="section-number">06 / DETECTION</div><h2>Integration, threshold, and S/N</h2></div>
+        <p>The detector is fixed-threshold and local-maximum based. “CFAR-like” in
+          this project does not mean that a training window estimates clutter or
+          maintains a selected probability of false alarm.</p>
+      </div>
+      <div class="panel">
+        <div class="panel-body">
+          <div class="flow">
+            <div><strong>10 complex pulses</strong><code>I<sub>p</sub>, Q<sub>p</sub></code><span>One 10 ms dwell.</span></div>
+            <div><strong>Noncoherent power mean</strong><code>mean(I² + Q²)</code><span>Phase is not coherently summed.</span></div>
+            <div><strong>RMS bin magnitude</strong><code>M = √mean(I²+Q²)</code><span>Voltage-like integrated magnitude.</span></div>
+            <div><strong>Plot extraction</strong><code>M &gt; 0.26</code><span>Also local maximum and aperture online.</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="table-wrap"><table>
+          <thead><tr><th>Constant / rule</th><th>Value</th><th>Interpretation</th><th>Type</th></tr></thead>
+          <tbody>
+            <tr><td class="name">Fixed magnitude threshold</td><td><code>0.26</code></td><td>Retained demo sensitivity calibration; applied after ten-pulse RMS integration.</td><td><span class="tag calibrated">calibrated</span></td></tr>
+            <tr><td class="name">Peak rule</td><td><code>M[i] ≥ M[i−1]</code><br><code>M[i] &gt; M[i+1]</code></td><td>One deterministic side wins a flat two-cell tie.</td><td><span class="tag implemented">implemented</span></td></tr>
+            <tr><td class="name">Aperture gate</td><td>active elements &gt; 0</td><td>An all-offline face can display noise but cannot publish a DetectionEvent.</td><td><span class="tag implemented">implemented</span></td></tr>
+            <tr><td class="name">Equivalent target amplitude</td><td><code>A<sub>threshold</sub> ≈ 0.2502</code></td><td><code>√(0.26² − 2·0.05²)</code> under the root-sum-square mean approximation.</td><td><span class="tag derived">derived</span></td></tr>
+            <tr><td class="name">Reported S/N</td><td><code>20 log₁₀(M / 0.07071)</code></td><td>Total bin magnitude relative to fixed nominal complex-noise RMS.</td><td><span class="tag implemented">implemented</span></td></tr>
+            <tr><td class="name">Threshold report floor</td><td>approximately 11.31 dB</td><td>Any normally emitted plot is above this reported ratio.</td><td><span class="tag derived">derived</span></td></tr>
+            <tr><td class="name"><code>A = 1</code> reference</td><td>approximately 23.03 dB</td><td><code>M_expected ≈ 1.0025</code>; approximately 11.72 dB above the actual 0.26 magnitude threshold.</td><td><span class="tag derived">derived</span></td></tr>
+          </tbody>
+        </table></div>
+      </div>
+
+      <div class="two-col" style="margin-top:16px">
+        <div class="callout">Because <code>M/0.07071</code> is an amplitude ratio, the implementation uses <code>20 log10</code>. Equivalently, <code>10 log10(M²/0.005)</code> compares total bin power with nominal noise power.</div>
+        <div class="callout amber">The numerator includes signal plus noise. This diagnostic field approaches conventional SNR for strong targets, but a noise-only bin is approximately 0 dB rather than negative infinity.</div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title"><h3>Nominal beam-center sensitivity references</h3><span>Healthy array · root-sum-square mean crossing · capped at 100 km</span></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Example profile</th><th>RCS</th><th>Uncapped threshold crossing</th><th>Effective modeled result</th></tr></thead>
+          <tbody>
+            <tr><td class="name">Drone</td><td>−15 dBsm</td><td>14.6 km</td><td>14.6 km</td></tr>
+            <tr><td class="name">Missile</td><td>−10 dBsm</td><td>19.5 km</td><td>19.5 km</td></tr>
+            <tr><td class="name">Fighter / baseline</td><td>0 dBsm</td><td>34.6 km</td><td>34.6 km</td></tr>
+            <tr><td class="name">Decoy</td><td>+5 dBsm</td><td>46.2 km</td><td>46.2 km</td></tr>
+            <tr><td class="name">Bomber</td><td>+20 dBsm</td><td>109.5 km</td><td>100 km instrument cap</td></tr>
+            <tr><td class="name">Ship</td><td>+35 dBsm</td><td>259.6 km</td><td>100 km instrument cap</td></tr>
+          </tbody>
+        </table></div>
+        <div class="callout red">These are mean engineering crossings, not guaranteed detection ranges or validated operational performance. Noise makes the result probabilistic near threshold, and the simulator does not calculate <code>Pd</code>.</div>
+      </div>
+    </section>
+
+    <section id="tracking">
+      <div class="section-head">
+        <div><div class="section-number">07 / MEASUREMENT &amp; TRACKING</div><h2>Plot fusion, uncertainty, and track lifecycle</h2></div>
+        <p>The tracker is greedy gated nearest-neighbor association followed by a
+          fixed-gain alpha-beta filter. It is not a Kalman filter, JPDA, MHT, or a
+          global assignment solver.</p>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title"><h3>Measurement and pre-track fusion</h3><span>DetectionEvent → fused CoreDetection</span></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Constant</th><th>Value</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td class="name">Plot-fusion time tolerance</td><td>30 ms</td><td>Cluster adjacent-beam or face-seam reports from one illumination neighborhood.</td></tr>
+            <tr><td class="name">Plot-fusion range tolerance</td><td>1.5 cells = 224.84 m</td><td>Resolution-cell duplicate suppression.</td></tr>
+            <tr><td class="name">Plot-fusion azimuth tolerance</td><td>3.3°</td><td>Spans neighboring overlapping raster beams.</td></tr>
+            <tr><td class="name">Plot-fusion elevation tolerance</td><td>0.1°</td><td>Requires the same discrete elevation-bar label.</td></tr>
+            <tr><td class="name">Fusion weighting</td><td><code>10^(S/N dB / 10)</code></td><td>Power-weights range, azimuth, and elevation; preserves contributor identities.</td></tr>
+            <tr><td class="name">Range quantization σ floor</td><td>43.27 m</td><td><code>ΔR/√12</code> for a uniform range cell.</td></tr>
+            <tr><td class="name">Azimuth raster σ floor</td><td>0.6495°</td><td><code>2.25°/√12</code>; no continuous monopulse estimator.</td></tr>
+            <tr><td class="name">Elevation σ</td><td>3.175°</td><td><code>11°/√12</code>; an elevation bar is interval-censored.</td></tr>
+            <tr><td class="name">Accepted reported S/N range</td><td>11.31–80 dB</td><td>Bound used when deriving uncertainty; missing/non-finite values default to 12 dB.</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title"><h3>Association and alpha-beta filter</h3><span>TrackManager core runs at 10 Hz</span></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Constant / rule</th><th>Value</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td class="name">Range gate floor</td><td>375 m</td><td><code>max(375 m, 3σ<sub>range</sub>) + motion uncertainty</code>.</td></tr>
+            <tr><td class="name">Azimuth gate floor</td><td>2.6°</td><td><code>max(2.6°, 3σ<sub>az</sub>)</code>, converted to physical cross-range.</td></tr>
+            <tr><td class="name">Cross-range floor</td><td>150 m</td><td>Added to range-scaled angular gate and initiation uncertainty.</td></tr>
+            <tr><td class="name">Initiation speed allowance</td><td>350 m/s</td><td>Multiplied by elapsed time before velocity stabilizes; halved during early stabilization.</td></tr>
+            <tr><td class="name">Greedy score</td><td><code>(ΔR/Rgate)² + (ΔX/Xgate)²</code></td><td>Lowest passing score wins for the current detection; elevation is excluded.</td></tr>
+            <tr><td class="name">Position gain</td><td><code>α = 0.55</code></td><td>Corrected position retains 45% prediction and applies 55% residual.</td></tr>
+            <tr><td class="name">Velocity gain</td><td><code>β = 0.20</code></td><td>Applies <code>(β/dt)·residual</code> when <code>dt ≥ 250 ms</code>.</td></tr>
+            <tr><td class="name">Elevation-bar handoff</td><td><code>α = 1</code>, no β</td><td>Projects to the bar interval boundary without a false vertical-velocity impulse.</td></tr>
+            <tr><td class="name">Velocity initialization</td><td>second ≥1 s cross-sweep association</td><td>Birth-to-measurement seed; horizontal seed speed capped at 700 m/s.</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title"><h3>Construction, confirmation, merging, and disposal</h3><span>Lifecycle constants</span></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Constant / event</th><th>Value</th><th>Behavior</th></tr></thead>
+          <tbody>
+            <tr><td class="name">Confirmation</td><td>3 independent hits</td><td>Three accepted scan visits inside a rolling 6-second window.</td></tr>
+            <tr><td class="name">Independent-hit separation</td><td>600 ms minimum</td><td>Multiple reports from one dwell cannot confirm a track.</td></tr>
+            <tr><td class="name">Nominal rule</td><td>3 out of 5</td><td>Five nominal 1.2-second volume opportunities fit the confirmation window.</td></tr>
+            <tr><td class="name">Tentative coast timeout</td><td>6 seconds</td><td>No accepted update: remove the unconfirmed lifecycle.</td></tr>
+            <tr><td class="name">Confirmed coast timeout</td><td>12 seconds</td><td>No accepted update: emit <code>DROP/COAST_TIMEOUT</code> and dispose the DDS instance.</td></tr>
+            <tr><td class="name">Maximum live tracks</td><td>256</td><td>Bounded numeric ID pool beginning at 1000; lifecycle IDs remain monotonic.</td></tr>
+            <tr><td class="name">Duplicate merge</td><td>&lt;300 m, &lt;3.3°, &lt;80 m/s Δv</td><td>Velocity condition applies when both fragments have initialized velocity.</td></tr>
+            <tr><td class="name">Classification thresholds</td><td>&gt;300 / &gt;100 m/s</td><td>Ballistic above 300 m/s; air-breathing above 100 m/s; low/slow geometry may classify surface.</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <section id="interfaces">
+      <div class="section-head">
+        <div><div class="section-number">08 / INTERFACES</div><h2>Publication and processing rates</h2></div>
+        <p>Rates below are nominal application schedules. Best-effort DDS delivery,
+          operating-system scheduling, startup, and shutdown can change what an
+          external observer receives.</p>
+      </div>
+      <div class="panel">
+        <div class="table-wrap"><table>
+          <thead><tr><th>Stream / activity</th><th>Per key / face</th><th>Aggregate</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td class="name">Radar/BeamCommand</td><td>100 Hz/face</td><td>400 Hz</td><td>One new pointing per 10 ms dwell.</td></tr>
+            <tr><td class="name">Radar/RawReturn</td><td>1 kHz/face</td><td>4 kHz</td><td>One 1,336-float I/Q return per pulse; approximately 21.4 MB/s before DDS overhead.</td></tr>
+            <tr><td class="name">Dwell integration</td><td>100 Hz/face</td><td>400 Hz</td><td>One magnitude trace and peak-pick pass per ten pulses.</td></tr>
+            <tr><td class="name">Radar/BeamPatternStatus</td><td>20 Hz/face</td><td>80 Hz</td><td>Effective outage-aware pattern telemetry.</td></tr>
+            <tr><td class="name">Radar/CalibrationStatus</td><td>1 Hz/face</td><td>4 Hz</td><td>Heartbeat plus immediate state-change publications.</td></tr>
+            <tr><td class="name">TargetGen/TargetTruth</td><td>50 Hz/target</td><td>target-count dependent</td><td>Receiver truth input; constant-velocity extrapolated to each pulse.</td></tr>
+            <tr><td class="name">Ship/ShipPosition</td><td>10 Hz/source</td><td>20 Hz for keys 0 and 1</td><td>Key 0 is operational INS; key 1 is target-generator diagnostic truth.</td></tr>
+            <tr><td class="name">Tracker update / TargetTrack</td><td>10 Hz/confirmed track</td><td>track-count dependent</td><td>Only confirmed tracks publish.</td></tr>
+            <tr><td class="name">Target-control snapshot</td><td>5 Hz</td><td>5 Hz</td><td>Separate control-domain inventory; mutations publish immediately.</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title"><h3>Own-ship navigation baseline</h3><span>Operational INS key 0 and diagnostic truth key 1</span></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Constant / state</th><th>Value</th><th>Use</th></tr></thead>
+          <tbody>
+            <tr><td class="name">Initial geodetic position</td><td>36.90° N, 75.90° W</td><td>Atlantic reference origin off the Virginia Capes.</td></tr>
+            <tr><td class="name">Heading and course</td><td>45.0°</td><td>Converts ship-relative detection azimuth into Earth-aligned ENU tracks.</td></tr>
+            <tr><td class="name">Ship speed</td><td>10.3 m/s</td><td>Approximately 20 knots; both navigation sources model the same nominal translation.</td></tr>
+            <tr><td class="name">Altitude</td><td>0 m</td><td>No modeled heave or vertical ship translation.</td></tr>
+            <tr><td class="name">Pitch</td><td><code>0.8 sin(0.50t)°</code></td><td>Display/navigation motion; the search elevation-bar geometry remains discrete.</td></tr>
+            <tr><td class="name">Roll</td><td><code>2.5 sin(0.31t + 1.2)°</code></td><td>Display/navigation motion; not a full stabilized-array dynamics model.</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div class="callout" style="margin-top:16px">DetectionProcessor and TrackManager each subscribe to a DDS content-filtered <code>Ship/ShipPosition</code> topic selecting <code>source_id = 0</code>. The <code>source_id = 1</code> truth instance is intentionally available to external diagnostic tools, not to the operational processing path.</div>
+    </section>
+
+    <section id="limits">
+      <div class="section-head">
+        <div><div class="section-number">09 / LIMITS</div><h2>What the constants do not model</h2></div>
+        <p>These omissions define the boundary of valid interpretation more strongly
+          than another decimal place on any constant.</p>
+      </div>
+      <div class="three-col">
+        <div class="list-card">
+          <h3>Propagation &amp; environment</h3>
+          <ul>
+            <li>No atmospheric attenuation, terrain, sea state, multipath, or ducting.</li>
+            <li>No rain/weather volume returns, clutter map, interference, or jamming.</li>
+            <li>No receiver saturation or detailed transmit leakage/recovery.</li>
+            <li>No calibrated system loss or operational link budget.</li>
+          </ul>
+        </div>
+        <div class="list-card">
+          <h3>Target &amp; signal statistics</h3>
+          <ul>
+            <li>Constant target RCS; no aspect dependence or Swerling fluctuations.</li>
+            <li>No Doppler processing or radial-velocity measurement.</li>
+            <li>No fractional-delay matched-filter interpolation.</li>
+            <li>No modeled probability of detection; noise alone makes near-threshold outcomes stochastic.</li>
+          </ul>
+        </div>
+        <div class="list-card">
+          <h3>Angle &amp; tracking</h3>
+          <ul>
+            <li>One-dimensional azimuth array factor; elevation is a three-bar label.</li>
+            <li>No monopulse or continuous sub-beam angle estimate.</li>
+            <li>No adaptive CFAR training/guard cells or calibrated operational <code>Pfa</code>.</li>
+            <li>Published covariance is latest-measurement geometry, not a propagated Kalman posterior.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="calculator">
+      <div class="section-head">
+        <div><div class="section-number">10 / CALCULATOR</div><h2>Receiver reference calculator</h2></div>
+        <p>Uses the implemented amplitude, root-sum-square mean, fixed-noise, and
+          fixed-threshold equations. It assumes elevation acceptance and that the
+          supplied pattern response already represents the desired beam offset.</p>
+      </div>
+      <div class="calculator">
+        <div class="controls">
+          <h3>Target and aperture</h3>
+          <p>Defaults reproduce the healthy-array, beam-center, 0 dBsm unit-amplitude reference.</p>
+          <div class="field-grid">
+            <label>Slant range (km)<input id="rangeKm" type="number" min="0.001" step="0.1" value="17.3145"></label>
+            <label>RCS (dBsm)<input id="rcsDbsm" type="number" step="1" value="0"></label>
+            <label>Active aperture fraction<input id="activeFraction" type="number" min="0" max="1" step="0.0625" value="1"></label>
+            <label>Pattern voltage response<input id="patternResponse" type="number" min="0" max="1" step="0.01" value="1"></label>
+          </div>
+          <p>The calculator is deliberately deterministic. It does not sample I/Q noise, test adjacent cells, or calculate detection probability.</p>
+        </div>
+        <div class="results" aria-live="polite">
+          <h3>Mean engineering estimate</h3>
+          <div class="result-grid">
+            <div class="result"><div class="r-label">Target amplitude A</div><div class="r-value" id="resultA">—</div><div class="r-note">noise-free voltage-like phasor</div></div>
+            <div class="result"><div class="r-label">Expected M_bin</div><div class="r-value" id="resultM">—</div><div class="r-note">RSS target + complex-noise RMS</div></div>
+            <div class="result"><div class="r-label">Reported S/N</div><div class="r-value" id="resultSnr">—</div><div class="r-note">20 log₁₀(M / 0.07071)</div></div>
+            <div class="result"><div class="r-label">Target-A margin</div><div class="r-value" id="resultAMargin">—</div><div class="r-note">relative to A_threshold = 0.2502</div></div>
+            <div class="result"><div class="r-label">Detector margin</div><div class="r-value" id="resultDetectorMargin">—</div><div class="r-note">relative to M threshold = 0.26</div></div>
+            <div class="result" id="resultDecisionCard"><div class="r-label">Mean threshold test</div><div class="r-value" id="resultDecision">—</div><div class="r-note" id="resultDecisionNote">M &gt; 0.26 and within 100 km</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="sources">
+      <div class="section-head">
+        <div><div class="section-number">11 / SOURCES</div><h2>Implementation sources</h2></div>
+        <p>Direct links work when this page is opened from the repository. The
+          effective-range document contains the longer derivations and rationale.</p>
+      </div>
+      <div class="sources">
+        <a class="source" href="../src/radar_app/components/RadarRfModel.hpp"><strong>RadarRfModel.hpp</strong><span>Carrier, wavelength, bandwidth, PRF, pulse width, ranges, bins</span></a>
+        <a class="source" href="../src/radar_app/components/DetectionModel.hpp"><strong>DetectionModel.hpp</strong><span>Noise, threshold, calibration, phase, compressed-pulse weights</span></a>
+        <a class="source" href="../src/radar_app/components/NearRangeModel.hpp"><strong>NearRangeModel.hpp</strong><span>Transmit eclipse and truncated-return approximation</span></a>
+        <a class="source" href="../src/radar_app/components/SearchRaster.hpp"><strong>SearchRaster.hpp</strong><span>Dwell timing, raster spacing, elevation bars, volume period</span></a>
+        <a class="source" href="../src/radar_app/components/BeamPatternModel.hpp"><strong>BeamPatternModel.hpp / .cpp</strong><span>Array geometry, pattern cut, outage-aware beam model</span></a>
+        <a class="source" href="../src/radar_app/components/FaceDetectionFusion.hpp"><strong>FaceDetectionFusion.hpp</strong><span>Pre-track resolution-cell fusion tolerances</span></a>
+        <a class="source" href="../src/radar_app/components/TrackerCore.hpp"><strong>TrackerCore.hpp / .cpp</strong><span>Association, alpha-beta gains, confirmation, merge, coast/drop</span></a>
+        <a class="source" href="../src/common/RadarFaces.hpp"><strong>RadarFaces.hpp</strong><span>Face keys, masks, coverage, boresights, boundary ownership</span></a>
+        <a class="source" href="../src/radar_app/ShipSimulator.hpp"><strong>ShipSimulator.hpp / .cpp</strong><span>Operational navigation origin, motion, attitude, and publication rate</span></a>
+        <a class="source" href="../src/target_gen/TargetScenario.cpp"><strong>TargetScenario.cpp</strong><span>Target profile RCS values and scenario motion assumptions</span></a>
+        <a class="source" href="EFFECTIVE_RANGE_PROCESSING.md"><strong>EFFECTIVE_RANGE_PROCESSING.md</strong><span>Detailed receiver, threshold, uncertainty, and tracking rationale</span></a>
+      </div>
+    </section>
+
+    <footer>
+      <span>AesaRadarSim · Radar Constants &amp; Modeling Assumptions</span>
+      <span>Static documentation reference · no live DDS connection required</span>
+    </footer>
+  </main>
+
+  <script>
+    "use strict";
+    (() => {
+      const C = Object.freeze({
+        signalScale: 299792458,
+        noiseSigma: 0.05,
+        noiseMagnitudeRms: Math.SQRT2 * 0.05,
+        detectorThreshold: 0.26,
+        instrumentedRangeM: 100000
+      });
+      const aThreshold = Math.sqrt(
+        C.detectorThreshold ** 2 - C.noiseMagnitudeRms ** 2);
+      const byId = id => document.getElementById(id);
+      const inputs = ["rangeKm", "rcsDbsm", "activeFraction", "patternResponse"]
+        .map(byId);
+
+      const finite = (value, fallback = 0) => Number.isFinite(value) ? value : fallback;
+      const db = ratio => ratio > 0 ? 20 * Math.log10(ratio) : -Infinity;
+      const fmt = (value, digits = 3) => {
+        if (value === Infinity) return "+∞";
+        if (value === -Infinity) return "−∞";
+        if (!Number.isFinite(value)) return "—";
+        return value.toLocaleString(undefined, {
+          minimumFractionDigits: digits,
+          maximumFractionDigits: digits
+        });
+      };
+
+      function update() {
+        const rangeKm = Math.max(0.001, finite(Number(byId("rangeKm").value), 17.3145));
+        const rangeM = rangeKm * 1000;
+        const rcsDbsm = finite(Number(byId("rcsDbsm").value));
+        const active = Math.min(1, Math.max(0, finite(Number(byId("activeFraction").value), 1)));
+        const pattern = Math.min(1, Math.max(0, finite(Number(byId("patternResponse").value), 1)));
+        const rcsLinear = 10 ** (rcsDbsm / 10);
+        const amplitude = C.signalScale * active * pattern * Math.sqrt(rcsLinear) / (rangeM ** 2);
+        const expectedM = Math.hypot(amplitude, C.noiseMagnitudeRms);
+        const reportedSnr = db(expectedM / C.noiseMagnitudeRms);
+        const aMargin = db(amplitude / aThreshold);
+        const detectorMargin = db(expectedM / C.detectorThreshold);
+        const inRange = rangeM <= C.instrumentedRangeM;
+        const apertureOnline = active > 0;
+        const passesMean = inRange && apertureOnline && expectedM > C.detectorThreshold;
+
+        byId("resultA").textContent = fmt(amplitude, amplitude < 0.01 ? 5 : 3);
+        byId("resultM").textContent = fmt(expectedM, expectedM < 0.01 ? 5 : 3);
+        byId("resultSnr").textContent = `${fmt(reportedSnr, 2)} dB`;
+        byId("resultAMargin").textContent = `${fmt(aMargin, 2)} dB`;
+        byId("resultDetectorMargin").textContent = `${fmt(detectorMargin, 2)} dB`;
+        byId("resultDecision").textContent = passesMean ? "ABOVE" : "BELOW";
+        byId("resultDecisionNote").textContent = !inRange
+          ? "outside the 100 km instrumented range"
+          : !apertureOnline
+            ? "all-offline aperture suppresses detections"
+            : passesMean
+              ? "mean magnitude exceeds 0.26; local-maximum test still applies"
+              : "mean magnitude does not exceed 0.26";
+        const card = byId("resultDecisionCard");
+        card.classList.toggle("pass", passesMean);
+        card.classList.toggle("fail", !passesMean);
+      }
+
+      for (const input of inputs) input.addEventListener("input", update);
+      update();
+    })();
+  </script>
+</body>
+</html>

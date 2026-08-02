@@ -24,6 +24,11 @@ separate workspace.
 > **[Effective-range Detection and Tracking](docs/EFFECTIVE_RANGE_PROCESSING.md)**
 > for the RF timing basis, sensitivity table, measurement uncertainty,
 > covariance, elevation-bar handling, assumptions, and deferred processing.
+>
+> **RF reviewers and presenters:** Open the standalone
+> **[Radar Constants & Modeling Assumptions](docs/radar_constants_and_assumptions.html)**
+> page for a source-audited summary, derived values, limitations, and an
+> interactive receiver reference calculator.
 
 Three applications in one CMake monorepo. Radar data stays on the simulation
 DDS domain; the optional target-management UI uses a separate control domain:
