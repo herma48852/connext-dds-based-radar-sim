@@ -56,9 +56,7 @@ AesaRadarSim/
 ├── scripts/start-all.sh         # macOS launcher for all three processes
 ├── scripts/run-demo.sh          # unattended/headless Bash launcher
 ├── scripts/windows/start-all.cmd # Windows launcher for all three processes
-├── tests/                       # headless UI, target, and tracker regressions
-├── RadarDemoPresentationPlaybook.md   # editable presentation playbook
-└── RadarDemoPresentationPlaybook.html # printable presentation playbook
+└── tests/                       # headless UI, target, and tracker regressions
 ```
 
 ---
@@ -348,8 +346,7 @@ intentionally ends both that stream and `Ship/ShipPosition` with
 demand by Connext Studio, WIS live views, recording tools, or other analysis
 participants, not operational radar inputs. They therefore have no reader when
 no diagnostic tool is connected. (Connext Studio joins the same domain from a
-separate workspace and can read every topic shown; see the
-[presentation playbook](RadarDemoPresentationPlaybook.md#8-connext-studio-live-system-visibility). Not shown: the
+separate workspace and can read every topic shown. Not shown: the
 on-demand diagnostic endpoints `target_gen` creates with
 `--inject-qos-mismatch`, `--inject-type-mismatch` and `--degrade-array`.)
 
@@ -536,9 +533,3 @@ ship-relative polar for detections, ship-relative ENU for tracks/truth.
   reusable polyline buffers, a single texture upload per B-scope frame,
   lock-free SPSC handoff for high-rate display events, and small
   mutex-protected snapshot copies for the latest aggregate views.
-
-## Connext Studio
-
-See the **[radar demonstration presentation playbook](RadarDemoPresentationPlaybook.md)**
-for the complete speaker and operator sequence. The printable standalone
-version is **[RadarDemoPresentationPlaybook.html](RadarDemoPresentationPlaybook.html)**.

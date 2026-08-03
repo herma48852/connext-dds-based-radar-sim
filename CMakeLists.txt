@@ -353,10 +353,6 @@ if(RADAR_BUILD_APPLICATIONS)
             docs/beam_spacing_geometry.svg
             docs/elevation_geometry.svg
             DESTINATION docs)
-        install(FILES
-            RadarDemoPresentationPlaybook.md
-            RadarDemoPresentationPlaybook.html
-            DESTINATION .)
         set(CPACK_GENERATOR "ZIP")
         set(CPACK_PACKAGE_FILE_NAME
             "AesaRadarSim-${PROJECT_VERSION}-windows-x64")

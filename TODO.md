@@ -800,8 +800,7 @@ Report back: ASan report (or "ASan silent + zombie/scribble output").
 - **Crash handler** installed in `radar_app/main.cpp` (SIGSEGV/SIGBUS/
   SIGABRT → backtrace to stderr; POSIX only).
 - **Font-scale clamp** in UiApp.cpp (guards 0/NaN content scale).
-- Docs fully synced: README, `docs/dds_architecture.{svg,png}`, and the
-  radar presentation playbook. K2.6's
+- Docs fully synced: README and `docs/dds_architecture.{svg,png}`. K2.6's
   loopback section kept; K2.6's invented subscriptions corrected, then
   made real by the HMI-UI work.
 
@@ -837,8 +836,6 @@ Report back: ASan report (or "ASan silent + zombie/scribble output").
 
 ## 4. Webinar prep (after the crash is fixed)
 
-- [ ] Rehearse `RadarDemoPresentationPlaybook.md` end-to-end, including
-      topology, TypeLookup, QoS visibility, and the live scenarios.
 - [ ] Show dispose in action: track reset → instances vanish live in
       Studio (HMI-UI dispose path).
 - [ ] Verify `--inject-qos-mismatch` and `--inject-type-mismatch` still

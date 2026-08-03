@@ -1,7 +1,7 @@
 # Multi-topic live views
 
-These browser prototypes provide the live multi-topic workarounds described in
-[the presentation playbook](../../RadarDemoPresentationPlaybook.md#9-live-observability-limitations-and-the-wis-workaround).
+These browser views use Web Integration Service to correlate several live DDS
+topics in one task-specific page.
 
 | Section | View | Windows launcher |
 |---|---|---|

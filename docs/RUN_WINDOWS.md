@@ -237,9 +237,6 @@ operation, allow `radar_app.exe`, `target_gen.exe`, `target_control.exe`, and Co
 Windows Defender Firewall on the intended network profile. Do not disable the
 firewall globally. Use a unique DDS domain when multiple demos share a network.
 
-Connext Studio should observe the topology and transitions described in
-`RadarDemoPresentationPlaybook.md`.
-
 ## Packaging
 
 ```bat
