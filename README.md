@@ -57,8 +57,8 @@ AesaRadarSim/
 ├── scripts/run-demo.sh          # unattended/headless Bash launcher
 ├── scripts/windows/start-all.cmd # Windows launcher for all three processes
 ├── tests/                       # headless UI, target, and tracker regressions
-├── ConnextStudioDemo.md         # live webinar workspace-switching runbook
-└── docs/CONNEXT_STUDIO.md       # monitoring / diagnostics demo guide
+├── RadarDemoPresentationPlaybook.md   # editable presentation playbook
+└── RadarDemoPresentationPlaybook.html # printable presentation playbook
 ```
 
 ---
@@ -348,8 +348,8 @@ intentionally ends both that stream and `Ship/ShipPosition` with
 demand by Connext Studio, WIS live views, recording tools, or other analysis
 participants, not operational radar inputs. They therefore have no reader when
 no diagnostic tool is connected. (Connext Studio joins the same domain from a
-separate workspace and can read every topic shown; see
-[docs/CONNEXT_STUDIO.md](docs/CONNEXT_STUDIO.md). Not shown: the
+separate workspace and can read every topic shown; see the
+[presentation playbook](RadarDemoPresentationPlaybook.md#8-connext-studio-live-system-visibility). Not shown: the
 on-demand diagnostic endpoints `target_gen` creates with
 `--inject-qos-mismatch`, `--inject-type-mismatch` and `--degrade-array`.)
 
@@ -539,8 +539,6 @@ ship-relative polar for detections, ship-relative ENU for tracks/truth.
 
 ## Connext Studio
 
-See **[ConnextStudioDemo.md](ConnextStudioDemo.md)** for the webinar
-play-by-play: prepare a steady-state Studio view, activate a scenario in the
-radar workspace, return to observe the DDS changes, and reshape the live view
-with Studio AI. See **[docs/CONNEXT_STUDIO.md](docs/CONNEXT_STUDIO.md)** for
-the lower-level topology, QoS, TypeLookup, and mismatch reference.
+See the **[radar demonstration presentation playbook](RadarDemoPresentationPlaybook.md)**
+for the complete speaker and operator sequence. The printable standalone
+version is **[RadarDemoPresentationPlaybook.html](RadarDemoPresentationPlaybook.html)**.

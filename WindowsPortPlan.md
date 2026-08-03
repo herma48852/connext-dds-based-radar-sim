@@ -254,7 +254,8 @@ machine, and finally Studio or the target generator on a second machine.
 ### Exit criteria
 
 - Same-host DDS operation passes for 30 minutes.
-- Connext Studio observes every scenario in `ConnextStudioDemo.md`.
+- Connext Studio observes every applicable live scenario in
+  `RadarDemoPresentationPlaybook.md`.
 - Multi-host discovery and data flow work on the intended webinar network.
 
 ## 7. Add Windows integration automation
@@ -321,7 +322,7 @@ Produce a ZIP or CPack package containing:
 - Required Connext runtime DLLs, subject to RTI redistribution terms
 - Any required Microsoft runtime components
 - `run-demo.ps1`
-- `ConnextStudioDemo.md`
+- `RadarDemoPresentationPlaybook.md` and its printable HTML rendering
 - A short Windows README
 
 Keep the applications as console executables initially so diagnostic output
@@ -511,7 +512,7 @@ platform and presentation documents:
 - `WindowsPortPlan.md` — port implementation and acceptance plan.
 - `docs/RUN_MACOS.md` — macOS setup, launch, and troubleshooting.
 - `docs/RUN_WINDOWS.md` — Windows setup, launch, firewall, and troubleshooting.
-- `ConnextStudioDemo.md` — platform-neutral webinar choreography.
+- `RadarDemoPresentationPlaybook.md` — platform-neutral webinar choreography.
 
 Avoid copying common behavioral explanations into both platform runbooks.
 Link to the shared source so updates cannot diverge unnoticed.

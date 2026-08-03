@@ -347,14 +347,16 @@ if(RADAR_BUILD_APPLICATIONS)
             DESTINATION scripts/windows)
         install(FILES
             docs/RUN_WINDOWS.md
-            docs/CONNEXT_STUDIO.md
             docs/EFFECTIVE_RANGE_PROCESSING.md
             docs/OPERATOR_DISPLAY_GUIDE.md
             docs/TARGET_CONTROL.md
             docs/beam_spacing_geometry.svg
             docs/elevation_geometry.svg
             DESTINATION docs)
-        install(FILES ConnextStudioDemo.md DESTINATION .)
+        install(FILES
+            RadarDemoPresentationPlaybook.md
+            RadarDemoPresentationPlaybook.html
+            DESTINATION .)
         set(CPACK_GENERATOR "ZIP")
         set(CPACK_PACKAGE_FILE_NAME
             "AesaRadarSim-${PROJECT_VERSION}-windows-x64")

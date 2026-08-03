@@ -238,7 +238,7 @@ Windows Defender Firewall on the intended network profile. Do not disable the
 firewall globally. Use a unique DDS domain when multiple demos share a network.
 
 Connext Studio should observe the topology and transitions described in
-`ConnextStudioDemo.md`.
+`RadarDemoPresentationPlaybook.md`.
 
 ## Packaging
 

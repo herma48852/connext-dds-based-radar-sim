@@ -1,7 +1,7 @@
 # Multi-topic live views
 
-These browser prototypes implement the live multi-topic view designs in
-[Section 4 of the Connext Studio guide](../CONNEXT_STUDIO.md#4-designing-hypothetical-live-multi-topic-custom-ai-views).
+These browser prototypes provide the live multi-topic workarounds described in
+[the presentation playbook](../../RadarDemoPresentationPlaybook.md#9-live-observability-limitations-and-the-wis-workaround).
 
 | Section | View | Windows launcher |
 |---|---|---|
