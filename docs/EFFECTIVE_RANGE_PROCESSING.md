@@ -172,8 +172,24 @@ It does not imply that a physical one-square-metre object is a perfect
 reflector; RCS depends on shape, material, aspect, and frequency. The adjacent
 compressed-pulse cells receive `0.4 A` in the current three-cell response.
 
-For carrier phase `phi`, independent noise samples are added to both complex
-components:
+The simulator does not choose carrier phase `phi` randomly. For each pulse, it
+extrapolates the target position from the latest truth sample, calculates the
+target's slant range `R`, doubles that range for the outbound-and-return path,
+and computes:
+
+```text
+phi = 2*pi * remainder(2*R / wavelength, 1)
+    = (4*pi*R / wavelength) modulo 2*pi
+```
+
+The `remainder` form represents the wrapped phase in approximately
+`[-pi, pi]`. At the 3 GHz carrier, `wavelength` is approximately `0.09993 m`,
+so the same phase repeats after a slant-range change of `wavelength / 2`, or
+about `0.04997 m`. Computing `phi` from the pulse-time range makes its
+pulse-to-pulse evolution coherent with target motion and preserves Doppler
+information in the raw I/Q.
+
+Independent noise samples are then added to both complex components:
 
 ```text
 I = A * cos(phi) + N_I
