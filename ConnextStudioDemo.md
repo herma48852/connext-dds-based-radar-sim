@@ -33,6 +33,13 @@ the beginning of the transition. `Radar/CalibrationStatus`,
 `Radar/BeamPatternStatus`, and `Radar/TargetTrack` are transient-local and
 retain their latest keyed state for late joiners.
 
+Connext Studio currently restricts each visualization view to one DDS topic.
+Several single-topic views can be open at once, but one view cannot subscribe
+to, join, or correlate multiple topics on a common timeline. In this runbook,
+show the command in a `Radar/SystemCommand` sample log and then switch to a
+separate topic view to show its effect. Do not assume the multi-topic
+subscription support implemented in Admin Console is available in Studio.
+
 ## 2. Preflight
 
 ### 2.1 Eliminate stale processes
@@ -178,11 +185,15 @@ comparison easier to explain.
 
 Suggested AI prompt:
 
-> Subscribe to `Radar/SystemCommand` and `Radar/BeamCommand` on domain 92.
-> Create a scrolling time chart with `azimuth_deg` as the only numeric Y field
-> and one series for each `scheduler_id`. Keep all four face instances visible,
-> put priority in a second panel, and mark each SystemCommand on the common time
-> axis. Use a 15-second window.
+> On domain 92, subscribe to `Radar/BeamCommand`. Create a scrolling time chart
+> with `azimuth_deg` as the only numeric Y field and one series for each
+> `scheduler_id`. Keep all four face instances visible and put priority in a
+> second panel. Use a 15-second window.
+
+Keep the `Radar/SystemCommand` sample log open as a separate single-topic view.
+Studio cannot place its command samples on the `Radar/BeamCommand` chart, so
+show `CMD_SET_SECTOR` in the log and then switch to the time chart to show the
+resulting scan change.
 
 In steady FS search, `azimuth_deg` repeatedly sweeps through its forty
 half-step-inset centers from 1.125° to 88.875°, `elevation_deg` cycles among
@@ -398,14 +409,19 @@ and the button changes to **ALL ONLINE**. Press it again to restore FS.
 
 Subscribe to `Radar/TargetTrack` and retain instance lifecycle information.
 The topic is keyed by `track_id`, publishes active tracks at 10 Hz, and uses
-reliable transient-local delivery.
+reliable transient-local delivery. If the reset command itself is part of the
+demonstration, open a `Radar/SystemCommand` sample log as a separate view before
+pressing the button.
 
 Suggested AI prompt:
 
-> Subscribe to `Radar/TargetTrack` and `Radar/SystemCommand`. Create a live
-> count of ALIVE track instances, a table of track ID, classification,
-> quality, and range, and a timeline of instance disposals and new track
-> births. Mark RESET commands on the timeline.
+> Subscribe to `Radar/TargetTrack`. Create a live count of ALIVE track
+> instances, a table of track ID, classification, quality, and range, and a
+> timeline of instance disposals and new track births.
+
+Show `CMD_RESET` in the separate `Radar/SystemCommand` log, then return to the
+`Radar/TargetTrack` view. Studio cannot annotate the track timeline with the
+command because the samples belong to different topics.
 
 Let the view reach a steady state with several tracks.
 

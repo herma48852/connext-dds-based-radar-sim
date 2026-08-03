@@ -190,6 +190,11 @@ duplicate target/truth publisher.
   older app versions.
 - No DDS-Security and no Persistence/Recording service in play; Recording
   Service can be pointed at the same domain later without code changes.
+- Each Connext Studio visualization view is limited to one DDS topic. Multiple
+  single-topic views may run side by side, but a Studio view cannot join topics
+  or annotate one topic's chart with another topic's samples. Admin Console's
+  multi-topic subscription implementation is separate and is not currently
+  available in Studio.
 
 ## 4. Designing hypothetical live multi-topic custom AI views
 
