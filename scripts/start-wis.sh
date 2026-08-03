@@ -7,7 +7,7 @@ repo_root="$(cd "$script_dir/.." && pwd)"
 
 connext_dir="${CONNEXTDDS_DIR:-${NDDSHOME:-/Applications/rti_connext_dds-7.7.0}}"
 config_file="$repo_root/config/radar_live_view_wis.xml"
-config_name="RadarLiveViews"
+config_name="DetectionBeamLiveView"
 document_root="$repo_root/docs"
 listening_ports="18080"
 verbosity="3"
@@ -17,13 +17,20 @@ usage() {
     cat <<'EOF'
 Usage: scripts/start-wis.sh [options]
 
-Launch the Section 4 multi-topic live views through RTI Web Integration
-Service. Defaults: RadarLiveViews, docs document root, port 18080.
+Launch one Section 4 multi-topic live view through RTI Web Integration
+Service. Defaults: DetectionBeamLiveView, docs document root, port 18080.
+
+Single-view configuration names:
+  DetectionBeamLiveView
+  RmaOutageImpactLiveView
+  AssociationDiagnosticsLiveView
+  MotionGeometryLiveView
+  TrackLossLiveView
 
 Options:
   --connext-dir PATH       RTI Connext installation
   --config-file PATH      WIS XML configuration
-  --cfg-name NAME         web_integration_service name
+  --cfg-name NAME         Single-view web_integration_service name
   --document-root PATH    Static web document root
   --listening-ports PORTS WIS port list, for example 18080 or 18080,18443s
   --verbosity 0..6        WIS logging verbosity

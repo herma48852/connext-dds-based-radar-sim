@@ -1,11 +1,11 @@
 <#
 .SYNOPSIS
-Starts RTI Web Integration Service for the Section 4 multi-topic live views.
+Starts RTI Web Integration Service for one Section 4 multi-topic live view.
 
 .DESCRIPTION
 Resolves repository-relative configuration and document-root paths, enables
-WebSockets, and starts the aggregate RadarLiveViews configuration on port
-18080 by default.
+WebSockets, and starts the DetectionBeamLiveView configuration on port 18080
+by default.
 
 .PARAMETER ConnextDir
 RTI Connext DDS installation. Defaults to CONNEXTDDS_DIR, NDDSHOME, or the
@@ -15,7 +15,8 @@ standard Windows 7.7.0 installation path.
 WIS XML configuration. Defaults to config\radar_live_view_wis.xml.
 
 .PARAMETER CfgName
-Named web_integration_service configuration. Defaults to RadarLiveViews.
+Named single-view web_integration_service configuration. Defaults to
+DetectionBeamLiveView.
 
 .PARAMETER DocumentRoot
 Static web root. Defaults to the repository docs directory.
@@ -34,12 +35,15 @@ Enables WIS built-in-topic support.
 
 .EXAMPLE
 .\scripts\windows\start-wis.ps1 -ListeningPorts 18081 -Verbosity 4
+
+.EXAMPLE
+.\scripts\windows\start-wis.ps1 -CfgName RmaOutageImpactLiveView
 #>
 [CmdletBinding()]
 param(
     [string]$ConnextDir,
     [string]$ConfigFile,
-    [string]$CfgName = "RadarLiveViews",
+    [string]$CfgName = "DetectionBeamLiveView",
     [string]$DocumentRoot,
     [string]$ListeningPorts = "18080",
     [ValidateRange(0, 6)]

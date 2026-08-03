@@ -9,7 +9,7 @@ if not defined CONNEXT_DIR if defined NDDSHOME set "CONNEXT_DIR=%NDDSHOME%"
 if not defined CONNEXT_DIR set "CONNEXT_DIR=C:\Program Files\rti_connext_dds-7.7.0"
 
 set "CONFIG_FILE=%REPO_ROOT%\config\radar_live_view_wis.xml"
-set "CONFIG_NAME=RadarLiveViews"
+set "CONFIG_NAME=DetectionBeamLiveView"
 set "DOCUMENT_ROOT=%REPO_ROOT%\docs"
 set "LISTENING_PORTS=18080"
 set "VERBOSITY=3"
@@ -119,13 +119,20 @@ exit /b 0
 :usage_text
 echo Usage: scripts\windows\start-wis.cmd [options]
 echo.
-echo Launch the Section 4 multi-topic live views through RTI Web Integration
-echo Service. Defaults: RadarLiveViews, docs document root, port 18080.
+echo Launch one Section 4 multi-topic live view through RTI Web Integration
+echo Service. Defaults: DetectionBeamLiveView, docs document root, port 18080.
+echo.
+echo View launchers:
+echo   start-wis-detection-beam.cmd
+echo   start-wis-rma-impact.cmd
+echo   start-wis-association-diagnostics.cmd
+echo   start-wis-motion-geometry.cmd
+echo   start-wis-track-loss.cmd
 echo.
 echo Options:
 echo   -ConnextDir PATH        RTI Connext installation
 echo   -ConfigFile PATH       WIS XML configuration
-echo   -CfgName NAME          web_integration_service name
+echo   -CfgName NAME          Single-view web_integration_service name
 echo   -DocumentRoot PATH     Static web document root
 echo   -ListeningPorts PORTS  WIS port list, for example 18080 or 18080,18443s
 echo   -Verbosity 0..6        WIS logging verbosity

@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Web Integration Service configuration for the Section 4 live views in
-  docs/multi_topic_live_views/. RadarLiveViews contains one application per
-  page; a browser enables only the readers in the application it selects.
+  docs/multi_topic_live_views/. Each named web_integration_service contains
+  exactly one page application so launching one view creates one DDS
+  participant and only that view's readers.
 
   The domain is 92 to match scripts/windows/start-all.cmd and
   scripts/start-all.sh defaults.
@@ -467,7 +468,7 @@
     </domain>
   </domain_library>
 
-  <web_integration_service name="RadarLiveView">
+  <web_integration_service name="DetectionBeamLiveView">
     <application name="RadarLiveViewApp">
       <domain_participant name="RadarParticipant"
                           domain_ref="RadarLiveViewDomainLibrary::RadarDomain92">
@@ -481,7 +482,7 @@
           <data_reader name="RawReturnReader"
                        topic_ref="Radar/RawReturn">
             <datareader_qos
-                base_name="RadarLiveViewQosLibrary::BestEffortVolatile"/>
+                base_name="RadarLiveViewQosLibrary::BestEffortRawVolatile"/>
           </data_reader>
 
           <data_reader name="BeamCommandReader"
@@ -499,7 +500,7 @@
 
         <participant_qos>
           <participant_name>
-            <name>Radar.WIS-LiveView</name>
+            <name>Radar.WIS-DetectionBeam</name>
           </participant_name>
           <transport_builtin>
             <mask>UDPv4</mask>
@@ -519,37 +520,7 @@
     </application>
   </web_integration_service>
 
-  <!--
-    Aggregate configuration: one WIS process can serve every Section 4 page.
-    Each page selects its own application and enables only that application's
-    participant, subscriber, and readers through the REST API.
-  -->
-  <web_integration_service name="RadarLiveViews">
-    <application name="RadarLiveViewApp">
-      <domain_participant name="RadarParticipant"
-          domain_ref="RadarLiveViewDomainLibrary::RadarDomain92">
-        <subscriber name="RadarSubscriber">
-          <data_reader name="DetectionEventReader" topic_ref="Radar/DetectionEvent">
-            <datareader_qos base_name="RadarLiveViewQosLibrary::BestEffortVolatile"/>
-          </data_reader>
-          <data_reader name="RawReturnReader" topic_ref="Radar/RawReturn">
-            <datareader_qos base_name="RadarLiveViewQosLibrary::BestEffortRawVolatile"/>
-          </data_reader>
-          <data_reader name="BeamCommandReader" topic_ref="Radar/BeamCommand">
-            <datareader_qos base_name="RadarLiveViewQosLibrary::ReliableVolatile"/>
-          </data_reader>
-          <data_reader name="BeamPatternStatusReader" topic_ref="Radar/BeamPatternStatus">
-            <datareader_qos base_name="RadarLiveViewQosLibrary::ReliableTransientLocal"/>
-          </data_reader>
-        </subscriber>
-        <participant_qos>
-          <participant_name><name>Radar.WIS-DetectionBeam</name></participant_name>
-          <transport_builtin><mask>UDPv4</mask></transport_builtin>
-          <discovery><initial_peers><element>32@builtin.udpv4://127.0.0.1</element></initial_peers></discovery>
-        </participant_qos>
-      </domain_participant>
-    </application>
-
+  <web_integration_service name="RmaOutageImpactLiveView">
     <application name="RmaOutageApp">
       <domain_participant name="RadarParticipant"
           domain_ref="RadarLiveViewDomainLibrary::RadarDomain92">
@@ -577,7 +548,9 @@
         </participant_qos>
       </domain_participant>
     </application>
+  </web_integration_service>
 
+  <web_integration_service name="AssociationDiagnosticsLiveView">
     <application name="RecordingDiagnosticsApp">
       <domain_participant name="RadarParticipant"
           domain_ref="RadarLiveViewDomainLibrary::RadarDomain92">
@@ -599,7 +572,9 @@
         </participant_qos>
       </domain_participant>
     </application>
+  </web_integration_service>
 
+  <web_integration_service name="MotionGeometryLiveView">
     <application name="MotionGeometryApp">
       <domain_participant name="RadarParticipant"
           domain_ref="RadarLiveViewDomainLibrary::RadarDomain92">
@@ -624,7 +599,9 @@
         </participant_qos>
       </domain_participant>
     </application>
+  </web_integration_service>
 
+  <web_integration_service name="TrackLossLiveView">
     <application name="TrackLossApp">
       <domain_participant name="RadarParticipant"
           domain_ref="RadarLiveViewDomainLibrary::RadarDomain92">

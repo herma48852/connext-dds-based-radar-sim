@@ -447,40 +447,54 @@ still `array_id`, `beam_id`, and `timestamp.epoch_millis`; `azimuth_deg` and
 
 [`detection_to_beam_live_view.html`](multi_topic_live_views/detection_to_beam_live_view.html) is a
 standalone implementation of this view. The supplied
-[`radar_live_view_wis.xml`](../config/radar_live_view_wis.xml) contains an
-aggregate `RadarLiveViews` service configuration with one application per
-Section 4 solution. Each page enables only its own application and readers on
-domain 92. `RawReturn` and `BeamPatternStatus` are projected so their large
-arrays are not serialized to JSON.
+[`radar_live_view_wis.xml`](../config/radar_live_view_wis.xml) contains five
+separate `web_integration_service` configurations, one per Section 4 solution.
+Launching a view therefore creates only that view's DDS participant and
+readers on domain 92. `RawReturn` and `BeamPatternStatus` are projected so
+their large arrays are not serialized to JSON.
 
-From the repository root, start RTI Web Integration Service with the launcher
-for the current shell.
+From the repository root, start the launcher that matches the page:
 
-Windows Command Prompt (`cmd.exe`):
+| Section | Page application | WIS configuration | Windows launcher |
+|---|---|---|---|
+| 4.2 Detection → Beam | `RadarLiveViewApp` | `DetectionBeamLiveView` | `start-wis-detection-beam.cmd` |
+| 4.3 RMA impact | `RmaOutageApp` | `RmaOutageImpactLiveView` | `start-wis-rma-impact.cmd` |
+| 4.4 Association diagnostics | `RecordingDiagnosticsApp` | `AssociationDiagnosticsLiveView` | `start-wis-association-diagnostics.cmd` |
+| 4.5 Motion geometry | `MotionGeometryApp` | `MotionGeometryLiveView` | `start-wis-motion-geometry.cmd` |
+| 4.6 Coast/loss | `TrackLossApp` | `TrackLossLiveView` | `start-wis-track-loss.cmd` |
+
+For example, start the RMA impact view from Windows Command Prompt or
+PowerShell with:
 
 ```bat
-scripts\windows\start-wis.cmd
+scripts\windows\start-wis-rma-impact.cmd
 ```
 
-Windows PowerShell:
-
-```powershell
-.\scripts\windows\start-wis.ps1
-```
-
-macOS:
+On macOS, select the same single-view configuration explicitly:
 
 ```bash
-./scripts/start-wis.sh
+./scripts/start-wis.sh --cfg-name RmaOutageImpactLiveView
 ```
 
-All three launchers use `CONNEXTDDS_DIR` or `NDDSHOME`, select the aggregate
-`RadarLiveViews` configuration, serve `docs`, and listen on port 18080. They
-resolve repository paths themselves, so they do not depend on the caller's
-working directory. Use `scripts\windows\start-wis.cmd -Help`, PowerShell
+The generic Windows launchers remain available for advanced overrides:
+
+```bat
+scripts\windows\start-wis.cmd -CfgName RmaOutageImpactLiveView
+```
+
+```powershell
+.\scripts\windows\start-wis.ps1 -CfgName RmaOutageImpactLiveView
+```
+
+The launchers use `CONNEXTDDS_DIR` or `NDDSHOME`, serve `docs`, and listen on
+port 18080. The displayed relative commands assume the repository root as the
+current directory; the scripts themselves resolve repository paths from their
+own location. Use `scripts\windows\start-wis.cmd -Help`, PowerShell
 `Get-Help .\scripts\windows\start-wis.ps1 -Detailed`, or
 `./scripts/start-wis.sh --help` for configuration, port, document-root,
-verbosity, and built-in-topic overrides.
+verbosity, and built-in-topic overrides. Run one launcher at a time on the
+default port. To run several views concurrently, give each WIS process a
+different listening port and set the matching endpoint in each browser page.
 
 Run the interactive demo with its default domain 92 if it is not already
 running, then open one or more of these pages:
@@ -503,11 +517,10 @@ page enables the configured participant, subscriber, and readers before binding 
 either launch order works. Volatile evidence begins when the page subscribes;
 use **Demo stream** to review any UI without DDS traffic.
 
-One XML file may contain multiple named `web_integration_service` sections,
-but `-cfgName` selects one section per WIS process. To make all five pages
-available from one process, `RadarLiveViews` instead contains five separate
-`application` sections. The older `RadarLiveView` service configuration is
-retained as a 4.2-only compatibility option.
+One XML file contains all five named `web_integration_service` sections, but
+`-cfgName` selects exactly one section per WIS process. If a browser navigates
+to a different Section 4 page, stop WIS and run that page's launcher before
+selecting **Connect live**.
 
 The XML domain is intentionally fixed at 92 to match `start-all`. If the
 simulation is launched with a different domain, change `domain_id` in the XML
