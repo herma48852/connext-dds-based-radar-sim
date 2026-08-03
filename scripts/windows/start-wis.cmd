@@ -123,11 +123,11 @@ echo Launch one Section 4 multi-topic live view through RTI Web Integration
 echo Service. Defaults: DetectionBeamLiveView, docs document root, port 18080.
 echo.
 echo View launchers:
-echo   start-wis-detection-beam.cmd
-echo   start-wis-rma-impact.cmd
-echo   start-wis-association-diagnostics.cmd
-echo   start-wis-motion-geometry.cmd
-echo   start-wis-track-loss.cmd
+echo   multi_topic_live_views\start-wis-detection-beam.cmd
+echo   multi_topic_live_views\start-wis-rma-impact.cmd
+echo   multi_topic_live_views\start-wis-association-diagnostics.cmd
+echo   multi_topic_live_views\start-wis-motion-geometry.cmd
+echo   multi_topic_live_views\start-wis-track-loss.cmd
 echo.
 echo Options:
 echo   -ConnextDir PATH        RTI Connext installation

@@ -457,17 +457,17 @@ From the repository root, start the launcher that matches the page:
 
 | Section | Page application | WIS configuration | Windows launcher |
 |---|---|---|---|
-| 4.2 Detection → Beam | `RadarLiveViewApp` | `DetectionBeamLiveView` | `start-wis-detection-beam.cmd` |
-| 4.3 RMA impact | `RmaOutageApp` | `RmaOutageImpactLiveView` | `start-wis-rma-impact.cmd` |
-| 4.4 Association diagnostics | `RecordingDiagnosticsApp` | `AssociationDiagnosticsLiveView` | `start-wis-association-diagnostics.cmd` |
-| 4.5 Motion geometry | `MotionGeometryApp` | `MotionGeometryLiveView` | `start-wis-motion-geometry.cmd` |
-| 4.6 Coast/loss | `TrackLossApp` | `TrackLossLiveView` | `start-wis-track-loss.cmd` |
+| 4.2 Detection → Beam | `RadarLiveViewApp` | `DetectionBeamLiveView` | `multi_topic_live_views\start-wis-detection-beam.cmd` |
+| 4.3 RMA impact | `RmaOutageApp` | `RmaOutageImpactLiveView` | `multi_topic_live_views\start-wis-rma-impact.cmd` |
+| 4.4 Association diagnostics | `RecordingDiagnosticsApp` | `AssociationDiagnosticsLiveView` | `multi_topic_live_views\start-wis-association-diagnostics.cmd` |
+| 4.5 Motion geometry | `MotionGeometryApp` | `MotionGeometryLiveView` | `multi_topic_live_views\start-wis-motion-geometry.cmd` |
+| 4.6 Coast/loss | `TrackLossApp` | `TrackLossLiveView` | `multi_topic_live_views\start-wis-track-loss.cmd` |
 
 For example, start the RMA impact view from Windows Command Prompt or
 PowerShell with:
 
 ```bat
-scripts\windows\start-wis-rma-impact.cmd
+scripts\windows\multi_topic_live_views\start-wis-rma-impact.cmd
 ```
 
 On macOS, select the same single-view configuration explicitly:
