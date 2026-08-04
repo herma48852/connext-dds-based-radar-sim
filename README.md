@@ -384,9 +384,13 @@ input therefore fuses reports that occupy one modeled time/range/angle
 resolution cell and uses SNR-derived power weighting to estimate a bearing
 between beam centers. Resolvable contacts remain separate.
 
-![Four-face azimuth beam spacing, half-power overlap, and face placement](docs/beam_spacing_geometry.svg)
+![Four-face azimuth beam spacing, half-power overlap, and face placement](docs/beam_spacing_geometry.png)
+([open the full-size interactive azimuth diagram](docs/beam_spacing_geometry.html)
+and click a section to isolate it)
 
-![Three-bar elevation gate tiling](docs/elevation_geometry.svg)
+![Three-bar elevation gate tiling](docs/elevation_geometry.png)
+([open the full-size interactive elevation diagram](docs/elevation_geometry.html)
+and click a bar or interpretation section to isolate it)
 
 ### DDS topics
 
@@ -491,7 +495,9 @@ workload from payload byte rate and shows exactly where the implementation
 removes the element-channel dimension, integrates pulses, and converts dense
 range arrays into sparse plots and tracks.
 
-![Physical radar versus implemented simulation signal-processing pipeline and data rates](docs/signal_processing_pipeline.svg)
+![Physical radar versus implemented simulation signal-processing pipeline and data rates](docs/signal_processing_pipeline.png)
+([open the full-size interactive pipeline](docs/signal_processing_pipeline.html)
+and click any processing or rate component to isolate it)
 
 ### WaitSet vs. listener split
 

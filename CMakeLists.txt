@@ -350,8 +350,15 @@ if(RADAR_BUILD_APPLICATIONS)
             docs/EFFECTIVE_RANGE_PROCESSING.md
             docs/OPERATOR_DISPLAY_GUIDE.md
             docs/TARGET_CONTROL.md
+            docs/beam_spacing_geometry.html
+            docs/beam_spacing_geometry.png
             docs/beam_spacing_geometry.svg
+            docs/elevation_geometry.html
+            docs/elevation_geometry.png
             docs/elevation_geometry.svg
+            docs/signal_processing_pipeline.html
+            docs/signal_processing_pipeline.png
+            docs/signal_processing_pipeline.svg
             DESTINATION docs)
         set(CPACK_GENERATOR "ZIP")
         set(CPACK_PACKAGE_FILE_NAME

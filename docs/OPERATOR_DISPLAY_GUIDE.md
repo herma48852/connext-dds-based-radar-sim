@@ -314,7 +314,10 @@ beamwidth. Adjacent centers are only 2.25 degrees apart, so their half-power
 footprints overlap by about 0.92 degree instead of leaving gaps. The panel
 filters its 2.4-second history to the selected face.
 
-![Azimuth face geometry, beam-center spacing, and half-power overlap](beam_spacing_geometry.svg)
+![Azimuth face geometry, beam-center spacing, and half-power overlap](beam_spacing_geometry.png)
+
+[Open the full-size interactive azimuth diagram](beam_spacing_geometry.html)
+and click a section to isolate it.
 
 The `-3 dB` marks are the two half-power boundaries of each physical azimuth
 beam: power there is one-half of that beam's peak (voltage amplitude is about
@@ -323,7 +326,10 @@ are closer than one full HPBW, the neighboring half-power footprints overlap.
 At the exact midpoint between centers, both beams are still inside their
 half-power contours, providing scan coverage margin.
 
-![Three-bar elevation acceptance-gate tiling](elevation_geometry.svg)
+![Three-bar elevation acceptance-gate tiling](elevation_geometry.png)
+
+[Open the full-size interactive elevation diagram](elevation_geometry.html)
+and click a bar or interpretation section to isolate it.
 
 Elevation is deliberately different. The simulator commands only three bar
 centers and applies a hard ±5.5-degree truth-elevation acceptance test:
@@ -368,7 +374,8 @@ across the 100 km instrumented range. A 20 microsecond pulse creates an
 approximately 3.0 km transmit/receive blind range. These are representative,
 unclassified S-band search values, not claimed operational SPY-6 parameters.
 
-The [signal-processing pipeline diagram](signal_processing_pipeline.svg)
+The [interactive signal-processing pipeline](signal_processing_pipeline.html)
+([static SVG](signal_processing_pipeline.svg))
 compares the corresponding physical element-domain workload with the
 implemented post-beamforming DDS stream, dwell integration, plot extraction,
 and track output.

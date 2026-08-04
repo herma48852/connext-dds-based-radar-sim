@@ -48,6 +48,24 @@
                    marker-end:url(#arrow-cyan); }
       .flow-green { fill:none; stroke:#7be3a1; stroke-width:2;
                     marker-end:url(#arrow-green); }
+      .diagram-component {
+        cursor:pointer;
+        transition:opacity 160ms ease;
+      }
+      .diagram-component:hover > rect:first-child,
+      .diagram-component:focus-visible > rect:first-child {
+        stroke:#76ded8;
+        stroke-width:3;
+      }
+      .diagram-component:focus { outline:none; }
+      .focus-active .diagram-component:not(.focused) { opacity:0.12; }
+      .focus-active .diagram-component.focused > rect:first-child {
+        stroke:#76ded8;
+        stroke-width:3;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .diagram-component { transition:none; }
+      }
     </style>
   </defs>
 
@@ -87,6 +105,8 @@
 
   <!-- Real-chain boxes -->
   <g>
+    <g class="diagram-component" data-component="physical-array"
+       tabindex="0" role="button" aria-label="Focus physical array aperture stage">
     <rect x="65" y="180" width="210" height="142" rx="8" class="real-box"/>
     <text x="170" y="207" text-anchor="middle" class="box-title">1 · ARRAY APERTURE</text>
     <text x="170" y="235" text-anchor="middle" class="body">4 faces × 1,024 T/R elements</text>
@@ -94,7 +114,10 @@
     <text x="170" y="288" text-anchor="middle" class="small">analog RF at each element</text>
 
     <path d="M275 251 H294" class="flow"/>
+    </g>
 
+    <g class="diagram-component" data-component="physical-digitize"
+       tabindex="0" role="button" aria-label="Focus physical RF and digitization stage">
     <rect x="300" y="180" width="210" height="142" rx="8" class="real-box"/>
     <text x="405" y="207" text-anchor="middle" class="box-title">2 · RF / DIGITIZE</text>
     <text x="405" y="235" text-anchor="middle" class="body">LNA · downconversion · ADC</text>
@@ -102,7 +125,10 @@
     <text x="405" y="288" text-anchor="middle" class="small">668 gated samples / PRI / channel</text>
 
     <path d="M510 251 H529" class="flow"/>
+    </g>
 
+    <g class="diagram-component" data-component="physical-calibrate"
+       tabindex="0" role="button" aria-label="Focus physical channel-calibration stage">
     <rect x="535" y="180" width="210" height="142" rx="8" class="real-box"/>
     <text x="640" y="207" text-anchor="middle" class="box-title">3 · CALIBRATE</text>
     <text x="640" y="235" text-anchor="middle" class="body">per-element gain and phase</text>
@@ -110,7 +136,10 @@
     <text x="640" y="288" text-anchor="middle" class="small">still 1,024 streams per face</text>
 
     <path d="M745 251 H764" class="flow"/>
+    </g>
 
+    <g class="diagram-component" data-component="physical-beamform"
+       tabindex="0" role="button" aria-label="Focus physical beamforming stage">
     <rect x="770" y="180" width="210" height="142" rx="8" class="real-box"/>
     <text x="875" y="207" text-anchor="middle" class="box-title">4 · BEAMFORM</text>
     <text x="875" y="235" text-anchor="middle" class="body">complex weighted element sum</text>
@@ -118,7 +147,10 @@
     <text x="875" y="288" text-anchor="middle" class="small">one or more beams per face</text>
 
     <path d="M980 251 H999" class="flow"/>
+    </g>
 
+    <g class="diagram-component" data-component="physical-range-doppler"
+       tabindex="0" role="button" aria-label="Focus physical range and Doppler stage">
     <rect x="1005" y="180" width="210" height="142" rx="8" class="real-box"/>
     <text x="1110" y="207" text-anchor="middle" class="box-title">5 · RANGE / DOPPLER</text>
     <text x="1110" y="235" text-anchor="middle" class="body">matched-filter pulse compression</text>
@@ -126,7 +158,10 @@
     <text x="1110" y="288" text-anchor="middle" class="small">range–velocity cells</text>
 
     <path d="M1215 251 H1234" class="flow"/>
+    </g>
 
+    <g class="diagram-component" data-component="physical-detect-angle"
+       tabindex="0" role="button" aria-label="Focus physical detection and angle-estimation stage">
     <rect x="1240" y="180" width="210" height="142" rx="8" class="real-box"/>
     <text x="1345" y="207" text-anchor="middle" class="box-title">6 · DETECT / ANGLE</text>
     <text x="1345" y="235" text-anchor="middle" class="body">clutter map · adaptive CFAR</text>
@@ -134,15 +169,21 @@
     <text x="1345" y="288" text-anchor="middle" class="small">sparse measurement plots</text>
 
     <path d="M1450 251 H1469" class="flow"/>
+    </g>
 
+    <g class="diagram-component" data-component="physical-track"
+       tabindex="0" role="button" aria-label="Focus physical tracking stage">
     <rect x="1475" y="180" width="210" height="142" rx="8" class="real-box"/>
     <text x="1580" y="207" text-anchor="middle" class="box-title">7 · TRACK</text>
     <text x="1580" y="235" text-anchor="middle" class="body">association · state estimator</text>
     <text x="1580" y="256" text-anchor="middle" class="body">initiation · coast · drop</text>
     <text x="1580" y="288" text-anchor="middle" class="small">confirmed track reports</text>
+    </g>
   </g>
 
   <!-- Real rate cards -->
+  <g class="diagram-component" data-component="physical-workload"
+     tabindex="0" role="button" aria-label="Focus physical element-domain workload">
   <rect x="65" y="345" width="760" height="88" rx="8" class="rate-real"/>
   <text x="87" y="372" class="box-title orange">
     ELEMENT-DOMAIN WORKLOAD · 2.736 billion complex range samples / second
@@ -153,7 +194,10 @@
   <text x="87" y="417" class="small">
     This is the physical sample-count scale before the element channels are combined.
   </text>
+  </g>
 
+  <g class="diagram-component" data-component="physical-data-rate"
+     tabindex="0" role="button" aria-label="Focus illustrative physical element data rate">
   <rect x="845" y="345" width="840" height="88" rx="8" class="rate-real"/>
   <text x="867" y="372" class="box-title orange">
     ILLUSTRATIVE ELEMENT DATA · 10.94 GB/s = 87.6 Gb/s
@@ -164,8 +208,11 @@
   <text x="867" y="417" class="small">
     Wider operational bandwidths, oversampling, extra beams, and framing can raise this substantially.
   </text>
+  </g>
 
   <!-- Abstraction boundary -->
+  <g class="diagram-component" data-component="abstraction-boundary"
+     tabindex="0" role="button" aria-label="Focus simulation abstraction boundary">
   <rect x="40" y="491" width="1720" height="67" rx="10" class="omitted"/>
   <text x="900" y="519" text-anchor="middle" class="box-title purple">
     SIMULATION ABSTRACTION BOUNDARY
@@ -173,6 +220,7 @@
   <text x="900" y="543" text-anchor="middle" class="body">
     Element RF, ADC, channel calibration, beamforming arithmetic, Doppler filtering, adaptive clutter processing, and monopulse are not executed.
   </text>
+  </g>
 
   <!-- Implemented chain -->
   <rect x="40" y="580" width="1720" height="445" rx="12" class="panel"/>
@@ -187,6 +235,8 @@
 
   <!-- Implemented boxes -->
   <g>
+    <g class="diagram-component" data-component="sim-scene"
+       tabindex="0" role="button" aria-label="Focus implemented scene-model stage">
     <rect x="65" y="645" width="210" height="158" rx="8" class="sim-box"/>
     <text x="170" y="672" text-anchor="middle" class="box-title">1 · SCENE MODEL</text>
     <text x="170" y="699" text-anchor="middle" class="body">TargetTruth: 50 Hz / target</text>
@@ -195,7 +245,10 @@
     <text x="170" y="770" text-anchor="middle" class="tiny">replace element-channel input</text>
 
     <path d="M275 724 H294" class="flow-cyan"/>
+    </g>
 
+    <g class="diagram-component" data-component="sim-iq"
+       tabindex="0" role="button" aria-label="Focus implemented I/Q-synthesis stage">
     <rect x="300" y="645" width="210" height="158" rx="8" class="sim-box"/>
     <text x="405" y="672" text-anchor="middle" class="box-title">2 · SYNTHESIZE I/Q</text>
     <text x="405" y="699" text-anchor="middle" class="body">post-beamformed RawReturn</text>
@@ -204,7 +257,10 @@
     <text x="405" y="770" text-anchor="middle" class="tiny">BEST_EFFORT DDS loopback</text>
 
     <path d="M510 724 H529" class="flow-cyan"/>
+    </g>
 
+    <g class="diagram-component" data-component="sim-integrate"
+       tabindex="0" role="button" aria-label="Focus implemented dwell-integration stage">
     <rect x="535" y="645" width="210" height="158" rx="8" class="sim-box"/>
     <text x="640" y="672" text-anchor="middle" class="box-title">3 · DWELL INTEGRATE</text>
     <text x="640" y="699" text-anchor="middle" class="body">noncoherent I² + Q² average</text>
@@ -213,7 +269,10 @@
     <text x="640" y="770" text-anchor="middle" class="tiny">in-process A-scope state</text>
 
     <path d="M745 724 H764" class="flow-cyan"/>
+    </g>
 
+    <g class="diagram-component" data-component="sim-peaks"
+       tabindex="0" role="button" aria-label="Focus implemented peak-extraction stage">
     <rect x="770" y="645" width="210" height="158" rx="8" class="sim-box"/>
     <text x="875" y="672" text-anchor="middle" class="box-title">4 · EXTRACT PEAKS</text>
     <text x="875" y="699" text-anchor="middle" class="body">fixed threshold + local maximum</text>
@@ -222,7 +281,10 @@
     <text x="875" y="770" text-anchor="middle" class="tiny">DetectionEvent over DDS</text>
 
     <path d="M980 724 H999" class="flow-green"/>
+    </g>
 
+    <g class="diagram-component" data-component="sim-fuse"
+       tabindex="0" role="button" aria-label="Focus implemented plot-fusion stage">
     <rect x="1005" y="645" width="210" height="158" rx="8" class="sim-box"/>
     <text x="1110" y="672" text-anchor="middle" class="box-title">5 · FUSE PLOTS</text>
     <text x="1110" y="699" text-anchor="middle" class="body">range / time / angle clustering</text>
@@ -231,7 +293,10 @@
     <text x="1110" y="770" text-anchor="middle" class="tiny">resolution-cell model</text>
 
     <path d="M1215 724 H1234" class="flow-green"/>
+    </g>
 
+    <g class="diagram-component" data-component="sim-tracker"
+       tabindex="0" role="button" aria-label="Focus implemented tracker-core stage">
     <rect x="1240" y="645" width="210" height="158" rx="8" class="sim-box"/>
     <text x="1345" y="672" text-anchor="middle" class="box-title">6 · TRACKER CORE</text>
     <text x="1345" y="699" text-anchor="middle" class="body">nearest neighbor · α–β filter</text>
@@ -240,19 +305,25 @@
     <text x="1345" y="770" text-anchor="middle" class="tiny">10 Hz update cycle</text>
 
     <path d="M1450 724 H1469" class="flow-green"/>
+    </g>
 
+    <g class="diagram-component" data-component="sim-track-output"
+       tabindex="0" role="button" aria-label="Focus implemented track-output stage">
     <rect x="1475" y="645" width="210" height="158" rx="8" class="sim-box"/>
     <text x="1580" y="672" text-anchor="middle" class="box-title">7 · TRACK OUTPUT</text>
     <text x="1580" y="699" text-anchor="middle" class="body">TargetTrack: 10 Hz / track</text>
     <text x="1580" y="720" text-anchor="middle" class="body">RELIABLE + transient-local</text>
     <text x="1580" y="748" text-anchor="middle" class="small">HMI + Connext Studio</text>
     <text x="1580" y="770" text-anchor="middle" class="tiny">sparse operational product</text>
+    </g>
   </g>
 
   <!-- Implemented rate ladder -->
   <text x="68" y="839" class="box-title">IMPLEMENTED RATE LADDER</text>
   <text x="305" y="839" class="small">payload values exclude DDS/CDR framing</text>
 
+  <g class="diagram-component" data-component="rate-raw-return"
+     tabindex="0" role="button" aria-label="Focus RawReturn DDS rate">
   <rect x="65" y="858" width="370" height="122" rx="8" class="rate-sim"/>
   <text x="86" y="884" class="box-title cyan">RAWRETURN DDS</text>
   <text x="86" y="909" class="body">2.672 M complex cells/s aggregate</text>
@@ -261,7 +332,10 @@
 
   <path d="M435 919 H471" class="flow-cyan"/>
   <text x="453" y="902" text-anchor="middle" class="small cyan">10:1</text>
+  </g>
 
+  <g class="diagram-component" data-component="rate-integrated-traces"
+     tabindex="0" role="button" aria-label="Focus integrated-trace rate">
   <rect x="477" y="858" width="370" height="122" rx="8" class="rate-sim"/>
   <text x="498" y="884" class="box-title cyan">INTEGRATED TRACES</text>
   <text x="498" y="909" class="body">267,200 magnitude cells/s</text>
@@ -270,7 +344,10 @@
 
   <path d="M847 919 H883" class="flow-green"/>
   <text x="865" y="902" text-anchor="middle" class="small green">sparse</text>
+  </g>
 
+  <g class="diagram-component" data-component="rate-detections"
+     tabindex="0" role="button" aria-label="Focus DetectionEvent rate">
   <rect x="889" y="858" width="370" height="122" rx="8" class="rate-derived"/>
   <text x="910" y="884" class="box-title green">DETECTION EVENTS</text>
   <text x="910" y="909" class="body">data-dependent plot rate</text>
@@ -279,36 +356,103 @@
 
   <path d="M1259 919 H1295" class="flow-green"/>
   <text x="1277" y="902" text-anchor="middle" class="small green">associate</text>
+  </g>
 
+  <g class="diagram-component" data-component="rate-target-track"
+     tabindex="0" role="button" aria-label="Focus TargetTrack DDS rate">
   <rect x="1301" y="858" width="384" height="122" rx="8" class="rate-derived"/>
   <text x="1322" y="884" class="box-title green">TARGETTRACK DDS</text>
   <text x="1322" y="909" class="body">10 × confirmed-track count samples/s</text>
   <text x="1322" y="932" class="body">for example: 5 tracks → 50 samples/s</text>
   <text x="1322" y="956" class="small">bounded, stable display / integration product</text>
+  </g>
 
   <!-- Interpretation -->
   <rect x="40" y="1046" width="1720" height="194" rx="12" class="panel"/>
   <text x="68" y="1082" class="section">WHAT THE REDUCTION MEANS</text>
 
+  <g class="diagram-component" data-component="meaning-element-reduction"
+     tabindex="0" role="button" aria-label="Focus element-sample reduction explanation">
   <rect x="65" y="1101" width="520" height="108" rx="8" class="box"/>
   <text x="87" y="1129" class="box-title purple">1,024:1 ELEMENT-SAMPLE REDUCTION</text>
   <text x="87" y="1153" class="body">The implementation starts after beamforming: four streams</text>
   <text x="87" y="1173" class="body">replace 4,096 element channels. Complex-sample workload is</text>
   <text x="87" y="1193" class="body">2.736 G/s physical-reference versus 2.672 M/s implemented.</text>
+  </g>
 
+  <g class="diagram-component" data-component="meaning-time-integration"
+     tabindex="0" role="button" aria-label="Focus time-integration reduction explanation">
   <rect x="608" y="1101" width="520" height="108" rx="8" class="box"/>
   <text x="630" y="1129" class="box-title cyan">THEN 10:1 TIME INTEGRATION</text>
   <text x="630" y="1153" class="body">Ten 1 kHz pulse returns become one 100 Hz dwell trace per</text>
   <text x="630" y="1173" class="body">face. Thresholding and tracking reduce the flow again from</text>
   <text x="630" y="1193" class="body">dense range arrays to sparse measurements and state vectors.</text>
+  </g>
 
+  <g class="diagram-component" data-component="meaning-rf-rate"
+     tabindex="0" role="button" aria-label="Focus RF carrier versus digital data-rate explanation">
   <rect x="1151" y="1101" width="534" height="108" rx="8" class="box"/>
   <text x="1173" y="1129" class="box-title orange">3 GHz IS NOT THE DIGITAL DATA RATE</text>
   <text x="1173" y="1153" class="body">The RF carrier is downconverted. Bandwidth, receive-window</text>
   <text x="1173" y="1173" class="body">samples, channel count, quantization, and beam count set the</text>
   <text x="1173" y="1193" class="body">processing rate. This diagram uses the demo's 1 MHz model.</text>
+  </g>
 
   <text x="900" y="1262" text-anchor="middle" class="small">
     Rates are decimal SI payload rates. The physical lane is an engineering reference using public round-number assumptions, not an operational-system claim.
   </text>
+
+  <script><![CDATA[
+    (() => {
+      const root = document.documentElement;
+      const nodes = Array.from(root.querySelectorAll(".diagram-component"));
+      const baseUrl = window.location.href.split("#")[0];
+      let active = null;
+
+      function applyFocus(requested, updateLocation = true) {
+        const exists = nodes.some(node => node.dataset.component === requested);
+        active = exists && active !== requested ? requested : null;
+        root.classList.toggle("focus-active", Boolean(active));
+
+        for (const node of nodes) {
+          const focused = node.dataset.component === active;
+          node.classList.toggle("focused", focused);
+          node.setAttribute("aria-pressed", String(focused));
+        }
+
+        if (updateLocation) {
+          try {
+            history.replaceState(null, "", active ? `${baseUrl}#${active}` : baseUrl);
+          } catch (_) {
+            // Some embedded SVG viewers do not expose writable history.
+          }
+        }
+      }
+
+      for (const node of nodes) {
+        node.setAttribute("aria-pressed", "false");
+        node.addEventListener("click", event => {
+          event.stopPropagation();
+          applyFocus(node.dataset.component);
+        });
+        node.addEventListener("keydown", event => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            event.stopPropagation();
+            applyFocus(node.dataset.component);
+          }
+        });
+      }
+
+      root.addEventListener("click", event => {
+        if (!event.target.closest(".diagram-component") && active) applyFocus(null);
+      });
+      window.addEventListener("keydown", event => {
+        if (event.key === "Escape" && active) applyFocus(null);
+      });
+
+      const initial = decodeURIComponent(window.location.hash.slice(1));
+      if (initial) applyFocus(initial, false);
+    })();
+  ]]></script>
 </svg>

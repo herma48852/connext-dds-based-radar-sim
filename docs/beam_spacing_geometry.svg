@@ -27,6 +27,47 @@
              A 400 400 0 0 1 441.07 348.15 Z"/>
   </defs>
 
+  <style>
+    .diagram-component {
+      cursor: pointer;
+      transition: opacity 160ms ease;
+    }
+
+    .diagram-component:hover > rect:first-child,
+    .diagram-component:hover > path:first-child,
+    .diagram-component:hover > line:first-child,
+    .diagram-component:hover > use:first-child,
+    .focus-node:focus-visible > rect:first-child,
+    .focus-node:focus-visible > path:first-child,
+    .focus-node:focus-visible > line:first-child,
+    .focus-node:focus-visible > use:first-child {
+      stroke: #76ded8;
+      stroke-width: 3;
+    }
+
+    .focus-node:focus {
+      outline: none;
+    }
+
+    .focus-active .diagram-component:not(.focused) {
+      opacity: 0.12;
+    }
+
+    .focus-active .diagram-component.focused > rect:first-child,
+    .focus-active .diagram-component.focused > path:first-child,
+    .focus-active .diagram-component.focused > line:first-child,
+    .focus-active .diagram-component.focused > use:first-child {
+      stroke: #76ded8;
+      stroke-width: 3;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .diagram-component {
+        transition: none;
+      }
+    }
+  </style>
+
   <rect width="1400" height="1080" fill="#0a0a0f"/>
   <text x="700" y="42" text-anchor="middle" font-size="25"
         font-weight="bold" fill="#e8f2ea">
@@ -37,6 +78,8 @@
   </text>
 
   <!-- Main selected-face field of regard -->
+  <g class="diagram-component focus-node" data-component="raster"
+     tabindex="0" role="button" aria-label="Focus selected-face azimuth raster">
   <path d="M 430 748 L 83.5 401.5 A 490 490 0 0 1 776.5 401.5 Z"
         fill="#14202a" stroke="#718092" stroke-width="1.5"/>
   <line x1="430" y1="748" x2="83.5" y2="401.5"
@@ -91,8 +134,11 @@
     <use href="#beam-ray" transform="rotate(41.625 430 748)"/>
     <use href="#beam-ray" transform="rotate(43.875 430 748)"/>
   </g>
+  </g>
 
   <!-- Highlight adjacent half-power footprints -->
+  <g class="diagram-component focus-node" data-component="adjacent-beams"
+     tabindex="0" role="button" aria-label="Focus adjacent-beam spacing and half-power overlap">
   <use href="#hpbw-wedge" transform="rotate(-1.125 430 748)"
        fill="#4fc3f7" fill-opacity="0.24" stroke="#4fc3f7"
        stroke-width="1.5"/>
@@ -132,8 +178,10 @@
   <text x="614" y="563" font-size="11" fill="#aebbb3">
     both beams exceed half power at the midpoint
   </text>
+  </g>
 
   <!-- Face limits and labels -->
+  <g class="diagram-component" data-component="raster">
   <text x="72" y="389" text-anchor="middle" font-size="12" fill="#dfe9e2">−45° face edge</text>
   <text x="788" y="389" text-anchor="middle" font-size="12" fill="#dfe9e2">+45° face edge</text>
   <text x="430" y="252" text-anchor="middle" font-size="12" fill="#dfe9e2">face boresight</text>
@@ -141,8 +189,10 @@
   <text x="430" y="811" text-anchor="middle" font-size="11" fill="#8fa398">
     40 azimuth centers × 3 elevation bars = 120 pointings per face
   </text>
+  </g>
 
   <!-- Dashed annular detail region around the two central beam footprints. -->
+  <g class="diagram-component" data-component="adjacent-beams">
   <path d="M408.02 328.58
            A420 420 0 0 1 451.98 328.58
            L438.37 588.22
@@ -153,8 +203,11 @@
         fill="#17111d" stroke="#d18cff"/>
   <text x="401.5" y="326" text-anchor="middle" font-size="11"
         font-weight="bold" fill="#e6c8ff">DETAIL A</text>
+  </g>
 
   <!-- Four-face ship-relative inset -->
+  <g class="diagram-component focus-node" data-component="face-placement"
+     tabindex="0" role="button" aria-label="Focus four-face ship-relative placement">
   <rect x="900" y="106" width="440" height="490" rx="8"
         fill="#10141c" stroke="#3a4350"/>
   <text x="1120" y="138" text-anchor="middle" font-size="17"
@@ -196,8 +249,10 @@
   <text x="1120" y="581" text-anchor="middle" font-size="11" fill="#8fa398">
     Each face owns a 90° field of regard; adjacent half-power footprints meet at the seams.
   </text>
+  </g>
 
   <!-- Linearized angular blowup of the dashed annular detail region. -->
+  <g class="diagram-component" data-component="adjacent-beams">
   <rect x="855" y="620" width="510" height="245" rx="8"
         fill="#10141c" stroke="#3a4350"/>
   <text x="1110" y="647" text-anchor="middle" font-size="14"
@@ -263,8 +318,11 @@
   <path d="M452 458 C650 500, 730 605, 855 650"
         fill="none" stroke="#d18cff" stroke-width="1.5"
         stroke-dasharray="6 5"/>
+  </g>
 
   <!-- Engineering notes moved below the graphics. -->
+  <g class="diagram-component focus-node" data-component="raster-conventions"
+     tabindex="0" role="button" aria-label="Focus raster conventions">
   <rect x="65" y="892" width="1300" height="130" rx="8"
         fill="#10141c" stroke="#3a4350"/>
   <text x="90" y="922" font-size="14" font-weight="bold"
@@ -287,4 +345,64 @@
   <text x="700" y="1002" font-size="12" fill="#8fa398">
     • Angles are schematic; radial distance is not a range scale.
   </text>
+  </g>
+
+  <script><![CDATA[
+    (() => {
+      const root = document.documentElement;
+      const parts = Array.from(root.querySelectorAll(".diagram-component"));
+      const nodes = Array.from(root.querySelectorAll(".focus-node"));
+      const baseUrl = window.location.href.split("#")[0];
+      let active = null;
+
+      function applyFocus(requested, updateLocation = true) {
+        const exists = parts.some(part => part.dataset.component === requested);
+        active = exists && active !== requested ? requested : null;
+        root.classList.toggle("focus-active", Boolean(active));
+
+        for (const part of parts) {
+          part.classList.toggle("focused", part.dataset.component === active);
+        }
+        for (const node of nodes) {
+          node.setAttribute(
+            "aria-pressed", String(node.dataset.component === active));
+        }
+
+        if (updateLocation) {
+          try {
+            history.replaceState(null, "", active ? `${baseUrl}#${active}` : baseUrl);
+          } catch (_) {
+            // Some embedded SVG viewers do not expose writable history.
+          }
+        }
+      }
+
+      for (const part of parts) {
+        part.addEventListener("click", event => {
+          event.stopPropagation();
+          applyFocus(part.dataset.component);
+        });
+      }
+      for (const node of nodes) {
+        node.setAttribute("aria-pressed", "false");
+        node.addEventListener("keydown", event => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            event.stopPropagation();
+            applyFocus(node.dataset.component);
+          }
+        });
+      }
+
+      root.addEventListener("click", event => {
+        if (!event.target.closest(".diagram-component") && active) applyFocus(null);
+      });
+      window.addEventListener("keydown", event => {
+        if (event.key === "Escape" && active) applyFocus(null);
+      });
+
+      const initial = decodeURIComponent(window.location.hash.slice(1));
+      if (initial) applyFocus(initial, false);
+    })();
+  ]]></script>
 </svg>

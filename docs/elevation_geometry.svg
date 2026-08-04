@@ -14,6 +14,44 @@
     </marker>
   </defs>
 
+  <style>
+    .diagram-component {
+      cursor: pointer;
+      transition: opacity 160ms ease;
+    }
+
+    .diagram-component:hover > rect:first-child,
+    .diagram-component:hover > path:first-child,
+    .diagram-component:hover > line:first-child,
+    .focus-node:focus-visible > rect:first-child,
+    .focus-node:focus-visible > path:first-child,
+    .focus-node:focus-visible > line:first-child {
+      stroke: #76ded8;
+      stroke-width: 3;
+    }
+
+    .focus-node:focus {
+      outline: none;
+    }
+
+    .focus-active .diagram-component:not(.focused) {
+      opacity: 0.12;
+    }
+
+    .focus-active .diagram-component.focused > rect:first-child,
+    .focus-active .diagram-component.focused > path:first-child,
+    .focus-active .diagram-component.focused > line:first-child {
+      stroke: #76ded8;
+      stroke-width: 3;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .diagram-component {
+        transition: none;
+      }
+    }
+  </style>
+
   <rect width="1400" height="860" fill="#0a0a0f"/>
   <text x="700" y="42" text-anchor="middle" font-size="25"
         font-weight="bold" fill="#e8f2ea">
@@ -24,20 +62,36 @@
   </text>
 
   <!-- Plot background -->
+  <g class="diagram-component focus-node" data-component="reference-geometry"
+     tabindex="0" role="button" aria-label="Focus range and altitude reference geometry">
   <rect x="88" y="104" width="1000" height="650" rx="8"
         fill="#0d1219" stroke="#3a4350"/>
+  </g>
 
   <!-- Elevation coverage wedges, 50 km reference plane at x=980 -->
+  <g class="diagram-component focus-node" data-component="low-bar"
+     tabindex="0" role="button" aria-label="Focus low elevation bar">
   <path d="M160 680 L980 680 L980 557.5 Z"
         fill="#4fc3f7" fill-opacity="0.24"/>
+  </g>
+  <g class="diagram-component focus-node" data-component="mid-bar"
+     tabindex="0" role="button" aria-label="Focus middle elevation bar">
   <path d="M160 680 L980 557.5 L980 389.5 Z"
         fill="#7be3a1" fill-opacity="0.21"/>
+  </g>
+  <g class="diagram-component focus-node" data-component="high-bar"
+     tabindex="0" role="button" aria-label="Focus high elevation bar">
   <path d="M160 680 L980 389.5 L980 197.0 Z"
         fill="#ffbf4d" fill-opacity="0.22"/>
+  </g>
+  <g class="diagram-component focus-node" data-component="outside-coverage"
+     tabindex="0" role="button" aria-label="Focus area outside modeled elevation coverage">
   <path d="M160 680 L980 197 L980 122 L160 122 Z"
         fill="#ff5d57" fill-opacity="0.07"/>
+  </g>
 
   <!-- Horizon and range scale -->
+  <g class="diagram-component" data-component="reference-geometry">
   <line x1="120" y1="680" x2="1045" y2="680"
         stroke="#d7e2dc" stroke-width="2"/>
   <text x="1060" y="671" text-anchor="end" font-size="12"
@@ -48,8 +102,11 @@
   <text x="160" y="718" text-anchor="middle" font-size="11" fill="#aebbb3">0 km</text>
   <text x="570" y="718" text-anchor="middle" font-size="11" fill="#aebbb3">25 km</text>
   <text x="980" y="718" text-anchor="middle" font-size="11" fill="#aebbb3">50 km ground range</text>
+  </g>
 
   <!-- Exact gate boundaries -->
+  <g class="diagram-component focus-node" data-component="shared-edges"
+     tabindex="0" role="button" aria-label="Focus exact shared elevation-bar edges">
   <line x1="160" y1="680" x2="980" y2="715.8"
         stroke="#718092" stroke-width="1.3" stroke-dasharray="6 5"/>
   <!-- The two internal shared edges are deliberately prominent: each is
@@ -64,16 +121,24 @@
         stroke="#d18cff" stroke-width="3"/>
   <line x1="160" y1="680" x2="980" y2="197.0"
         stroke="#9fb0a6" stroke-width="1.5"/>
+  </g>
 
   <!-- Beam center rays -->
+  <g class="diagram-component" data-component="low-bar">
   <line x1="160" y1="680" x2="980" y2="637.0"
         stroke="#4fc3f7" stroke-width="3"/>
+  </g>
+  <g class="diagram-component" data-component="mid-bar">
   <line x1="160" y1="680" x2="980" y2="475.5"
         stroke="#7be3a1" stroke-width="3"/>
+  </g>
+  <g class="diagram-component" data-component="high-bar">
   <line x1="160" y1="680" x2="980" y2="297.6"
         stroke="#ffbf4d" stroke-width="3"/>
+  </g>
 
   <!-- Array/ship symbol -->
+  <g class="diagram-component" data-component="reference-geometry">
   <path d="M128 680 L148 643 L172 643 L192 680 Z"
         fill="#d7e2dc" stroke="#ffffff"/>
   <rect x="151" y="625" width="18" height="22" rx="2"
@@ -81,23 +146,31 @@
   <text x="160" y="739" text-anchor="middle" font-size="12" fill="#dfe9e2">
     array phase center
   </text>
+  </g>
 
   <!-- Center labels -->
+  <g class="diagram-component" data-component="low-bar">
   <rect x="332" y="628" width="146" height="29" rx="4"
         fill="#111923" stroke="#4fc3f7"/>
   <text x="405" y="647" text-anchor="middle" font-size="12"
         font-weight="bold" fill="#dfe9e2">LOW BAR · 3°</text>
+  </g>
+  <g class="diagram-component" data-component="mid-bar">
   <rect x="424" y="511" width="160" height="29" rx="4"
         fill="#111923" stroke="#7be3a1"/>
   <text x="504" y="530" text-anchor="middle" font-size="12"
         font-weight="bold" fill="#dfe9e2">MID BAR · 14°</text>
+  </g>
+  <g class="diagram-component" data-component="high-bar">
   <rect x="529" y="365" width="165" height="29" rx="4"
         fill="#111923" stroke="#ffbf4d"/>
   <text x="611" y="384" text-anchor="middle" font-size="12"
         font-weight="bold" fill="#dfe9e2">HIGH BAR · 25°</text>
+  </g>
 
   <!-- Shared-edge callouts make the exact edge-to-edge tiling explicit. -->
-  <g font-size="10.5" fill="#d7e2dc">
+  <g class="diagram-component" data-component="shared-edges"
+     font-size="10.5" fill="#d7e2dc">
     <rect x="690" y="510" width="240" height="39" rx="4"
           fill="#17111d" stroke="#d18cff" stroke-width="1.5"/>
     <text x="810" y="526" text-anchor="middle" font-weight="bold"
@@ -127,11 +200,14 @@
           fill="#111923" stroke="#526071"/>
     <text x="863" y="742" text-anchor="end">−2.5° gate below horizon</text>
   </g>
+  <g class="diagram-component" data-component="outside-coverage">
   <text x="777" y="145" font-size="12" font-weight="bold" fill="#ff8b86">
     cone of silence / outside modeled elevation coverage
   </text>
+  </g>
 
   <!-- 50 km altitude scale -->
+  <g class="diagram-component" data-component="reference-geometry">
   <line x1="980" y1="680" x2="980" y2="122"
         stroke="#718092" stroke-width="1" stroke-dasharray="3 4"/>
   <g font-size="10.5" fill="#8fa398">
@@ -142,8 +218,10 @@
     <line x1="972" y1="188" x2="988" y2="188" stroke="#718092"/>
     <text x="965" y="192" text-anchor="end">30 km</text>
   </g>
+  </g>
 
   <!-- Tiling callout -->
+  <g class="diagram-component" data-component="shared-edges">
   <path d="M 241 663 A 82 82 0 0 0 239 660"
         fill="none" stroke="#7be3a1" stroke-width="2"/>
   <line x1="246" y1="625" x2="344" y2="573"
@@ -154,8 +232,11 @@
   <text x="354" y="588" font-size="11" fill="#aebbb3">
     Adjacent gates meet exactly: 3 + 5.5 = 14 − 5.5 = 8.5°
   </text>
+  </g>
 
   <!-- Notes panel -->
+  <g class="diagram-component focus-node" data-component="interpretation"
+     tabindex="0" role="button" aria-label="Focus elevation geometry interpretation">
   <rect x="1115" y="104" width="250" height="650" rx="8"
         fill="#10141c" stroke="#3a4350"/>
   <text x="1140" y="138" font-size="15" font-weight="bold" fill="#e8f2ea">
@@ -193,4 +274,64 @@
     <tspan x="1140" dy="18">schematic. Height annotations</tspan>
     <tspan x="1140" dy="18">use tan(elevation) × 50 km.</tspan>
   </text>
+  </g>
+
+  <script><![CDATA[
+    (() => {
+      const root = document.documentElement;
+      const parts = Array.from(root.querySelectorAll(".diagram-component"));
+      const nodes = Array.from(root.querySelectorAll(".focus-node"));
+      const baseUrl = window.location.href.split("#")[0];
+      let active = null;
+
+      function applyFocus(requested, updateLocation = true) {
+        const exists = parts.some(part => part.dataset.component === requested);
+        active = exists && active !== requested ? requested : null;
+        root.classList.toggle("focus-active", Boolean(active));
+
+        for (const part of parts) {
+          part.classList.toggle("focused", part.dataset.component === active);
+        }
+        for (const node of nodes) {
+          node.setAttribute(
+            "aria-pressed", String(node.dataset.component === active));
+        }
+
+        if (updateLocation) {
+          try {
+            history.replaceState(null, "", active ? `${baseUrl}#${active}` : baseUrl);
+          } catch (_) {
+            // Some embedded SVG viewers do not expose writable history.
+          }
+        }
+      }
+
+      for (const part of parts) {
+        part.addEventListener("click", event => {
+          event.stopPropagation();
+          applyFocus(part.dataset.component);
+        });
+      }
+      for (const node of nodes) {
+        node.setAttribute("aria-pressed", "false");
+        node.addEventListener("keydown", event => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            event.stopPropagation();
+            applyFocus(node.dataset.component);
+          }
+        });
+      }
+
+      root.addEventListener("click", event => {
+        if (!event.target.closest(".diagram-component") && active) applyFocus(null);
+      });
+      window.addEventListener("keydown", event => {
+        if (event.key === "Escape" && active) applyFocus(null);
+      });
+
+      const initial = decodeURIComponent(window.location.hash.slice(1));
+      if (initial) applyFocus(initial, false);
+    })();
+  ]]></script>
 </svg>
